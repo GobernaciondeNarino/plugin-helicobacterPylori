@@ -110,6 +110,8 @@ final class UHP_Activator {
 			// descuido de cambiar a claro y quedarse con teselas oscuras.
 			'tema'        => 'oscuro',
 			'teselas'     => 'auto',
+			// Capa territorial de partida del mapa.
+			'nivel'       => 'municipio',
 			'panel_izq'   => 1,
 			'panel_der'   => 1,
 			'mostrar_kpi' => 1,

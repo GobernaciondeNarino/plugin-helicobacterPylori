@@ -192,7 +192,25 @@ final class UHP_Municipios {
 		$n = self::sin_acentos( $n );
 		$n = preg_replace( '/[^A-Za-z0-9 ]/', ' ', $n );
 		$n = preg_replace( '/\s+/', ' ', $n );
-		return strtoupper( trim( $n ) );
+		$n = strtoupper( trim( $n ) );
+
+		/* Cuatro municipios circulan con dos nombres, y las fuentes del
+		   proyecto usan indistintamente uno u otro: la cartografía del DANE
+		   escribe el oficial completo y las tablas de la entidad el de uso
+		   corriente. Quitar el paréntesis no basta —«Los Andes Sotomayor»
+		   no lo lleva—, así que se reducen al mismo nombre. Es una tabla
+		   corta y cerrada, no una heurística: cada línea es un municipio
+		   concreto verificado contra su DIVIPOLA. */
+		$equivalencias = array(
+			'LOS ANDES SOTOMAYOR'   => 'LOS ANDES',        // 52418
+			'CUASPUD CARLOSAMA'     => 'CUASPUD',          // 52224
+			'SAN ANDRES DE TUMACO'  => 'TUMACO',           // 52835
+			'MAGUI PAYAN'           => 'MAGUI',            // 52427
+			'SANTACRUZ DE GUACHAVEZ' => 'SANTACRUZ',       // 52699
+			'SANTA CRUZ'            => 'SANTACRUZ',        // 52699
+		);
+
+		return isset( $equivalencias[ $n ] ) ? $equivalencias[ $n ] : $n;
 	}
 
 	/**

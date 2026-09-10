@@ -191,6 +191,7 @@ final class UHP_Admin {
 		$indicador   = isset( $entrada['indicador'] ) ? UHP_Security::clave( $entrada['indicador'] ) : $def['indicador'];
 		$teselas     = isset( $entrada['teselas'] ) ? UHP_Security::clave( $entrada['teselas'] ) : $def['teselas'];
 		$tema        = isset( $entrada['tema'] ) ? UHP_Security::clave( $entrada['tema'] ) : $def['tema'];
+		$nivel       = isset( $entrada['nivel'] ) ? UHP_Security::clave( $entrada['nivel'] ) : $def['nivel'];
 
 		$lat = isset( $entrada['mapa_lat'] ) ? (float) $entrada['mapa_lat'] : $def['mapa_lat'];
 		$lon = isset( $entrada['mapa_lon'] ) ? (float) $entrada['mapa_lon'] : $def['mapa_lon'];
@@ -203,6 +204,7 @@ final class UHP_Admin {
 			'titulo'      => sanitize_text_field( isset( $entrada['titulo'] ) ? $entrada['titulo'] : $def['titulo'] ),
 			'indicador'   => in_array( $indicador, $indicadores, true ) ? $indicador : $def['indicador'],
 			'tema'        => in_array( $tema, array( 'oscuro', 'claro' ), true ) ? $tema : $def['tema'],
+			'nivel'       => in_array( $nivel, UHP_Territorios::NIVELES, true ) ? $nivel : $def['nivel'],
 			'teselas'     => in_array( $teselas, array( 'auto', 'oscuro', 'osm', 'claro', 'humanitario' ), true ) ? $teselas : $def['teselas'],
 			'mapa_lat'    => $lat,
 			'mapa_lon'    => $lon,
@@ -954,16 +956,18 @@ final class UHP_Admin {
 			array(
 				'tag'         => 'urkunina_dashboard',
 				'titulo'      => __( 'Tablero completo', 'urkunina-5000' ),
-				'descripcion' => __( 'Todo el proyecto en una sola pantalla: cintillo de cifras, panel de controles y filtros, mapa de OpenStreetMap al centro y panel de gráficos con su análisis. Ocupa el 100 % del ancho y toda la altura de la ventana.', 'urkunina-5000' ),
+				'descripcion' => __( 'Todo el proyecto en una sola pantalla: cintillo de cifras, panel de controles y filtros, mapa de OpenStreetMap al centro y panel de gráficos con su análisis. Ocupa el 100 % del ancho y toda la altura de la ventana. Todo gira alrededor de un territorio seleccionado —el departamento, una subregión o un municipio—: al elegirlo en el mapa, en una barra del gráfico o en el selector, el cintillo, la ficha y el gráfico pasan a hablar de él, y lo que el proyecto no publica por territorio queda marcado como departamental en vez de pasar por local.', 'urkunina-5000' ),
 				'ejemplos'    => array(
 					'[urkunina_dashboard]',
 					'[urkunina_dashboard tema="claro"]',
+					'[urkunina_dashboard nivel="subregion"]',
 					'[urkunina_dashboard indicador="hpylori" zoom="9"]',
 					'[urkunina_dashboard alto="calc(100vh - 80px)"]',
 				),
 				'atributos'   => array(
 					'titulo'    => __( 'Título mostrado en la cabecera del tablero.', 'urkunina-5000' ),
 					'tema'      => __( 'oscuro (por defecto) o claro. Viste todo el tablero: paneles, controles, fichas, mapa y la tinta de los gráficos.', 'urkunina-5000' ),
+					'nivel'     => __( 'Capa territorial de partida del mapa: municipio (por defecto), subregion o departamento.', 'urkunina-5000' ),
 					'alto'      => __( 'Altura del contenedor. Por defecto 100vh; use calc() si su tema tiene una barra fija.', 'urkunina-5000' ),
 					'indicador' => __( 'Indicador inicial del mapa: lpm, hpylori, cancer o intervencion.', 'urkunina-5000' ),
 					'teselas'   => __( 'Capa base: auto (sigue al tema, recomendado), oscuro, claro, osm o humanitario.', 'urkunina-5000' ),
@@ -1017,12 +1021,14 @@ final class UHP_Admin {
 				'ejemplos'    => array(
 					'[urkunina_geomapa view="prev_lpm_municipios"]',
 					'[urkunina_geomapa view="prev_subregion_lpm" alto="520px"]',
+					'[urkunina_geomapa view="prev_subregion" serie="Infección por H. pylori"]',
 					'[urkunina_geomapa indicador="intervencion" teselas="si"]',
 					'[urkunina_geomapa view="cancer_municipios" tema="oscuro" leyenda="no"]',
 				),
 				'atributos'   => array(
 					'view'      => __( 'Vista territorial del catálogo. El nivel —municipios o subregiones— lo decide la propia vista.', 'urkunina-5000' ),
 					'indicador' => __( 'Alternativa a «view»: lpm, hpylori, cancer o intervencion. Siempre municipal.', 'urkunina-5000' ),
+					'serie'     => __( 'Solo para vistas con más de un indicador por territorio, como «prev_subregion»: elige cuál se colorea. Si se omite se dibuja el primero y el título lo dice.', 'urkunina-5000' ),
 					'teselas'   => __( 'si o no (por defecto, no). Enciende la capa base de cartografía bajo el territorio.', 'urkunina-5000' ),
 					'capa'      => __( 'claro, oscuro u osm. Elige el proveedor de teselas; si se omite, se usa el que corresponde al tema.', 'urkunina-5000' ),
 					'titulo'    => __( 'Sustituye el título; con «no» se oculta.', 'urkunina-5000' ),
@@ -1275,6 +1281,18 @@ final class UHP_Admin {
 						</p>
 						<p class="uhpa-ayuda">
 							<?php esc_html_e( 'Viste todo el tablero: paneles, controles, mapa, fichas y la tinta de los gráficos. Cada página puede llevar el suyo con [urkunina_dashboard tema="claro"].', 'urkunina-5000' ); ?>
+						</p>
+
+						<p>
+							<label class="uhpa-label" for="uhp-db-nivel"><?php esc_html_e( 'Capa territorial inicial', 'urkunina-5000' ); ?></label>
+							<select id="uhp-db-nivel" class="uhpa-select" name="uhp_dashboard[nivel]">
+								<option value="municipio" <?php selected( 'municipio', $cfg['nivel'] ); ?>><?php esc_html_e( 'Municipios — los 64 del departamento', 'urkunina-5000' ); ?></option>
+								<option value="subregion" <?php selected( 'subregion', $cfg['nivel'] ); ?>><?php esc_html_e( 'Subregiones — las 13', 'urkunina-5000' ); ?></option>
+								<option value="departamento" <?php selected( 'departamento', $cfg['nivel'] ); ?>><?php esc_html_e( 'Departamento — solo el contorno', 'urkunina-5000' ); ?></option>
+							</select>
+						</p>
+						<p class="uhpa-ayuda">
+							<?php esc_html_e( 'Con qué división arranca el mapa. Quien visita puede cambiarla desde los controles del propio tablero.', 'urkunina-5000' ); ?>
 						</p>
 
 						<p>

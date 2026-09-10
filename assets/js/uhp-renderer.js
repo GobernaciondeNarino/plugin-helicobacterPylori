@@ -105,6 +105,14 @@
 
   /* Descarta las filas cuya medida principal es 0/null/NaN: una barra de
      altura cero solo ocupa espacio del eje. */
+  /* Descarta SOLO lo que no es un dato.
+
+     Un `null` significa «no documentado» y no se puede dibujar. Un CERO,
+     en cambio, es un dato: un año sin publicaciones, un municipio sin
+     casos, un producto sin avance. Descartarlo deformaba la lectura —la
+     serie de producción científica saltaba de 2019 a 2022 como si no
+     hubiera habido años de por medio, cuando lo que hubo fue un vacío de
+     publicaciones, que es justo lo que había que ver—. */
   function filtrarUtiles(datos, medidas) {
     if (!medidas || !medidas.length) { return datos; }
     var m = medidas[0];
@@ -112,7 +120,7 @@
       var v = r[m];
       if (v === null || v === undefined) { return false; }
       if (typeof v === 'number' && isNaN(v)) { return false; }
-      return v !== 0;
+      return true;
     });
   }
 
@@ -367,6 +375,49 @@
     var cfgLeyenda = { shapeConfig: { labelConfig: { fontColor: tinta.leyenda } } };
     if ('icons' === opts.legendStyle) { cfgLeyenda.label = false; }
     llamar(viz, 'legendConfig', cfgLeyenda);
+
+    /* Resaltado por territorio y aviso de pulsación.
+
+       Los usa el tablero para que el gráfico y el mapa hablen del mismo
+       sitio: al seleccionar un municipio o una subregión, sus marcas
+       quedan a plena opacidad y las demás se atenúan; al pulsar una
+       marca, el mapa se mueve a ese territorio.
+
+       El campo del territorio se busca entre las dimensiones de la vista,
+       de modo que sirve igual para `municipio`, `subregion` o `zona` sin
+       que el tablero tenga que saber cuál usa cada vista. */
+    var campoTerr = campoTerritorial(dims, opts.resaltar);
+    if (campoTerr) {
+      var buscado = normalizar(opts.resaltar.valor);
+      var atenua = function (d) {
+        if (!d || d[campoTerr] === undefined) { return 1; }
+        return normalizar(d[campoTerr]) === buscado ? 1 : 0.25;
+      };
+      /* Se atenúa con `fillOpacity` y `strokeOpacity`, NO con `opacity`.
+
+         D3plus agrupa las entradas de su leyenda por la clave
+         `relleno + '_' + opacity`: una opacidad distinta por dato parte
+         cada serie en dos entradas y la leyenda pasa a repetir cada
+         nombre. Con `fillOpacity` el efecto visual es el mismo y la clave
+         de la leyenda no cambia. */
+      llamar(viz, 'shapeConfig', {
+        fillOpacity: atenua,
+        strokeOpacity: atenua
+      });
+    }
+
+    if (typeof opts.alPulsar === 'function') {
+      var campoClic = campoTerr || primeraDimension(dims, plot);
+      if (campoClic) {
+        llamar(viz, 'on', {
+          'click.shape': function (d) {
+            if (d && d[campoClic] !== undefined) {
+              opts.alPulsar(String(d[campoClic]), campoClic);
+            }
+          }
+        });
+      }
+    }
     llamar(viz, 'tooltipConfig', {
       title: function (d) {
         var v = cartesiano ? (d[grupo] != null ? d[grupo] : d[dimX]) : d[dims[0]];
@@ -377,6 +428,44 @@
 
     viz.render();
     return viz;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Resaltado territorial                                              */
+  /* ------------------------------------------------------------------ */
+
+  /** Compara nombres de territorio sin tildes, mayúsculas ni paréntesis.
+      Es la misma regla que usa UHP_Municipios en el servidor: los informes
+      escriben «Colón (Génova)» donde la cartografía dice «COLÓN». */
+  function normalizar(v) {
+    var t = String(v == null ? '' : v);
+    if (t.normalize) { t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    return t.toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9]/g, '');
+  }
+
+  /**
+   * Dimensión de la vista que nombra un territorio, si la hay.
+   *
+   * @param {Array}  dims     Dimensiones de la vista.
+   * @param {Object} resaltar {campo, valor} pedido por quien dibuja.
+   * @return {string} Nombre del campo, o '' si la vista no habla de territorio.
+   */
+  function campoTerritorial(dims, resaltar) {
+    if (!resaltar || !resaltar.valor) { return ''; }
+    if (resaltar.campo && dims.indexOf(resaltar.campo) >= 0) { return resaltar.campo; }
+    var candidatos = ['municipio', 'subregion', 'zona', 'ambito', 'territorio'];
+    for (var i = 0; i < candidatos.length; i++) {
+      if (dims.indexOf(candidatos[i]) >= 0) { return candidatos[i]; }
+    }
+    return '';
+  }
+
+  /** Primera dimensión con valores, para saber qué se pulsó. */
+  function primeraDimension(dims, filas) {
+    for (var i = 0; i < dims.length; i++) {
+      if (filas.length && filas[0][dims[i]] !== undefined) { return dims[i]; }
+    }
+    return dims[0] || '';
   }
 
   /* ------------------------------------------------------------------ */

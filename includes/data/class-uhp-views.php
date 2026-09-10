@@ -224,7 +224,17 @@ final class UHP_Views {
 				'dimensions'  => array( 'subregion', 'indicador' ),
 				'measures'    => array( 'valor' ),
 				'default'     => 'bar',
-				'grupo'       => 'Prevalencia',
+								'geo'         => array(
+					'nivel'  => 'subregion',
+					'campo'  => 'subregion',
+					'medida' => 'valor',
+					// Esta vista trae DOS indicadores por subregión. Un mapa
+					// coroplético solo puede pintar uno, de modo que declara
+					// qué dimensión la parte en series y el geomapa obliga a
+					// elegir cuál se dibuja en vez de escoger en silencio.
+					'serie'  => 'indicador',
+				),
+'grupo'       => 'Prevalencia',
 				'fuente'      => 'Informe preliminar URKUNINA 5000',
 			),
 			'prev_subregion_lpm'   => array(
@@ -470,6 +480,35 @@ final class UHP_Views {
 	public static function es_territorial( $id ) {
 		$m = self::meta( $id );
 		return ! empty( $m['geo'] );
+	}
+
+	/**
+	 * Series de una vista territorial partida en varias.
+	 *
+	 * Una vista como `prev_subregion` trae dos indicadores por subregión.
+	 * En un gráfico de barras eso son dos series y se ven las dos; en un
+	 * mapa coroplético hay que elegir una, porque un territorio no puede
+	 * tener dos colores.
+	 *
+	 * @param string $id Identificador de la vista.
+	 * @return array<int,string> Vacío si la vista no está partida en series.
+	 */
+	public static function series( $id ) {
+		$m = self::meta( $id );
+		if ( empty( $m['geo']['serie'] ) ) {
+			return array();
+		}
+
+		$campo  = $m['geo']['serie'];
+		$vistas = self::obtener( $id );
+		$salida = array();
+
+		foreach ( (array) ( isset( $vistas['data'] ) ? $vistas['data'] : array() ) as $fila ) {
+			if ( isset( $fila[ $campo ] ) && ! in_array( $fila[ $campo ], $salida, true ) ) {
+				$salida[] = $fila[ $campo ];
+			}
+		}
+		return $salida;
 	}
 
 	/**

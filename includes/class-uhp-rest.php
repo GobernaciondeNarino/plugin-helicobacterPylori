@@ -89,6 +89,10 @@ final class UHP_Rest {
 						'required'          => false,
 						'sanitize_callback' => array( UHP_Security::class, 'clave' ),
 					),
+					'nivel'     => array(
+						'required'          => false,
+						'sanitize_callback' => array( UHP_Security::class, 'clave' ),
+					),
 				),
 			)
 		);
@@ -100,6 +104,12 @@ final class UHP_Rest {
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'ruta_geo' ),
 				'permission_callback' => $publico,
+				'args'                => array(
+					'nivel' => array(
+						'required'          => false,
+						'sanitize_callback' => array( UHP_Security::class, 'clave' ),
+					),
+				),
 			)
 		);
 
@@ -132,6 +142,26 @@ final class UHP_Rest {
 						'sanitize_callback' => array( UHP_Security::class, 'clave' ),
 					),
 					'view'      => array(
+						'required'          => false,
+						'sanitize_callback' => array( UHP_Security::class, 'clave' ),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
+			'/territorio',
+			array(
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'ruta_territorio' ),
+				'permission_callback' => $publico,
+				'args'                => array(
+					'nivel' => array(
+						'required'          => false,
+						'sanitize_callback' => array( UHP_Security::class, 'clave' ),
+					),
+					'id'    => array(
 						'required'          => false,
 						'sanitize_callback' => array( UHP_Security::class, 'clave' ),
 					),
@@ -280,67 +310,95 @@ final class UHP_Rest {
 			$indicador = 'lpm';
 		}
 
+		// El nivel cambia los valores Y la meta: un mismo indicador no
+		// siempre mide lo mismo al cambiar de capa, y anunciarlo con la
+		// etiqueta de otro nivel induce a leer mal el mapa.
+		$nivel = UHP_Territorios::nivel( (string) $req->get_param( 'nivel' ) );
+
 		return self::respuesta(
 			array(
 				'indicador'   => $indicador,
-				'meta'        => $catalogo[ $indicador ],
-				'indicadores' => self::indicadores_mapa(),
-				'valores'     => self::valores_mapa( $indicador ),
+				'nivel'       => $nivel,
+				'meta'        => UHP_Territorios::meta_por_nivel( $catalogo[ $indicador ], $indicador, $nivel ),
+				'indicadores' => $catalogo,
+				'valores'     => UHP_Territorios::valores( $indicador, $nivel ),
 			)
 		);
 	}
 
 	/**
-	 * GET /geo — geometría municipal de Nariño (GeoJSON).
+	 * GET /geo — geometría de Nariño en el nivel pedido (GeoJSON).
 	 *
+	 * `nivel` admite municipio (64 polígonos, por defecto), subregion (13)
+	 * y departamento (el contorno). Es lo que permite al tablero cambiar de
+	 * capa territorial sin cambiar de mapa.
+	 *
+	 * @param \WP_REST_Request $peticion Petición.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function ruta_geo() {
+	public function ruta_geo( $peticion ) {
 		$limite = self::limitar( 'geo', 30 );
 		if ( $limite ) {
 			return $limite;
 		}
 
-		$geo = UHP_Datos::leer( 'geojson' );
-		if ( ! $geo ) {
-			return new \WP_Error(
-				'uhp_sin_geometria',
-				'No se pudo leer la geometría municipal.',
-				array( 'status' => 503 )
-			);
+		$nivel = UHP_Territorios::nivel( (string) $peticion->get_param( 'nivel' ) );
+		if ( ! in_array( $nivel, UHP_Topojson::NIVELES_GEO, true ) ) {
+			$nivel = 'municipio';
 		}
 
-		// Se adelgaza el GeoJSON: de las ~90 propiedades censales del DANE
-		// el mapa solo necesita cuatro, y enviarlas todas multiplicaría por
-		// tres el peso de la respuesta.
-		$prioritarios = UHP_Municipios::set_priorizados();
-		$features     = array();
-
-		foreach ( (array) ( isset( $geo['features'] ) ? $geo['features'] : array() ) as $f ) {
-			$p = isset( $f['properties'] ) ? $f['properties'] : array();
-			if ( empty( $p['MPIO_CDPMP'] ) ) {
-				continue;
-			}
-			$divipola   = (string) $p['MPIO_CDPMP'];
-			$features[] = array(
-				'type'       => 'Feature',
-				'properties' => array(
-					'divipola'   => $divipola,
-					'nombre'     => UHP_Municipios::titulo( (string) $p['MPIO_CNMBR'] ),
-					'lat'        => isset( $p['LATITUD'] ) ? round( (float) $p['LATITUD'], 5 ) : null,
-					'lon'        => isset( $p['LONGITUD'] ) ? round( (float) $p['LONGITUD'], 5 ) : null,
-					'priorizado' => isset( $prioritarios[ $divipola ] ),
-				),
-				'geometry'   => isset( $f['geometry'] ) ? $f['geometry'] : null,
+		// La geometría sale de UHP_Topojson::features(), que es la misma
+		// fuente de la que se construye la topología de D3plus: los dos
+		// mapas del plugin dibujan así el mismo departamento, vértice a
+		// vértice, y no pueden divergir con un cambio en uno solo.
+		$features = UHP_Topojson::features( $nivel );
+		if ( empty( $features ) ) {
+			return new \WP_Error(
+				'uhp_sin_geometria',
+				'No se pudo leer la geometría del nivel solicitado.',
+				array( 'status' => 503 )
 			);
 		}
 
 		return self::respuesta(
 			array(
 				'type'     => 'FeatureCollection',
+				'nivel'    => $nivel,
 				'features' => $features,
 			)
 		);
+	}
+
+	/**
+	 * GET /territorio — ficha de un territorio para el tablero.
+	 *
+	 * Devuelve, para cada indicador, no solo la cifra sino en qué
+	 * condición está: publicada para ese territorio, sin publicar para él,
+	 * agregada de sus municipios o disponible solo para el departamento.
+	 * El tablero necesita esa condición para no presentar una cifra
+	 * departamental como si fuera local.
+	 *
+	 * @param \WP_REST_Request $peticion Petición.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function ruta_territorio( $peticion ) {
+		$limite = self::limitar( 'territorio' );
+		if ( $limite ) {
+			return $limite;
+		}
+
+		$nivel = UHP_Territorios::nivel( (string) $peticion->get_param( 'nivel' ) );
+		$ficha = UHP_Territorios::ficha( $nivel, (string) $peticion->get_param( 'id' ) );
+
+		if ( null === $ficha ) {
+			return new \WP_Error(
+				'uhp_territorio_desconocido',
+				'Ese territorio no existe en el nivel indicado.',
+				array( 'status' => 404 )
+			);
+		}
+
+		return self::respuesta( $ficha );
 	}
 
 	/**
@@ -394,13 +452,17 @@ final class UHP_Rest {
 		if ( '' !== $vista && ! UHP_Views::es_territorial( $vista ) ) {
 			return new \WP_Error(
 				'uhp_vista_no_territorial',
-				'Esa vista no nombra municipios, de modo que no puede dibujarse sobre el mapa.',
+				'Esa vista no nombra un territorio con geometría, de modo que no puede dibujarse sobre el mapa.',
 				array( 'status' => 400 )
 			);
 		}
 
 		return self::respuesta(
-			self::carga_geomapa( $vista, (string) $peticion->get_param( 'indicador' ) )
+			self::carga_geomapa(
+				$vista,
+				(string) $peticion->get_param( 'indicador' ),
+				(string) $peticion->get_param( 'serie' )
+			)
 		);
 	}
 
@@ -417,18 +479,30 @@ final class UHP_Rest {
 	 * @param string $indicador Indicador del mapa; se usa si no hay vista.
 	 * @return array<string,mixed>
 	 */
-	public static function carga_geomapa( $vista = '', $indicador = 'lpm' ) {
+	public static function carga_geomapa( $vista = '', $indicador = 'lpm', $serie = '' ) {
 		$catalogo = self::indicadores_mapa();
 
 		if ( '' !== $vista && UHP_Views::es_territorial( $vista ) ) {
-			$meta  = UHP_Views::meta( $vista );
+			$meta   = UHP_Views::meta( $vista );
+			$series = UHP_Views::series( $vista );
+
+			// Con la vista partida en series, la elegida forma parte del
+			// rótulo: un mapa de «Prevalencia por subregión» sin decir de
+			// cuál de los dos indicadores no se puede leer.
+			if ( ! empty( $series ) && ( '' === $serie || ! in_array( $serie, $series, true ) ) ) {
+				$serie = $series[0];
+			}
+			$rotulo = ( '' !== $serie ) ? $meta['name'] . ' · ' . $serie : $meta['name'];
+
 			$carga = array(
 				'origen'  => 'vista',
 				'clave'   => $vista,
 				'nivel'   => $meta['geo']['nivel'],
+				'serie'   => $serie,
+				'series'  => $series,
 				'meta'    => array(
-					'etiqueta' => $meta['name'],
-					'corto'    => $meta['name'],
+					'etiqueta' => $rotulo,
+					'corto'    => ( '' !== $serie ) ? $serie : $meta['name'],
 					'unidad'   => self::unidad_de( $meta['geo']['medida'] ),
 					'nota'     => $meta['description'],
 					'fuente'   => isset( $meta['fuente'] ) ? $meta['fuente'] : '',
@@ -437,7 +511,7 @@ final class UHP_Rest {
 					// cálida con la que se lee el resto del proyecto.
 					'escala'   => $catalogo['lpm']['escala'],
 				),
-				'valores' => self::valores_vista( $vista ),
+				'valores' => self::valores_vista( $vista, $serie ),
 			);
 		} else {
 			if ( ! isset( $catalogo[ $indicador ] ) ) {
@@ -469,9 +543,10 @@ final class UHP_Rest {
 	 * subregional.
 	 *
 	 * @param string $vista Identificador de la vista.
+	 * @param string $serie Serie a dibujar en las vistas partidas en varias.
 	 * @return array<string,array{valor:float,nombre:string}>
 	 */
-	public static function valores_vista( $vista ) {
+	public static function valores_vista( $vista, $serie = '' ) {
 		$meta = UHP_Views::meta( $vista );
 		if ( empty( $meta['geo'] ) ) {
 			return array();
@@ -483,8 +558,21 @@ final class UHP_Rest {
 		$v      = UHP_Views::obtener( $vista );
 		$salida = array();
 
+		// Vista partida en series: un territorio no puede tener dos colores,
+		// así que se dibuja una sola y las filas de las demás se descartan.
+		$campo_serie = isset( $meta['geo']['serie'] ) ? $meta['geo']['serie'] : '';
+		if ( '' !== $campo_serie ) {
+			$disponibles = UHP_Views::series( $vista );
+			if ( '' === $serie || ! in_array( $serie, $disponibles, true ) ) {
+				$serie = isset( $disponibles[0] ) ? $disponibles[0] : '';
+			}
+		}
+
 		foreach ( (array) ( isset( $v['data'] ) ? $v['data'] : array() ) as $fila ) {
 			if ( ! isset( $fila[ $campo ], $fila[ $medida ] ) ) {
+				continue;
+			}
+			if ( '' !== $campo_serie && isset( $fila[ $campo_serie ] ) && $fila[ $campo_serie ] !== $serie ) {
 				continue;
 			}
 			if ( $sub ) {

@@ -218,6 +218,7 @@ final class UHP_Shortcodes {
 				'titulo'    => isset( $cfg['titulo'] ) ? $cfg['titulo'] : 'URKUNINA 5000',
 				'alto'      => '100vh',
 				'indicador' => isset( $cfg['indicador'] ) ? $cfg['indicador'] : 'lpm',
+				'nivel'     => isset( $cfg['nivel'] ) ? $cfg['nivel'] : 'municipio',
 				'tema'      => isset( $cfg['tema'] ) ? $cfg['tema'] : 'oscuro',
 				'teselas'   => isset( $cfg['teselas'] ) ? $cfg['teselas'] : '',
 				'lat'       => isset( $cfg['mapa_lat'] ) ? $cfg['mapa_lat'] : 1.30,
@@ -268,6 +269,7 @@ final class UHP_Shortcodes {
 			data-uhp-dashboard
 			data-tema="<?php echo esc_attr( $tema ); ?>"
 			data-indicador="<?php echo esc_attr( UHP_Security::clave( $atts['indicador'] ) ); ?>"
+			data-nivel="<?php echo esc_attr( UHP_Territorios::nivel( $atts['nivel'] ) ); ?>"
 			data-teselas="<?php echo esc_attr( $teselas ); ?>"
 			data-lat="<?php echo esc_attr( $lat ); ?>"
 			data-lon="<?php echo esc_attr( $lon ); ?>"
@@ -284,6 +286,8 @@ final class UHP_Shortcodes {
 				</div>
 				<div class="uhp-db__kpis" data-uhp-zona="kpi"
 					aria-label="<?php esc_attr_e( 'Indicadores clave del proyecto', 'urkunina-5000' ); ?>"></div>
+				<div class="uhp-db__ctx" data-uhp-zona="contexto" aria-live="polite"
+					aria-label="<?php esc_attr_e( 'Territorio seleccionado', 'urkunina-5000' ); ?>"></div>
 			</header>
 
 			<aside class="uhp-db__lateral" data-uhp-panel="controles"
@@ -739,6 +743,7 @@ final class UHP_Shortcodes {
 			array(
 				'view'      => '',
 				'indicador' => 'lpm',
+				'serie'     => '',
 				'titulo'    => '',
 				'alto'      => '',
 				'tema'      => 'claro',
@@ -786,6 +791,15 @@ final class UHP_Shortcodes {
 		// El nivel lo decide la vista, no quien maqueta: una vista subregional
 		// dibujada sobre municipios (o al revés) no cruzaría con nada.
 		$nivel  = ( '' !== $vista ) ? UHP_Views::nivel( $vista ) : 'municipio';
+
+		// Vista partida en varias series —dos indicadores por subregión, por
+		// ejemplo—: un coropleto solo puede pintar una. Si no se pide
+		// ninguna, se dibuja la primera y el título lo dice.
+		$series = ( '' !== $vista ) ? UHP_Views::series( $vista ) : array();
+		$serie  = sanitize_text_field( (string) $atts['serie'] );
+		if ( ! empty( $series ) && ! in_array( $serie, $series, true ) ) {
+			$serie = $series[0];
+		}
 		$clases = 'uhp uhp-geo uhp-geo--' . $nivel . ( 'oscuro' === $atts['tema'] ? ' uhp-geo--oscuro' : '' );
 
 		$estilo = UHP_Estilos::inline( $atts );
@@ -798,9 +812,14 @@ final class UHP_Shortcodes {
 		// dejó vacío.
 		$rotulo = $atts['titulo'];
 		if ( '' === $rotulo && 'no' !== $atts['titulo'] ) {
-			$rotulo = ( '' !== $vista )
-				? UHP_Views::meta( $vista )['name']
-				: $indicadores[ $indicador ]['etiqueta'];
+			if ( '' !== $vista ) {
+				$rotulo = UHP_Views::meta( $vista )['name'];
+				if ( '' !== $serie ) {
+					$rotulo .= ' · ' . $serie;
+				}
+			} else {
+				$rotulo = $indicadores[ $indicador ]['etiqueta'];
+			}
 		}
 
 		ob_start();
@@ -812,6 +831,7 @@ final class UHP_Shortcodes {
 			data-view="<?php echo esc_attr( $vista ); ?>"
 			data-indicador="<?php echo esc_attr( '' === $vista ? $indicador : '' ); ?>"
 			data-nivel="<?php echo esc_attr( $nivel ); ?>"
+			data-serie="<?php echo esc_attr( $serie ); ?>"
 			data-tema="<?php echo esc_attr( 'oscuro' === $atts['tema'] ? 'oscuro' : 'claro' ); ?>"
 			data-teselas="<?php echo $teselas ? '1' : '0'; ?>"
 			data-capa="<?php echo esc_attr( $capa ); ?>"

@@ -179,6 +179,11 @@ function wp_date( $formato, $marca = null ) {
 	return gmdate( $formato, null === $marca ? time() : (int) $marca );
 }
 
+function number_format_i18n( $numero, $decimales = 0 ) {
+	// es_CO: punto para los miles, coma para los decimales.
+	return number_format( (float) $numero, (int) $decimales, ',', '.' );
+}
+
 function size_format( $bytes, $decimales = 0 ) {
 	$unidades = array( 'B', 'KB', 'MB', 'GB' );
 	$bytes    = (float) $bytes;
@@ -209,6 +214,7 @@ function uhp_cargar_clases_de_datos() {
 	require_once $base . 'data/class-uhp-topojson.php';
 	require_once $base . 'analysis/class-uhp-analisis.php';
 	require_once $base . 'data/class-uhp-views.php';
+	require_once $base . 'data/class-uhp-territorios.php';
 	require_once $base . 'class-uhp-rest.php';
 }
 

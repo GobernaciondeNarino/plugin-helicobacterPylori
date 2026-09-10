@@ -22,6 +22,7 @@ use GobernacionNarino\Urkunina\UHP_Rest;
 use GobernacionNarino\Urkunina\UHP_Security;
 use GobernacionNarino\Urkunina\UHP_Topojson;
 use GobernacionNarino\Urkunina\UHP_Subregiones;
+use GobernacionNarino\Urkunina\UHP_Territorios;
 
 $pruebas = 0;
 $fallos  = array();
@@ -50,8 +51,8 @@ echo "\n1. Archivos del conjunto\n";
 
 $registro = UHP_Datos::registro();
 comprobar(
-	16 === count( $registro ),
-	sprintf( 'El registro declara los 14 archivos JSON y las dos capas de geometría (%d entradas)', count( $registro ) )
+	17 === count( $registro ),
+	sprintf( 'El registro declara los 15 archivos JSON y las dos capas de geometría (%d entradas)', count( $registro ) )
 );
 
 // La cartografía tiene su propio tope de tamaño: si volviera a compartirlo
@@ -352,12 +353,20 @@ comprobar(
 	'Una subregión inexistente no cruza'
 );
 
+$con_dato  = (array) UHP_Datos::valor( 'prev_subregion', 'subregiones', array() );
 $sin_cruce = array();
-foreach ( (array) UHP_Datos::valor( 'prev_subregional', 'subregiones', array() ) as $fila ) {
+foreach ( $con_dato as $fila ) {
 	if ( '' === UHP_Subregiones::codigo_de( $fila['subregion'] ) ) {
 		$sin_cruce[] = $fila['subregion'];
 	}
 }
+// Contar las filas ANTES de recorrerlas no es redundante: con la clave del
+// registro mal escrita la lista llegaba vacía y el bucle no encontraba
+// ningún fallo, de modo que la comprobación pasaba sin comprobar nada.
+comprobar(
+	11 === count( $con_dato ),
+	sprintf( 'El archivo subregional trae las 11 subregiones documentadas (%d)', count( $con_dato ) )
+);
 comprobar(
 	0 === count( $sin_cruce ),
 	sprintf(
@@ -409,6 +418,86 @@ comprobar(
 );
 
 /* ---------------------------------------------------------------- */
+echo "\n5bis-2. La división declarada y la cartográfica describen lo mismo\n";
+
+/* El plugin cruza dos fuentes: el archivo oficial de la Gobernación, que
+   da los nombres y la composición declarada, y la cartografía del DANE,
+   que da la geometría y los códigos DIVIPOLA. Si dejaran de coincidir, el
+   tablero estaría mezclando dos divisiones distintas del departamento sin
+   que nada lo avisara. Esta comprobación es la que lo impide. */
+$declaradas = UHP_Subregiones::declaradas();
+comprobar( 13 === count( $declaradas ), sprintf( 'El archivo oficial declara 13 subregiones (%d)', count( $declaradas ) ) );
+
+$total_declarados = 0;
+foreach ( $declaradas as $d ) {
+	$total_declarados += count( $d['municipios'] );
+}
+comprobar(
+	64 === $total_declarados,
+	sprintf( 'El archivo oficial reparte los 64 municipios (%d)', $total_declarados )
+);
+
+$geo_por_sub = array();
+foreach ( UHP_Subregiones::indice() as $codigo => $sr ) {
+	$geo_por_sub[ $codigo ] = $sr['municipios'];
+	sort( $geo_por_sub[ $codigo ] );
+}
+
+$discrepancias = array();
+foreach ( $declaradas as $d ) {
+	$codigo = UHP_Subregiones::codigo_de( $d['nombre'] );
+	if ( '' === $codigo ) {
+		$discrepancias[] = $d['nombre'] . ' (no cruza con la cartografía)';
+		continue;
+	}
+
+	$divipolas = array();
+	foreach ( $d['municipios'] as $m ) {
+		$id = UHP_Municipios::divipola_de( $m );
+		if ( '' === $id ) {
+			$discrepancias[] = $d['nombre'] . ' → ' . $m . ' (municipio sin DIVIPOLA)';
+			continue;
+		}
+		$divipolas[] = $id;
+	}
+	sort( $divipolas );
+
+	$soloDeclarados = array_diff( $divipolas, $geo_por_sub[ $codigo ] );
+	$soloGeo        = array_diff( $geo_por_sub[ $codigo ], $divipolas );
+	if ( $soloDeclarados || $soloGeo ) {
+		$discrepancias[] = sprintf(
+			'%s: solo en el archivo %s / solo en la cartografía %s',
+			$d['nombre'],
+			implode( ',', $soloDeclarados ) ?: '—',
+			implode( ',', $soloGeo ) ?: '—'
+		);
+	}
+}
+
+comprobar(
+	0 === count( $discrepancias ),
+	sprintf(
+		'Cada subregión declarada tiene los mismos municipios que en la cartografía%s',
+		$discrepancias ? ' — ' . implode( ' · ', $discrepancias ) : ''
+	)
+);
+
+// Los nombres que ve el ciudadano son los oficiales de la entidad, no los
+// de la cartografía del DANE.
+comprobar(
+	'Los Abades' === UHP_Subregiones::nombre_de( 'abades' )
+		&& 'La Cordillera' === UHP_Subregiones::nombre_de( 'cordillera' )
+		&& 'Piedemonte Costero' === UHP_Subregiones::nombre_de( 'pie_de_monte_costero' ),
+	'Las subregiones se rotulan con el nombre oficial de la entidad'
+);
+// Y el cruce sigue admitiendo la grafía del DANE, por si un dato la trae.
+comprobar(
+	'abades' === UHP_Subregiones::codigo_de( 'Abades' )
+		&& 'abades' === UHP_Subregiones::codigo_de( 'Los Abades' ),
+	'El cruce acepta el nombre oficial y el cartográfico'
+);
+
+/* ---------------------------------------------------------------- */
 echo "\n5c. Vistas que pueden llevarse al mapa\n";
 
 $territoriales = UHP_Views::territoriales();
@@ -450,8 +539,8 @@ comprobar(
 	sprintf( 'La vista subregional colorea %d de las 13 subregiones', count( $carga_sub['valores'] ) )
 );
 comprobar(
-	'Pie de Monte Costero' === $carga_sub['valores']['pie_de_monte_costero']['nombre'],
-	'El mapa usa el nombre cartográfico de la subregión, no el del informe'
+	'Piedemonte Costero' === $carga_sub['valores']['pie_de_monte_costero']['nombre'],
+	'El mapa rotula la subregión con el nombre oficial de la entidad'
 );
 
 $carga = UHP_Rest::carga_geomapa( 'prev_lpm_municipios' );
@@ -461,6 +550,127 @@ comprobar(
 	UHP_Topojson::OBJETO === $carga['objeto'],
 	'La carga del geomapa nombra el objeto de la topología'
 );
+
+/* Vista con dos indicadores por subregión: el mapa solo puede pintar uno.
+   Debe elegir, decirlo en el rótulo y respetar la serie que se le pida. */
+$series = UHP_Views::series( 'prev_subregion' );
+comprobar( 2 === count( $series ), sprintf( '«prev_subregion» declara %d series', count( $series ) ) );
+
+$por_defecto = UHP_Rest::carga_geomapa( 'prev_subregion' );
+comprobar(
+	$por_defecto['serie'] === $series[0] && 11 === count( $por_defecto['valores'] ),
+	'Sin serie pedida, el geomapa dibuja la primera y una sola cifra por subregión'
+);
+comprobar(
+	false !== strpos( $por_defecto['meta']['etiqueta'], $series[0] ),
+	'El rótulo del mapa dice qué serie se está dibujando'
+);
+
+$otra = UHP_Rest::carga_geomapa( 'prev_subregion', 'lpm', $series[1] );
+comprobar(
+	$otra['serie'] === $series[1] && $otra['valores'] !== $por_defecto['valores'],
+	'Pedir la otra serie cambia las cifras del mapa'
+);
+
+/* ---------------------------------------------------------------- */
+echo "\n5e. Índice territorial del tablero\n";
+
+foreach ( UHP_Territorios::NIVELES as $nivel ) {
+	$ent = UHP_Territorios::entidades( $nivel );
+	comprobar( count( $ent ) > 0, sprintf( 'El nivel «%s» declara %d entidades', $nivel, count( $ent ) ) );
+}
+comprobar( 64 === count( UHP_Territorios::entidades( 'municipio' ) ), 'El nivel municipal trae los 64 municipios' );
+comprobar( 13 === count( UHP_Territorios::entidades( 'subregion' ) ), 'El nivel subregional trae las 13 subregiones' );
+
+comprobar( null === UHP_Territorios::ficha( 'subregion', 'inventada' ), 'Un territorio inexistente no devuelve ficha' );
+comprobar( null === UHP_Territorios::ficha( 'municipio', '99999' ), 'Un DIVIPOLA inexistente no devuelve ficha' );
+
+/* La regla de honestidad del tablero: cada cifra dice en qué condición
+   está respecto del territorio, y las que el proyecto no desagrega se
+   marcan como departamentales en vez de pasar por locales. */
+$estados_validos = array( 'publicado', 'sin_dato', 'agregado', 'departamental' );
+$sin_estado      = array();
+foreach ( array( array( 'subregion', 'centro' ), array( 'municipio', '52001' ), array( 'departamento', '52' ) ) as $par ) {
+	$f = UHP_Territorios::ficha( $par[0], $par[1] );
+	foreach ( $f['indicadores'] as $ind ) {
+		if ( ! in_array( $ind['estado'], $estados_validos, true ) ) {
+			$sin_estado[] = $par[0] . '/' . $ind['clave'] . ' = ' . $ind['estado'];
+		}
+	}
+}
+comprobar(
+	0 === count( $sin_estado ),
+	sprintf( 'Cada cifra de una ficha declara su condición%s', $sin_estado ? ' — ' . implode( ', ', $sin_estado ) : '' )
+);
+
+$pasto = UHP_Territorios::ficha( 'municipio', '52001' );
+$participantes = null;
+foreach ( $pasto['indicadores'] as $ind ) {
+	if ( 'participantes' === $ind['clave'] ) {
+		$participantes = $ind;
+	}
+}
+comprobar(
+	$participantes && 'departamental' === $participantes['estado'],
+	'Los participantes tamizados se marcan como departamentales en un municipio'
+);
+
+// Las prevalencias NO se promedian para obtener la de una subregión: se
+// usan las publicadas o ninguna. Sanquianga no está documentada.
+$sanquianga = UHP_Territorios::ficha( 'subregion', 'sanquianga' );
+$prev = null;
+foreach ( $sanquianga['indicadores'] as $ind ) {
+	if ( 'lpm' === $ind['clave'] ) {
+		$prev = $ind;
+	}
+}
+comprobar(
+	$prev && 'sin_dato' === $prev['estado'] && null === $prev['valor'],
+	'Una subregión sin prevalencia publicada no se rellena con un promedio'
+);
+
+// Los conteos sí se suman, y la suma cuadra con el total del departamento.
+$suma_cancer = 0;
+foreach ( UHP_Territorios::valores( 'cancer', 'subregion' ) as $v ) {
+	$suma_cancer += (int) $v['valor'];
+}
+comprobar(
+	8 === $suma_cancer,
+	sprintf( 'Los casos sumados por subregión dan los 8 del departamento (%d)', $suma_cancer )
+);
+
+$suma_interv = 0;
+foreach ( UHP_Territorios::valores( 'intervencion', 'subregion' ) as $v ) {
+	$suma_interv += (int) $v['valor'];
+}
+comprobar(
+	55 === $suma_interv,
+	sprintf( 'Los municipios intervenidos sumados por subregión dan 55 (%d)', $suma_interv )
+);
+
+// Un indicador cambia de significado al cambiar de capa y debe decirlo.
+$meta_mun = UHP_Territorios::meta_por_nivel( UHP_Rest::indicadores_mapa()['intervencion'], 'intervencion', 'municipio' );
+$meta_sub = UHP_Territorios::meta_por_nivel( UHP_Rest::indicadores_mapa()['intervencion'], 'intervencion', 'subregion' );
+comprobar(
+	$meta_mun['etiqueta'] !== $meta_sub['etiqueta'],
+	'El indicador de intervención se rotula distinto en cada capa'
+);
+
+/* Las tres capas de geometría existen y traen lo que dicen. */
+foreach ( array( 'municipio' => 64, 'subregion' => 13, 'departamento' => 1 ) as $nivel => $esperados ) {
+	$f = UHP_Topojson::features( $nivel );
+	comprobar(
+		count( $f ) === $esperados,
+		sprintf( 'La capa «%s» trae %d geometrías (%d)', $nivel, $esperados, count( $f ) )
+	);
+	$sin_id = 0;
+	foreach ( $f as $x ) {
+		if ( empty( $x['properties']['id'] ) || empty( $x['properties']['nombre'] ) ) {
+			$sin_id++;
+		}
+	}
+	comprobar( 0 === $sin_id, sprintf( 'Toda la capa «%s» trae id y nombre', $nivel ) );
+}
 
 $carga_ind = UHP_Rest::carga_geomapa( '', 'inventado' );
 comprobar(

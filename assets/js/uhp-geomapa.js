@@ -82,6 +82,8 @@
       view: fig.getAttribute('data-view') || '',
       indicador: fig.getAttribute('data-indicador') || '',
       nivel: fig.getAttribute('data-nivel') === 'subregion' ? 'subregion' : 'municipio',
+      // Serie a dibujar cuando la vista trae más de una por territorio.
+      serie: fig.getAttribute('data-serie') || '',
       tema: fig.getAttribute('data-tema') === 'oscuro' ? 'oscuro' : 'claro',
       teselas: fig.getAttribute('data-teselas') === '1',
       capa: fig.getAttribute('data-capa') || '',
@@ -106,7 +108,7 @@
     // la misma página la descargan una sola vez entre todos.
     Promise.all([
       C.restCache('/topojson', { nivel: st.nivel }),
-      C.rest('/geomapa', { view: st.view, indicador: st.indicador })
+      C.rest('/geomapa', { view: st.view, indicador: st.indicador, serie: st.serie })
     ]).then(function (r) {
       st.topo = r[0];
       st.datos = r[1];

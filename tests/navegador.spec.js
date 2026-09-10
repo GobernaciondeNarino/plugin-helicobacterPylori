@@ -193,6 +193,78 @@ test.describe('Gráficos', () => {
     expect(dentro.textoAjeno).toBe('');
   });
 
+  test('un valor CERO se dibuja: no se descarta como si faltara', async ({ page }) => {
+    /* El renderer descartaba las filas cuyo valor era cero. En la serie de
+       producción científica eso borraba cinco años —2020, 2021, 2023, 2024
+       y 2025— y la línea saltaba de 2019 a 2022 como si no hubiera habido
+       años de por medio, cuando lo que hubo fue un vacío de publicaciones,
+       que es justamente lo que había que ver. */
+    await page.goto(BASE + '/paginas/graficos.html');
+
+    const fig = page.locator('[data-view="publicaciones_anio"]');
+    await expect(fig.locator('.uhp-g__lienzo svg')).toHaveCount(1, { timeout: 20000 });
+    await expect(fig.locator('.uhp-g__lienzo svg text')).not.toHaveCount(0, { timeout: 20000 });
+
+    const anios = await fig.evaluate((nodo) =>
+      Array.from(nodo.querySelectorAll('.uhp-g__lienzo svg text')).map((t) => t.textContent)
+    );
+    // Los nueve años del archivo, con publicaciones o sin ellas.
+    ['2018', '2019', '2020', '2021', '2022', '2023', '2024', '2025', '2026'].forEach((a) => {
+      expect(anios, 'falta el año ' + a + ' en la serie').toContain(a);
+    });
+  });
+
+  test('cada gráfico dibuja una marca por fila: no se recorta nada', async ({ page }) => {
+    /* La comprobación de fondo: lo que publica la API es lo que se ve.
+
+       Se cuentan las MARCAS, no los rótulos. D3plus escribe la etiqueta
+       dentro de cada barra y la acorta cuando no cabe —con 23 productos de
+       nombre largo eso pasa—, pero acortar un rótulo no es perder un dato:
+       la barra está, y su nombre completo sigue en el tooltip y en la
+       tabla de datos de la barra de herramientas. Lo que sí sería perder
+       un dato es que faltara la marca. */
+    await page.goto(BASE + '/paginas/graficos.html');
+    await expect(page.locator('[data-uhp-grafico] .uhp-g__lienzo svg')).toHaveCount(8, { timeout: 25000 });
+    await expect(page.locator('[data-view="metas_mga"] g.d3plus-Bar-shape > *'))
+      .not.toHaveCount(0, { timeout: 20000 });
+
+    const informe = await page.evaluate(async () => {
+      // Cuántas marcas dibuja cada tipo por fila de datos.
+      const POR_FILA = { bar: 'Bar', treemap: 'Rect', donut: 'Path', pie: 'Path' };
+      const salida = [];
+
+      for (const fig of document.querySelectorAll('[data-uhp-grafico]')) {
+        const vista = fig.dataset.view;
+        const tipo = fig.dataset.type;
+        const d = await fetch('/wp-json/urkunina/v1/render?view=' + vista + '&type=' + tipo)
+          .then((x) => x.json());
+        const filas = (d.data || []).length;
+
+        if (POR_FILA[tipo]) {
+          const g = fig.querySelector('g.d3plus-' + POR_FILA[tipo] + '-shape');
+          salida.push({ vista, tipo, filas, marcas: g ? g.children.length : 0 });
+        } else if (tipo === 'stacked_bar') {
+          // Formato largo: una marca por fila y medida.
+          const medidas = (d.view.measures || []).length;
+          const g = fig.querySelector('g.d3plus-Bar-shape');
+          salida.push({ vista, tipo, filas: filas * medidas, marcas: g ? g.children.length : 0 });
+        } else {
+          // Líneas: una forma por serie, no por punto. Se comprueba que
+          // dibuje algo; los puntos los cubre la prueba del valor cero.
+          const g = fig.querySelector('g.d3plus-Line-shape');
+          salida.push({ vista, tipo, filas: 1, marcas: g && g.children.length ? 1 : 0 });
+        }
+      }
+      return salida;
+    });
+
+    informe.forEach((v) => {
+      expect(v.filas, 'la vista ' + v.vista + ' llegó sin filas').toBeGreaterThan(0);
+      expect(v.marcas, 'la vista ' + v.vista + ' (' + v.tipo + ') dibuja ' +
+        v.marcas + ' marcas para ' + v.filas + ' filas').toBe(v.filas);
+    });
+  });
+
   test('la barra de herramientas abre el detalle y la tabla de datos', async ({ page }) => {
     await page.goto(BASE + '/paginas/graficos.html');
     const fig = page.locator('[data-uhp-grafico]').first();
@@ -476,6 +548,25 @@ test.describe('Geomapa (D3plus)', () => {
     expect(errores).toEqual([]);
   });
 
+  test('un territorio con conteo cero se colorea: cero no es «sin dato»', async ({ page }) => {
+    /* El geomapa subregional descartaba las subregiones cuyo conteo era
+       cero y las pintaba como «sin dato publicado». Son cosas distintas:
+       de esas subregiones SÍ se sabe, y lo que se sabe es que no tienen
+       casos documentados. */
+    await page.goto(BASE + '/paginas/geomapa.html');
+
+    const fig = page.locator('[data-caso="con-teselas"] [data-uhp-geomapa]');
+    await expect(fig.locator('g.d3plus-geomap-paths path')).toHaveCount(64, { timeout: 25000 });
+
+    const etiquetas = await fig.evaluate((nodo) =>
+      Array.from(nodo.querySelectorAll('g.d3plus-geomap-paths path'))
+        .map((p) => p.getAttribute('aria-label') || '')
+    );
+    // Los 9 municipios no priorizados no tienen orden de intervención: esos
+    // sí son «sin dato». Los 55 restantes llevan su cifra.
+    expect(etiquetas.filter((e) => /sin dato publicado/i.test(e)).length).toBe(9);
+  });
+
   test('las subregiones llegan disueltas, sin las fronteras municipales', async ({ page }) => {
     // La geometría subregional se reconstruye uniendo los municipios de
     // cada subregión por cancelación de aristas. Si esa unión dejara de
@@ -498,6 +589,31 @@ test.describe('Geomapa (D3plus)', () => {
       expect(n, 'subregión con ' + n + ' contornos: no se disolvió').toBeLessThanOrEqual(4);
       expect(n).toBeGreaterThan(0);
     });
+  });
+
+  test('una vista con dos indicadores por subregión dibuja uno y lo dice', async ({ page }) => {
+    /* `prev_subregion` trae dos indicadores por subregión. En un gráfico de
+       barras se ven los dos; en un mapa coroplético hay que elegir, porque
+       un territorio no puede tener dos colores. El shortcode obliga a
+       elegir y el título dice cuál se está dibujando. */
+    await page.goto(BASE + '/paginas/geomapa.html');
+
+    const fig = page.locator('[data-caso="serie"] [data-uhp-geomapa]');
+    await expect(fig).toHaveAttribute('data-nivel', 'subregion');
+    await expect(fig).toHaveAttribute('data-serie', 'Infección por H. pylori');
+    await expect(fig.locator('g.d3plus-geomap-paths path')).toHaveCount(13, { timeout: 25000 });
+
+    // El rótulo nombra la serie: sin eso el mapa no se puede leer.
+    await expect(fig.locator('.uhp-geo__titulo')).toContainText('Infección por H. pylori');
+
+    // Y son las cifras de ESA serie, no las de la otra.
+    const etiquetas = await fig.evaluate((nodo) =>
+      Array.from(nodo.querySelectorAll('g.d3plus-geomap-paths path'))
+        .map((p) => p.getAttribute('aria-label') || '').join(' | ')
+    );
+    // Piedemonte Costero: 55 % de infección frente a 19,6 % de lesión.
+    expect(etiquetas).toContain('55,0');
+    expect(etiquetas).not.toContain('19,6');
   });
 
   test('una vista sin territorio avisa en vez de romperse', async ({ page }) => {
@@ -636,7 +752,7 @@ test.describe('Tablero', () => {
     await expect(page.locator('.uhp-db__zona')).toHaveCount(3);
 
     // Mapa central con los 64 municipios.
-    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path')).toHaveCount(64, { timeout: 25000 });
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)')).toHaveCount(64, { timeout: 25000 });
 
     // Panel de gráficos con su análisis.
     await expect(page.locator('[data-uhp-zona="grafico"] svg')).toHaveCount(1, { timeout: 20000 });
@@ -646,10 +762,12 @@ test.describe('Tablero', () => {
 
   test('los filtros del mapa y del gráfico responden', async ({ page }) => {
     await page.goto(BASE + '/paginas/tablero.html');
-    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path')).toHaveCount(64, { timeout: 25000 });
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)')).toHaveCount(64, { timeout: 25000 });
 
-    // Cambiar el indicador del mapa.
-    const selInd = page.locator('.uhp-db__select').first();
+    // Cambiar el indicador del mapa. Se apunta al selector por su atributo
+    // y no por su posición: el panel de controles ha ganado grupos por
+    // encima y «el primero» dejó de ser este.
+    const selInd = page.locator('[data-uhp-indicador]');
     await selInd.selectOption('cancer');
     await expect(page.locator('.uhp-mapa__leyenda strong')).toContainText('Cáncer', { timeout: 15000 });
 
@@ -663,7 +781,7 @@ test.describe('Tablero', () => {
 
   test('al pulsar un municipio se abre su ficha', async ({ page }) => {
     await page.goto(BASE + '/paginas/tablero.html');
-    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path')).toHaveCount(64, { timeout: 25000 });
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)')).toHaveCount(64, { timeout: 25000 });
 
     const ficha = page.locator('[data-uhp-zona="ficha"]');
     await expect(ficha).not.toHaveClass(/is-activa/);
@@ -782,7 +900,7 @@ test.describe('Tablero', () => {
     await expect(db).toHaveAttribute('data-tema', 'claro');
 
     await expect(page.locator('.uhp-db__kpi')).toHaveCount(6, { timeout: 20000 });
-    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path')).toHaveCount(64, { timeout: 25000 });
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)')).toHaveCount(64, { timeout: 25000 });
 
     // Ni una superficie oscura debe quedar dentro del tablero claro: eso
     // es lo que delataría un color literal olvidado en la hoja.
@@ -817,7 +935,7 @@ test.describe('Tablero', () => {
 
   test('el tema decide también la capa base y la tinta de los gráficos', async ({ page }) => {
     await page.goto(BASE + '/paginas/tablero-claro.html');
-    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path')).toHaveCount(64, { timeout: 25000 });
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)')).toHaveCount(64, { timeout: 25000 });
 
     // La capa base sigue al tema: un tablero claro con teselas oscuras es
     // el descuido más fácil al cambiar solo el tema, y aquí se vigila.
@@ -845,7 +963,7 @@ test.describe('Tablero', () => {
     // tablero oscuro antes de tokenizar la hoja.
     for (const [pagina, oscuro] of [['tablero', true], ['tablero-claro', false]]) {
       await page.goto(BASE + '/paginas/' + pagina + '.html');
-      await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path'))
+      await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)'))
         .toHaveCount(64, { timeout: 25000 });
 
       await page.locator('.leaflet-overlay-pane path').nth(20).click({ force: true });
@@ -874,6 +992,152 @@ test.describe('Tablero', () => {
         }
       });
     }
+  });
+
+  test('el mapa cambia de capa territorial', async ({ page }) => {
+    const errores = vigilar(page);
+    await page.goto(BASE + '/paginas/tablero.html');
+
+    const territorios = page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)');
+    await expect(territorios).toHaveCount(64, { timeout: 25000 });
+
+    // El contorno del departamento va por debajo de las tres capas y no es
+    // un territorio: no debe contarse ni responder al ratón.
+    await expect(page.locator('.uhp-db__mapa .uhp-mapa__contorno')).not.toHaveCount(0);
+
+    await page.locator('[data-uhp-capa]').selectOption('subregion');
+    await expect(territorios).toHaveCount(13, { timeout: 20000 });
+
+    await page.locator('[data-uhp-capa]').selectOption('departamento');
+    await expect(territorios).toHaveCount(1, { timeout: 20000 });
+
+    await page.locator('[data-uhp-capa]').selectOption('municipio');
+    await expect(territorios).toHaveCount(64, { timeout: 20000 });
+
+    expect(errores).toEqual([]);
+  });
+
+  test('seleccionar un territorio recoloca todo el tablero', async ({ page }) => {
+    const errores = vigilar(page);
+    await page.goto(BASE + '/paginas/tablero.html');
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)'))
+      .toHaveCount(64, { timeout: 25000 });
+
+    // De partida manda el departamento y no hay nada que limpiar.
+    const ctx = page.locator('[data-uhp-zona="contexto"]');
+    await expect(ctx).toContainText('Nariño');
+    await expect(ctx.locator('[data-uhp-limpiar]')).toHaveCount(0);
+
+    await page.locator('.leaflet-overlay-pane path:not(.uhp-mapa__contorno)').nth(20).click({ force: true });
+
+    // La barra de contexto pasa a ese municipio, con su subregión de camino.
+    await expect(ctx.locator('[data-uhp-ctx-nivel="municipio"]')).toHaveCount(1, { timeout: 10000 });
+    await expect(ctx.locator('[data-uhp-limpiar]')).toHaveCount(1);
+
+    // La ficha lo describe y dice a qué subregión pertenece.
+    const ficha = page.locator('[data-uhp-zona="ficha"]');
+    await expect(ficha).toHaveClass(/is-activa/);
+    await expect(ficha).toContainText('DIVIPOLA');
+    await expect(ficha.locator('.uhp-db__ficha-salto')).toHaveCount(1);
+
+    // Volver al departamento deja el tablero como estaba.
+    await ctx.locator('[data-uhp-limpiar]').click();
+    await expect(ctx.locator('[data-uhp-limpiar]')).toHaveCount(0, { timeout: 10000 });
+    await expect(ficha).not.toHaveClass(/is-activa/);
+
+    expect(errores).toEqual([]);
+  });
+
+  test('el cintillo dice qué cifras NO son del territorio elegido', async ({ page }) => {
+    /* Es la regla de honestidad del tablero. De los seis indicadores, dos no
+       están desagregados en ninguna fuente: enseñar la cifra departamental
+       sin decirlo sería atribuir al municipio un dato que el proyecto no ha
+       medido. */
+    await page.goto(BASE + '/paginas/tablero.html');
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)'))
+      .toHaveCount(64, { timeout: 25000 });
+
+    // Sin selección, ninguna cifra lleva marca: todas son del departamento.
+    await expect(page.locator('.uhp-db__kpis .uhp-db__kpi-marca')).toHaveCount(0);
+
+    await page.locator('.leaflet-overlay-pane path:not(.uhp-mapa__contorno)').nth(20).click({ force: true });
+    await expect(page.locator('[data-uhp-zona="ficha"]')).toHaveClass(/is-activa/, { timeout: 10000 });
+
+    const marcas = await page.locator('.uhp-db__kpis .uhp-db__kpi-marca').allTextContents();
+    expect(marcas.filter((m) => m === 'departamental').length).toBe(2);
+
+    // Y una cifra sin publicar se muestra como raya, no como cero.
+    const sinDato = page.locator('.uhp-db__kpis .uhp-db__kpi.is-sin-dato .uhp-db__kpi-val').first();
+    if (await sinDato.count()) { await expect(sinDato).toHaveText('—'); }
+  });
+
+  test('el panel avisa cuando la vista no puede hablar del territorio', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero.html');
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)'))
+      .toHaveCount(64, { timeout: 25000 });
+
+    // Sin territorio elegido no hay nada que advertir.
+    await expect(page.locator('.uhp-db__aviso')).toHaveCount(0);
+
+    await page.locator('.leaflet-overlay-pane path:not(.uhp-mapa__contorno)').nth(20).click({ force: true });
+    await expect(page.locator('[data-uhp-zona="ficha"]')).toHaveClass(/is-activa/, { timeout: 10000 });
+
+    // El gráfico de partida es subregional y hay un municipio elegido: se
+    // dice que no se puede filtrar, en vez de dejar creer que sí.
+    await expect(page.locator('.uhp-db__aviso')).toContainText('no se puede filtrar', { timeout: 10000 });
+  });
+
+  test('la ficha de una subregión lleva a sus municipios', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero.html');
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)'))
+      .toHaveCount(64, { timeout: 25000 });
+
+    await page.locator('[data-uhp-capa]').selectOption('subregion');
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)'))
+      .toHaveCount(13, { timeout: 20000 });
+
+    await page.locator('.leaflet-overlay-pane path:not(.uhp-mapa__contorno)').nth(3).click({ force: true });
+    const ficha = page.locator('[data-uhp-zona="ficha"]');
+    await expect(ficha).toHaveClass(/is-activa/, { timeout: 10000 });
+
+    // Sus municipios son botones: bajar de nivel se hace desde aquí.
+    const hijos = ficha.locator('[data-uhp-hijo]');
+    await expect(hijos).not.toHaveCount(0);
+    const nombre = await hijos.first().textContent();
+
+    await hijos.first().click();
+
+    // Bajar a un municipio arrastra la capa del mapa: si no, se estaría
+    // seleccionando algo que no está dibujado.
+    await expect(page.locator('[data-uhp-capa]')).toHaveValue('municipio', { timeout: 20000 });
+    await expect(page.locator('[data-uhp-zona="contexto"] [data-uhp-ctx-nivel="municipio"]'))
+      .toHaveCount(1, { timeout: 15000 });
+    await expect(page.locator('[data-uhp-zona="contexto"]')).toContainText(nombre.trim());
+  });
+
+  test('la capa del mapa sigue a la vista del gráfico', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero.html');
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)'))
+      .toHaveCount(64, { timeout: 25000 });
+    await expect(page.locator('[data-uhp-capa]')).toHaveValue('municipio');
+
+    // Un acceso rápido a una vista subregional lleva el mapa a subregiones.
+    await page.locator('.uhp-db__chip', { hasText: 'Subregiones' }).first().click();
+    await expect(page.locator('[data-uhp-capa]')).toHaveValue('subregion', { timeout: 20000 });
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path:not(.uhp-mapa__contorno)'))
+      .toHaveCount(13, { timeout: 20000 });
+  });
+
+  test('una cifra del cintillo cambia el indicador del mapa', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero.html');
+    await expect(page.locator('.uhp-mapa__leyenda strong')).toContainText('LPM', { timeout: 25000 });
+
+    await page.locator('[data-uhp-kpi="cancer"]').click();
+    await expect(page.locator('.uhp-mapa__leyenda strong')).toContainText('Cáncer', { timeout: 15000 });
+    // El selector de los controles refleja el cambio: los dos caminos
+    // dejan el tablero en el mismo estado.
+    await expect(page.locator('[data-uhp-indicador]')).toHaveValue('cancer');
+    await expect(page.locator('[data-uhp-kpi="cancer"]')).toHaveClass(/is-activo/);
   });
 
   test('en móvil las zonas se apilan sin desbordar', async ({ page }) => {

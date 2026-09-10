@@ -443,11 +443,46 @@ agotar la memoria del sitio. El tope se aplica en los tres puntos donde se mide
 el tamaño —validación, subida y el `MAX_FILE_SIZE` del formulario— a través de
 `UHP_Datos::tope_bytes()`, de modo que no puede quedar uno desalineado.
 
+### Superficie añadida después: tablero interactivo
+
+| Superficie | Detalle |
+|---|---|
+| API REST | `/territorio`; `/geo` y `/mapa` aceptan `nivel`; `/geomapa` acepta `serie`. Once rutas en total |
+| Datos | `14_subregiones_municipios.json`. Diecisiete archivos |
+| Clases | `UHP_Territorios` |
+
+Sin hallazgos explotables. Se comprobó que los parámetros nuevos siguen la
+misma regla que los anteriores: `nivel` se contrasta contra una lista cerrada
+de tres valores y cae al departamento; `id` pasa por `UHP_Security::clave()` y
+se valida contra el índice de municipios o de subregiones antes de tocar nada,
+de modo que un identificador inventado devuelve 404 y no una ficha a medias;
+`serie` es el único que admite texto libre —los nombres de indicador llevan
+tildes y espacios—, se sanea con `sanitize_text_field()` y se contrasta contra
+las series que declara la propia vista, así que un valor que no esté en esa
+lista cae a la primera en vez de filtrar por él.
+
+La ficha de un territorio no expone nada que no publicaran ya `/kpi` y `/mapa`:
+son las mismas cifras reorganizadas, más el estado que dice en qué condición
+está cada una.
+
+### Dos correcciones de integridad del dato
+
+No son fallos de seguridad, pero sí de fidelidad de lo que se publica, que en
+un tablero de la entidad es del mismo orden:
+
+- El renderer descartaba las filas cuyo valor era **cero**, con lo que la serie
+  de producción científica ocultaba cinco años sin publicaciones y se leía como
+  actividad continua.
+- El geomapa subregional descartaba los territorios con conteo cero y los
+  pintaba como «sin dato publicado», que dice algo distinto: que no se sabe.
+
+Los dos quedan corregidos y con prueba de regresión.
+
 ### Resultado de las pruebas tras el anexo
 
 ```
-php tests/test-datos.php     →  311 de 311 comprobaciones en verde
-npx playwright test          →   36 de 36 pruebas de navegador en verde
+php tests/test-datos.php     →  354 de 354 comprobaciones en verde
+npx playwright test          →   50 de 50 pruebas de navegador en verde
 ```
 
 ---

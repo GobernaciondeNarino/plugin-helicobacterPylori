@@ -15,13 +15,13 @@ conoce al volcán Galeras.
 
 ## Qué hace
 
-Convierte el conjunto de datos del proyecto —catorce archivos JSON más la
+Convierte el conjunto de datos del proyecto —quince archivos JSON más la
 cartografía municipal y subregional— en componentes publicables desde el editor
 de WordPress:
 
 | Componente | Shortcode |
 |---|---|
-| Tablero completo con mapa, controles, filtros y gráficos | `[urkunina_dashboard tema="oscuro\|claro"]` |
+| Tablero interactivo con mapa, controles, filtros y gráficos enlazados | `[urkunina_dashboard tema="oscuro\|claro"]` |
 | Recreación 3D de *Helicobacter pylori* con línea de tiempo | `[urkunina_3d]` |
 | Gráfico de cualquiera de las 24 vistas del catálogo | `[urkunina_grafico view="…"]` |
 | Mapa coroplético de los 64 municipios sobre OpenStreetMap | `[urkunina_mapa]` |
@@ -77,6 +77,17 @@ departamento con o sin cartografía de fondo según convenga a la página.
 Publicar el tablero requiere una plantilla de página de ancho completo y sin
 barra lateral: el contenedor ocupa el 100 % del ancho y toda la altura de la
 ventana.
+
+Es **interactivo de punta a punta**: mantiene un territorio seleccionado —el
+departamento, una de sus 13 subregiones o uno de sus 64 municipios— y todo lo
+demás se recoloca a su alrededor. Se selecciona pulsando en el mapa, en una
+barra del gráfico, en el selector o navegando por la ficha. El mapa dibuja las
+tres capas territoriales y sigue a la vista que se elija en el panel.
+
+Y **lo que no se puede filtrar, lo dice**: 17 de las 24 vistas y 2 de los 6
+indicadores solo existen para el conjunto del departamento, así que cuando una
+pieza no puede responder por el territorio elegido lo anuncia en vez de enseñar
+la cifra departamental como si fuera local.
 
 Tiene **dos temas**. El oscuro es el de por defecto y viste la misma paleta que
 el objeto 3D —fondo oscuro, verde y amarillo institucionales— para que ambos se

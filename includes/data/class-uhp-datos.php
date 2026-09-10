@@ -164,6 +164,14 @@ final class UHP_Datos {
 				'lista'       => 'retos',
 				'grupo'       => 'gobernanza',
 			),
+			'subregiones'     => array(
+				'archivo'     => '14_subregiones_municipios.json',
+				'titulo'      => 'Subregiones y sus municipios',
+				'descripcion' => 'División subregional oficial de la Gobernación: las 13 subregiones con los municipios que componen cada una. Es la nomenclatura con la que se rotulan las subregiones en el tablero y en los gráficos.',
+				'claves'      => array( 'departamento', 'subregiones' ),
+				'lista'       => 'subregiones',
+				'grupo'       => 'territorio',
+			),
 			'geojson'         => array(
 				'archivo'     => 'narino_municipios.geojson',
 				'titulo'      => 'Geometría municipal (GeoJSON)',

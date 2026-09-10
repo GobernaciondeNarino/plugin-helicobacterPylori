@@ -98,6 +98,16 @@
   --uhp-db-kpi-fondo: rgba(16, 161, 59, .10);
   --uhp-db-kpi-val: #FFFFFF;
 
+  /* --- Condición de una cifra ---
+     `agregado`, `sin dato` y `departamental` no son decoración: dicen qué
+     relación tiene la cifra con el territorio seleccionado. Se marcan con
+     color Y con texto, porque el color solo no vale para quien no lo
+     distingue (Anexo 1 de la Resolución 1519, criterio 1.4.1). */
+  --uhp-db-marca-fondo: rgba(255, 255, 255, .10);
+  --uhp-db-marca-tinta: var(--uhp-db-texto-medio);
+  --uhp-db-dpto-filete: #FFD500;
+  --uhp-db-sin-dato-op: .55;
+
   /* --- Riesgo clínico ---
      Codifican el nivel, no decoran: tienen que leerse en los dos temas. */
   --uhp-db-riesgo-alto: #E2453C;
@@ -129,7 +139,7 @@
   --uhp-db-r-m: 10px;
 
   /* --- Retícula --- */
-  --uhp-db-cab: 118px;
+  --uhp-db-cab: 146px;
   --uhp-db-lateral: 300px;
   --uhp-db-panel-ancho: 380px;
 
@@ -227,6 +237,13 @@
   --uhp-db-halo-bajo: none;
 
   --uhp-db-foco: #003366;
+
+  --uhp-db-marca-fondo: rgba(15, 23, 42, .08);
+  --uhp-db-marca-tinta: #45525F;
+  --uhp-db-dpto-filete: #C98A00;
+  /* Sobre blanco una cifra atenuada se pierde antes que sobre negro: se
+     apaga menos para que siga siendo legible. */
+  --uhp-db-sin-dato-op: .68;
 
   --uhp-db-error-fondo: #FFF5F4;
   --uhp-db-error-borde: #F3C9C5;
@@ -742,6 +759,163 @@
 .uhp-db .uhp-error__btn { background: var(--uhp-db-verde); color: var(--uhp-db-btn-txt); font-weight: 600; }
 .uhp-db .uhp-error__btn:hover { background: var(--uhp-db-btn-alto); }
 .uhp-db .uhp-skeleton { color: var(--uhp-db-texto-tenue); }
+
+/* ---------- Cifras del cintillo: pulsables y con su condición ----------
+   La tarjeta es un <button> cuando lleva a algún sitio (cambiar el
+   indicador del mapa) y un <div> cuando no. Las dos se ven igual: lo que
+   cambia es que una responde. */
+.uhp-db__kpi {
+  font: inherit;
+  text-align: left;
+  transition: background .15s, border-color .15s, transform .15s;
+}
+button.uhp-db__kpi { cursor: pointer; }
+button.uhp-db__kpi:hover {
+  border-left-color: var(--uhp-db-verde-claro, var(--uhp-db-verde));
+  transform: translateY(-1px);
+}
+.uhp-db__kpi.is-activo {
+  background: var(--uhp-db-control-alto);
+  border-left-width: 4px;
+}
+
+/* Marca textual de la condición de la cifra. */
+.uhp-db__kpi-marca {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-family: var(--uhp-fuente-etq, inherit);
+  font-size: .62rem;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  color: var(--uhp-db-marca-tinta);
+  background: var(--uhp-db-marca-fondo);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+/* Sin dato: la tarjeta se apaga, pero sigue legible. */
+.uhp-db__kpi.is-sin-dato .uhp-db__kpi-val,
+.uhp-db__ficha-dato.is-sin-dato b { opacity: var(--uhp-db-sin-dato-op); }
+
+/* Departamental: filete amarillo, el color de «ojo con esto» del tablero. */
+.uhp-db__kpi.is-departamental,
+.uhp-db__ficha-dato.is-departamental { border-left-color: var(--uhp-db-dpto-filete); }
+
+/* ---------- Barra de contexto ---------- */
+.uhp-db__ctx {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: .78rem;
+  color: var(--uhp-db-texto-medio);
+}
+.uhp-db__ctx:empty { display: none; }
+.uhp-db__ctx-etq {
+  font-family: var(--uhp-fuente-etq, inherit);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--uhp-db-texto-tenue);
+}
+.uhp-db__ctx-sep { color: var(--uhp-db-texto-tenue); }
+.uhp-db__ctx-actual {
+  font-size: .88rem;
+  font-weight: 600;
+  color: var(--uhp-db-texto);
+}
+.uhp-db__ctx-nivel {
+  padding: 1px 7px;
+  font-family: var(--uhp-fuente-etq, inherit);
+  font-size: .64rem;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  color: var(--uhp-db-marca-tinta);
+  background: var(--uhp-db-marca-fondo);
+  border-radius: 999px;
+}
+.uhp-db__ctx-salto,
+.uhp-db__ctx-limpiar,
+.uhp-db__ficha-salto {
+  margin: 0;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: .76rem;
+  color: var(--uhp-db-texto-medio);
+  background: var(--uhp-db-control);
+  border: 1px solid var(--uhp-db-panel-borde);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.uhp-db__ctx-salto:hover,
+.uhp-db__ctx-limpiar:hover,
+.uhp-db__ficha-salto:hover {
+  background: var(--uhp-db-control-alto);
+  border-color: var(--uhp-db-verde);
+  color: var(--uhp-db-control-alto-txt);
+}
+.uhp-db__ctx-limpiar { margin-left: auto; }
+
+/* ---------- Aviso de alcance en el panel de análisis ----------
+   Aparece cuando la vista dibujada no puede hablar del territorio
+   seleccionado. Es de las piezas más importantes del tablero: sin ella, el
+   visitante leería una cifra departamental como si fuera local. */
+.uhp-db__aviso {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  font-size: .78rem;
+  line-height: 1.5;
+  color: var(--uhp-db-texto);
+  background: var(--uhp-db-marca-fondo);
+  border-left: 3px solid var(--uhp-db-dpto-filete);
+  border-radius: 0 var(--uhp-db-r-s) var(--uhp-db-r-s) 0;
+}
+
+/* ---------- Piezas nuevas de la ficha ---------- */
+.uhp-db__ficha-nivel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-family: var(--uhp-fuente-etq, inherit);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--uhp-db-texto-tenue);
+}
+.uhp-db__ficha-salto { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.uhp-db__ficha-dato + .uhp-db__ficha-dato { margin-top: 10px; }
+.uhp-db__ficha-dato {
+  padding-left: 10px;
+  border-left: 2px solid var(--uhp-db-verde);
+}
+.uhp-db__ficha-nota {
+  display: block;
+  margin: 3px 0 0;
+  font-size: .7rem;
+  line-height: 1.45;
+  color: var(--uhp-db-texto-tenue);
+}
+.uhp-db__ficha-h {
+  margin: 14px 0 7px;
+  padding: 0;
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--uhp-db-texto);
+  border: 0;
+}
+/* La ficha puede crecer: se le pone tope y desplazamiento propio para que
+   una subregión de trece municipios no desborde el mapa. */
+.uhp-db__ficha { max-height: calc(100% - 28px); overflow-y: auto; overscroll-behavior: contain; }
+.uhp-db__ficha::-webkit-scrollbar { width: 6px; }
+.uhp-db__ficha::-webkit-scrollbar-thumb { background: var(--uhp-db-scroll); border-radius: 3px; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1100px) {

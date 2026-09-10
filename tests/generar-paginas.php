@@ -332,6 +332,17 @@ $paginas['geomapa'] = construir(
 				)
 			) .
 			'</div>' .
+			// Vista con dos indicadores por subregión: el mapa dibuja uno y
+			// lo dice en el título.
+			'<div data-caso="serie">' .
+			$sc->sc_geomapa(
+				array(
+					'view'  => 'prev_subregion',
+					'serie' => 'Infección por H. pylori',
+					'alto'  => '360px',
+				)
+			) .
+			'</div>' .
 			// Una vista sin territorio con geometría: avisa, no falla.
 			'<div data-caso="no-territorial">' .
 			$sc->sc_geomapa( array( 'view' => 'perfil_etnia' ) ) .

@@ -1,0 +1,152 @@
+{
+  "_meta": {
+    "conjunto": "División subregional de Nariño y municipios que componen cada subregión",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Tabla de subregiones y municipios entregada por la Gobernación de Nariño (Subregiones_y_municipios.xlsx)"
+    ],
+    "fecha_extraccion": "2026-09-10",
+    "codificacion": "UTF-8",
+    "n": 13,
+    "notas": [
+      "Es la nomenclatura oficial de la entidad y la que se usa para rotular subregiones en el tablero y en los gráficos.",
+      "La composición coincide municipio a municipio con la capa subregional de dep-sub-mun.geojson; una prueba de la suite lo verifica en cada ejecución.",
+      "Cuatro municipios aparecen aquí con su nombre de uso corriente y en la cartografía del DANE con el oficial completo: Cuaspud (Cuaspud Carlosama), Tumaco (San Andrés de Tumaco), Magüí Payán (Magüí) y Los Andes Sotomayor (Los Andes). El cruce los resuelve sin tabla de alias."
+    ]
+  },
+  "departamento": "Nariño",
+  "total_subregiones": 13,
+  "total_municipios": 64,
+  "subregiones": [
+    {
+      "nombre": "Centro",
+      "municipios": [
+        "Chachagüí",
+        "La Florida",
+        "Nariño",
+        "Pasto",
+        "Tangua",
+        "Yacuanquer"
+      ]
+    },
+    {
+      "nombre": "Guambuyaco",
+      "municipios": [
+        "El Peñol",
+        "El Tambo",
+        "La Llanada",
+        "Los Andes Sotomayor"
+      ]
+    },
+    {
+      "nombre": "Juanambú",
+      "municipios": [
+        "Arboleda",
+        "Buesaco",
+        "La Unión",
+        "San Lorenzo",
+        "San Pedro de Cartago"
+      ]
+    },
+    {
+      "nombre": "La Cordillera",
+      "municipios": [
+        "Cumbitara",
+        "El Rosario",
+        "Leiva",
+        "Policarpa",
+        "Taminango"
+      ]
+    },
+    {
+      "nombre": "La Sabana",
+      "municipios": [
+        "Guaitarilla",
+        "Imués",
+        "Ospina",
+        "Sapuyes",
+        "Túquerres"
+      ]
+    },
+    {
+      "nombre": "Los Abades",
+      "municipios": [
+        "Providencia",
+        "Samaniego",
+        "Santacruz"
+      ]
+    },
+    {
+      "nombre": "Obando",
+      "municipios": [
+        "Aldana",
+        "Contadero",
+        "Córdoba",
+        "Cuaspud",
+        "Cumbal",
+        "Funes",
+        "Guachucal",
+        "Gualmatán",
+        "Iles",
+        "Ipiales",
+        "Potosí",
+        "Puerres",
+        "Pupiales"
+      ]
+    },
+    {
+      "nombre": "Occidente",
+      "municipios": [
+        "Ancuya",
+        "Consacá",
+        "Linares",
+        "Sandoná"
+      ]
+    },
+    {
+      "nombre": "Pacífico Sur",
+      "municipios": [
+        "Francisco Pizarro",
+        "Tumaco"
+      ]
+    },
+    {
+      "nombre": "Piedemonte Costero",
+      "municipios": [
+        "Mallama",
+        "Ricaurte"
+      ]
+    },
+    {
+      "nombre": "Río Mayo",
+      "municipios": [
+        "Albán",
+        "Belén",
+        "Colón",
+        "El Tablón de Gómez",
+        "La Cruz",
+        "San Bernardo",
+        "San Pablo"
+      ]
+    },
+    {
+      "nombre": "Sanquianga",
+      "municipios": [
+        "El Charco",
+        "La Tola",
+        "Mosquera",
+        "Olaya Herrera",
+        "Santa Bárbara"
+      ]
+    },
+    {
+      "nombre": "Telembí",
+      "municipios": [
+        "Barbacoas",
+        "Magüí Payán",
+        "Roberto Payán"
+      ]
+    }
+  ]
+}
