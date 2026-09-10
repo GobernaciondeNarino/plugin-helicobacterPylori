@@ -1,0 +1,133 @@
+/* =====================================================================
+   [urkunina_mapa] — mapa coroplético sobre OpenStreetMap.
+
+   Las reglas que tocan clases de Leaflet (.leaflet-*) van SIEMPRE
+   anidadas bajo un contenedor del plugin: otros plugins del sitio usan
+   Leaflet y no deben verse afectados por estos estilos.
+   ===================================================================== */
+
+.uhp-mapa {
+  margin: 18px 0;
+  background: var(--uhp-fondo, #fff);
+  border: 1px solid var(--uhp-linea, #e2e8f0);
+  border-radius: var(--uhp-radio, 14px);
+  overflow: hidden;
+}
+
+.uhp-mapa__cab {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--uhp-superficie, #f8fafc);
+  border-bottom: 1px solid var(--uhp-linea, #e2e8f0);
+}
+.uhp-mapa__titulo {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--uhp-azul, #003366);
+}
+.uhp-mapa__control { display: flex; align-items: center; gap: 8px; }
+.uhp-mapa__label { font-size: .82rem; color: var(--uhp-suave, #5b6773); }
+.uhp-mapa__select {
+  min-height: 34px;
+  padding: 5px 9px;
+  font: inherit;
+  font-size: .85rem;
+  color: var(--uhp-tinta, #0f172a);
+  background: #fff;
+  border: 1px solid var(--uhp-linea, #e2e8f0);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.uhp-mapa__lienzo {
+  width: 100%;
+  height: var(--uhp-mapa-alto, 520px);
+  min-height: 300px;
+  background: #EDF1F5;
+}
+.uhp-mapa__lienzo.is-cargando { opacity: .6; }
+
+/* Los polígonos son enfocables por teclado: el foco debe verse. */
+.uhp-mapa__lienzo .leaflet-interactive:focus-visible {
+  outline: 3px solid var(--uhp-amarillo, #FFD500);
+  outline-offset: 1px;
+}
+
+/* ---------- Tooltip ---------- */
+.uhp-mapa__tip {
+  padding: 7px 11px;
+  font-family: var(--uhp-fuente, system-ui, sans-serif);
+  font-size: .84rem;
+  line-height: 1.4;
+  color: #0f172a;
+  background: rgba(255, 255, 255, .97);
+  border: 1px solid #d7dee6;
+  border-radius: 7px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, .14);
+}
+.uhp-mapa__tip-val {
+  font-family: var(--uhp-fuente-etq, inherit);
+  font-weight: 700;
+  font-size: 1.02rem;
+  color: #003366;
+  font-variant-numeric: tabular-nums;
+}
+.uhp-mapa__tip-etq { font-size: .76rem; color: #5b6773; }
+
+/* ---------- Leyenda ---------- */
+.uhp-mapa__leyenda {
+  padding: 9px 11px;
+  font-family: var(--uhp-fuente, system-ui, sans-serif);
+  font-size: .76rem;
+  color: #0f172a;
+  background: rgba(255, 255, 255, .95);
+  border: 1px solid #d7dee6;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .12);
+}
+.uhp-mapa__leyenda strong { display: block; margin-bottom: 6px; font-size: .8rem; color: #003366; }
+.uhp-mapa__escala { display: flex; height: 11px; border-radius: 3px; overflow: hidden; }
+.uhp-mapa__escala i { flex: 1; }
+.uhp-mapa__rango {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: .72rem;
+  color: #5b6773;
+  font-variant-numeric: tabular-nums;
+}
+.uhp-mapa__sindato {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid #eef2f6;
+  font-size: .72rem;
+  color: #5b6773;
+}
+.uhp-mapa__sindato i {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 1px solid #c9d3dc;
+  border-radius: 2px;
+}
+
+.uhp-mapa__pie {
+  margin: 0;
+  padding: 10px 16px 12px;
+  font-size: .76rem;
+  color: var(--uhp-suave, #5b6773);
+  border-top: 1px solid var(--uhp-linea, #e2e8f0);
+}
+
+@media (max-width: 640px) {
+  .uhp-mapa__lienzo { height: var(--uhp-mapa-alto-movil, 380px); }
+  .uhp-mapa__cab { flex-direction: column; align-items: stretch; }
+}

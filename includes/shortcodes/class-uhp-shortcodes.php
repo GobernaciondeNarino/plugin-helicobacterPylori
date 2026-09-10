@@ -1,0 +1,923 @@
+<?php
+/**
+ * Registro y render de los shortcodes del plugin.
+ *
+ * Contrato común de todos ellos:
+ *  - esqueleto inmediato y carga asíncrona (nunca bloquean el render),
+ *  - error elegante con reintento si la REST falla,
+ *  - atribución de fuentes al pie,
+ *  - toda la salida escapada con esc_html / esc_attr / esc_url,
+ *  - los assets se encolan SOLO cuando el shortcode aparece en la página.
+ *
+ * @package Urkunina5000
+ */
+
+namespace GobernacionNarino\Urkunina;
+
+defined( 'ABSPATH' ) || exit;
+
+final class UHP_Shortcodes {
+
+	/** @var int Contador para identificadores únicos. */
+	private static $contador = 0;
+
+	public function __construct() {
+		add_action( 'init', array( $this, 'registrar' ) );
+	}
+
+	/**
+	 * Registra todos los shortcodes.
+	 */
+	public function registrar() {
+		add_shortcode( 'urkunina_3d', array( $this, 'sc_3d' ) );
+		add_shortcode( 'urkunina_dashboard', array( $this, 'sc_dashboard' ) );
+		add_shortcode( 'urkunina_grafico', array( $this, 'sc_grafico' ) );
+		add_shortcode( 'urkunina_analisis', array( $this, 'sc_analisis' ) );
+		add_shortcode( 'urkunina_mapa', array( $this, 'sc_mapa' ) );
+		add_shortcode( 'urkunina_kpi', array( $this, 'sc_kpi' ) );
+		add_shortcode( 'urkunina_tabla', array( $this, 'sc_tabla' ) );
+		add_shortcode( 'urkunina_ficha', array( $this, 'sc_ficha' ) );
+		add_shortcode( 'urkunina_dato', array( $this, 'sc_dato' ) );
+	}
+
+	/* ================================================================= */
+	/* [urkunina_3d]                                                     */
+	/* ================================================================= */
+
+	/**
+	 * Recreación 3D de Helicobacter pylori con su línea de tiempo.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_3d( $atts ) {
+		$cfg  = get_option( 'uhp_3d', UHP_Activator::tresd_por_defecto() );
+		$cfg  = is_array( $cfg ) ? $cfg : UHP_Activator::tresd_por_defecto();
+		$atts = $this->fusionar(
+			array(
+				'alto'         => isset( $cfg['alto'] ) ? $cfg['alto'] : '100vh',
+				'autoplay'     => ! empty( $cfg['autoplay'] ) ? 'si' : 'no',
+				'duracion'     => isset( $cfg['duracion'] ) ? $cfg['duracion'] : 15,
+				'instrumentos' => ! empty( $cfg['instrumentos'] ) ? 'si' : 'no',
+				'cabecera'     => ! empty( $cfg['cabecera'] ) ? 'si' : 'no',
+			),
+			$atts,
+			'urkunina_3d'
+		);
+
+		UHP_Estilos::encolar_fuentes();
+		wp_enqueue_style( UHP_Assets::P . '3d' );
+		wp_enqueue_script( UHP_Assets::P . '3d' );
+
+		// Las URLs de Three.js viajan en un script clásico: un módulo ES no
+		// admite un especificador dinámico en su `import`, de modo que las
+		// recibe por window.UHP3D. Solo se imprime una vez aunque el
+		// shortcode aparezca varias veces en la misma página.
+		static $urls_impresas = false;
+		if ( ! $urls_impresas ) {
+			wp_add_inline_script(
+				UHP_Assets::P . 'core',
+				'window.UHP3D=' . UHP_Assets::json_para_script( array( 'urls' => UHP_Assets::three_urls() ) ) . ';',
+				'after'
+			);
+			$urls_impresas = true;
+		}
+
+		$id      = $this->id( 'uhp3d' );
+		$clases  = 'uhp3d';
+		$clases .= ( 'si' === $atts['cabecera'] ) ? '' : ' uhp3d--sin-cabecera';
+		$clases .= ( 'si' === $atts['instrumentos'] ) ? '' : ' uhp3d--sin-instrumentos';
+
+		$alto = UHP_Estilos::sanitizar_css( $atts['alto'] );
+
+		ob_start();
+		?>
+		<div id="<?php echo esc_attr( $id ); ?>"
+			class="<?php echo esc_attr( $clases ); ?>"
+			style="--uhp3d-alto:<?php echo esc_attr( $alto ); ?>"
+			data-uhp3d-raiz
+			data-autoplay="<?php echo 'si' === $atts['autoplay'] ? '1' : '0'; ?>"
+			data-duracion="<?php echo esc_attr( (float) $atts['duracion'] ); ?>"
+			tabindex="0"
+			role="group"
+			aria-label="Recreación tridimensional de Helicobacter pylori y línea de tiempo de la infección">
+
+			<div class="uhp3d__escena">
+				<canvas class="uhp3d__lienzo" role="img"
+					aria-label="Recreación tridimensional de la bacteria Helicobacter pylori"></canvas>
+			</div>
+			<div class="uhp3d__vineta" aria-hidden="true"></div>
+			<div class="uhp3d__grano" aria-hidden="true"></div>
+
+			<?php if ( 'si' === $atts['cabecera'] ) : ?>
+			<div class="uhp3d__cabecera">
+				<div class="uhp3d__marca">
+					<div class="uhp3d__escudo" aria-hidden="true"></div>
+					<div class="uhp3d__marca-txt">
+						<b><?php esc_html_e( 'Gobernación de Nariño', 'urkunina-5000' ); ?></b>
+						<span><?php esc_html_e( 'Secretaría TIC, Innovación y Gobierno Abierto', 'urkunina-5000' ); ?></span>
+					</div>
+				</div>
+				<div class="uhp3d__titulo-obra">
+					<b>Helicobacter pylori</b>
+					<span><?php esc_html_e( 'Recreación 3D y línea de tiempo de la infección', 'urkunina-5000' ); ?></span>
+				</div>
+			</div>
+			<?php endif; ?>
+
+			<section class="uhp3d__lectura" data-uhp3d="lectura" aria-live="polite">
+				<span class="uhp3d__reloj" data-uhp3d="reloj">Momento 0</span>
+				<h2 data-uhp3d="titulo">—</h2>
+				<p class="uhp3d__entradilla" data-uhp3d="entradilla">—</p>
+				<div data-uhp3d="cuerpo"></div>
+				<div class="uhp3d__cifras" data-uhp3d="cifras"></div>
+				<p class="uhp3d__fuente" data-uhp3d="fuente"></p>
+			</section>
+
+			<aside class="uhp3d__instrumentos" aria-hidden="true">
+				<h3><?php esc_html_e( 'Morfometría en pantalla', 'urkunina-5000' ); ?></h3>
+				<div class="uhp3d__dato"><span><?php esc_html_e( 'Longitud del cuerpo', 'urkunina-5000' ); ?></span><b data-uhp3d="d-long">3,10 <em>µm</em></b></div>
+				<div class="uhp3d__dato"><span><?php esc_html_e( 'Diámetro celular', 'urkunina-5000' ); ?></span><b data-uhp3d="d-diam">0,56 <em>µm</em></b></div>
+				<div class="uhp3d__dato"><span><?php esc_html_e( 'Paso de la hélice', 'urkunina-5000' ); ?></span><b data-uhp3d="d-paso">2,50 <em>µm</em></b></div>
+				<div class="uhp3d__dato"><span><?php esc_html_e( 'Vueltas', 'urkunina-5000' ); ?></span><b data-uhp3d="d-vueltas">2,0</b></div>
+				<div class="uhp3d__dato"><span><?php esc_html_e( 'Flagelos', 'urkunina-5000' ); ?></span><b data-uhp3d="d-flag">5</b></div>
+				<div class="uhp3d__dato"><span><?php esc_html_e( 'Longitud flagelar', 'urkunina-5000' ); ?></span><b data-uhp3d="d-flong">4,10 <em>µm</em></b></div>
+				<div class="uhp3d__dato"><span><?php esc_html_e( 'Velocidad de nado', 'urkunina-5000' ); ?></span><b data-uhp3d="d-vel">0 <em>µm/s</em></b></div>
+				<div class="uhp3d__dato"><span><?php esc_html_e( 'Forma', 'urkunina-5000' ); ?></span><b data-uhp3d="d-forma">Espiral</b></div>
+				<div class="uhp3d__escala">
+					<div class="uhp3d__escala-barra" data-uhp3d="escala-barra" style="width:60px"></div>
+					<div class="uhp3d__escala-txt"><?php esc_html_e( '1 µm · escala real del modelo', 'urkunina-5000' ); ?></div>
+				</div>
+			</aside>
+
+			<footer class="uhp3d__riel">
+				<div class="uhp3d__progreso"><i data-uhp3d="progreso"></i></div>
+				<div class="uhp3d__riel-fila">
+					<div class="uhp3d__mandos">
+						<button class="uhp3d__mando" type="button" data-uhp3d="btn-atras"
+							title="<?php esc_attr_e( 'Momento anterior', 'urkunina-5000' ); ?>"
+							aria-label="<?php esc_attr_e( 'Momento anterior', 'urkunina-5000' ); ?>">
+							<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 1.5 4.5 8 11 14.5z"/></svg>
+						</button>
+						<button class="uhp3d__mando" type="button" data-uhp3d="btn-play"
+							title="<?php esc_attr_e( 'Pausar recorrido', 'urkunina-5000' ); ?>"
+							aria-label="<?php esc_attr_e( 'Pausar recorrido', 'urkunina-5000' ); ?>">
+							<svg data-uhp3d="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2h3.2v12H4zM8.8 2H12v12H8.8z"/></svg>
+						</button>
+						<button class="uhp3d__mando" type="button" data-uhp3d="btn-siguiente"
+							title="<?php esc_attr_e( 'Momento siguiente', 'urkunina-5000' ); ?>"
+							aria-label="<?php esc_attr_e( 'Momento siguiente', 'urkunina-5000' ); ?>">
+							<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 1.5 11.5 8 5 14.5z"/></svg>
+						</button>
+					</div>
+					<nav class="uhp3d__pasos" data-uhp3d="pasos"
+						aria-label="<?php esc_attr_e( 'Línea de tiempo de la infección', 'urkunina-5000' ); ?>"></nav>
+				</div>
+			</footer>
+
+			<div class="uhp3d__carga" data-uhp3d="carga">
+				<div class="uhp3d__helice" aria-hidden="true"></div>
+				<b><?php esc_html_e( 'Construyendo el modelo celular', 'urkunina-5000' ); ?></b>
+				<p><?php esc_html_e( 'Hélice, flagelos envainados y medio mucoso', 'urkunina-5000' ); ?></p>
+				<div class="uhp3d__fallo" data-uhp3d="fallo" role="alert"></div>
+			</div>
+
+			<p class="uhp3d__sr">
+				<?php esc_html_e( 'Con el foco puesto en la escena, use las flechas izquierda y derecha para recorrer la línea de tiempo y la barra espaciadora para pausar o reanudar. Arrastre sobre la escena para girar el modelo.', 'urkunina-5000' ); ?>
+			</p>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	/* ================================================================= */
+	/* [urkunina_dashboard]                                              */
+	/* ================================================================= */
+
+	/**
+	 * Tablero completo del proyecto.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_dashboard( $atts ) {
+		$cfg  = get_option( 'uhp_dashboard', UHP_Activator::dashboard_por_defecto() );
+		$cfg  = is_array( $cfg ) ? $cfg : UHP_Activator::dashboard_por_defecto();
+		$atts = $this->fusionar(
+			array(
+				'titulo'    => isset( $cfg['titulo'] ) ? $cfg['titulo'] : 'URKUNINA 5000',
+				'alto'      => '100vh',
+				'indicador' => isset( $cfg['indicador'] ) ? $cfg['indicador'] : 'lpm',
+				'teselas'   => isset( $cfg['teselas'] ) ? $cfg['teselas'] : 'osm',
+				'lat'       => isset( $cfg['mapa_lat'] ) ? $cfg['mapa_lat'] : 1.30,
+				'lon'       => isset( $cfg['mapa_lon'] ) ? $cfg['mapa_lon'] : -77.60,
+				'zoom'      => isset( $cfg['mapa_zoom'] ) ? $cfg['mapa_zoom'] : 8,
+			),
+			$atts,
+			'urkunina_dashboard'
+		);
+
+		UHP_Estilos::encolar_fuentes();
+		wp_enqueue_style( UHP_Assets::P . 'dashboard' );
+		UHP_Assets::encolar_libreria( 'leaflet' );
+		UHP_Assets::encolar_libreria( 'd3plus' );
+		wp_enqueue_script( UHP_Assets::P . 'dashboard' );
+		wp_enqueue_script( UHP_Assets::P . 'renderer' );
+		wp_enqueue_script( UHP_Assets::P . 'core' );
+
+		// Coordenadas fuera de Nariño delatarían un error de configuración:
+		// se cae al centro del departamento antes que mostrar otro sitio.
+		$lat = (float) $atts['lat'];
+		$lon = (float) $atts['lon'];
+		if ( ! UHP_Security::validar_bbox( $lat, $lon ) ) {
+			$lat = 1.30;
+			$lon = -77.60;
+		}
+
+		$id = $this->id( 'uhpdb' );
+
+		ob_start();
+		?>
+		<div id="<?php echo esc_attr( $id ); ?>"
+			class="uhp uhp-db"
+			style="<?php echo esc_attr( '--uhp-alto:' . UHP_Estilos::sanitizar_css( $atts['alto'] ) . ';' . UHP_Estilos::inline( $atts ) ); ?>"
+			data-uhp-dashboard
+			data-indicador="<?php echo esc_attr( UHP_Security::clave( $atts['indicador'] ) ); ?>"
+			data-teselas="<?php echo esc_attr( UHP_Security::clave( $atts['teselas'] ) ); ?>"
+			data-lat="<?php echo esc_attr( $lat ); ?>"
+			data-lon="<?php echo esc_attr( $lon ); ?>"
+			data-zoom="<?php echo esc_attr( (int) $atts['zoom'] ); ?>"
+			role="region"
+			aria-label="<?php echo esc_attr( $atts['titulo'] ); ?>">
+
+			<header class="uhp-db__cabecera">
+				<div class="uhp-db__marca">
+					<h2 class="uhp-db__titulo"><?php echo esc_html( $atts['titulo'] ); ?></h2>
+					<p class="uhp-db__subtitulo" data-uhp-zona="subtitulo">
+						<?php esc_html_e( 'Gobernación de Nariño · Secretaría TIC, Innovación y Gobierno Abierto', 'urkunina-5000' ); ?>
+					</p>
+				</div>
+				<div class="uhp-db__kpis" data-uhp-zona="kpi"
+					aria-label="<?php esc_attr_e( 'Indicadores clave del proyecto', 'urkunina-5000' ); ?>"></div>
+			</header>
+
+			<aside class="uhp-db__lateral" data-uhp-panel="controles"
+				aria-label="<?php esc_attr_e( 'Controles y filtros', 'urkunina-5000' ); ?>">
+				<div class="uhp-db__panel-cab">
+					<h3 class="uhp-db__panel-t"><?php esc_html_e( 'Controles', 'urkunina-5000' ); ?></h3>
+					<button type="button" class="uhp-db__plegar" data-uhp-toggle="controles"
+						aria-expanded="true"
+						aria-label="<?php esc_attr_e( 'Plegar o desplegar el panel de controles', 'urkunina-5000' ); ?>">◀</button>
+				</div>
+				<div class="uhp-db__controles" data-uhp-zona="controles"></div>
+			</aside>
+
+			<div class="uhp-db__mapa">
+				<!-- El lienzo se reconstruye al cambiar de capa base, de modo
+				     que la ficha del municipio vive fuera de él: si colgara
+				     dentro, cada cambio de capa la destruiría. -->
+				<div class="uhp-db__mapa-zona" data-uhp-zona="mapa"></div>
+				<div class="uhp-db__ficha" data-uhp-zona="ficha" aria-live="polite"></div>
+			</div>
+
+			<aside class="uhp-db__panel" data-uhp-panel="grafico"
+				aria-label="<?php esc_attr_e( 'Gráficos y análisis', 'urkunina-5000' ); ?>">
+				<div class="uhp-db__panel-cab">
+					<h3 class="uhp-db__panel-t"><?php esc_html_e( 'Análisis', 'urkunina-5000' ); ?></h3>
+					<button type="button" class="uhp-db__plegar" data-uhp-toggle="grafico"
+						aria-expanded="true"
+						aria-label="<?php esc_attr_e( 'Plegar o desplegar el panel de análisis', 'urkunina-5000' ); ?>">▶</button>
+				</div>
+				<div class="uhp-db__grafico-caja">
+					<h4 class="uhp-db__grafico-t" data-uhp-zona="grafico-titulo"></h4>
+					<div class="uhp-db__grafico" data-uhp-zona="grafico"></div>
+				</div>
+				<div class="uhp-db__analisis" data-uhp-zona="analisis"></div>
+			</aside>
+
+			<p class="uhp-sr" data-uhp-zona="estado" role="status" aria-live="polite"></p>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	/* ================================================================= */
+	/* [urkunina_grafico]                                                */
+	/* ================================================================= */
+
+	/**
+	 * Gráfico D3plus de una vista, con barra de herramientas y análisis.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_grafico( $atts ) {
+		$atts = $this->fusionar(
+			array(
+				'view'         => 'tamizaje_hp',
+				'type'         => '',
+				'titulo'       => '',
+				'alto'         => '',
+				'tema'         => 'claro',
+				'leyenda'      => 'si',
+				'leyenda_pos'  => 'bottom',
+				'leyenda_estilo' => 'text',
+				'analisis'     => 'ambos',
+				'acciones'     => '',
+				'barra'        => 'si',
+			),
+			$atts,
+			'urkunina_grafico'
+		);
+
+		$vista = UHP_Security::clave( $atts['view'] );
+		if ( ! UHP_Views::existe( $vista ) ) {
+			return $this->aviso(
+				sprintf(
+					/* translators: %s: identificador de vista solicitado. */
+					__( 'La vista «%s» no existe. Consulte el catálogo en URKUNINA 5000 → Gráficos.', 'urkunina-5000' ),
+					$vista
+				)
+			);
+		}
+
+		UHP_Estilos::encolar_fuentes();
+		wp_enqueue_style( UHP_Assets::P . 'grafico' );
+		UHP_Assets::encolar_libreria( 'd3plus' );
+		wp_enqueue_script( UHP_Assets::P . 'grafico' );
+
+		$meta   = UHP_Views::meta( $vista );
+		$id     = $this->id( 'uhpg' );
+		$clases = 'uhp uhp-g' . ( 'oscuro' === $atts['tema'] ? ' uhp-g--oscuro' : '' );
+
+		$estilo = UHP_Estilos::inline( $atts );
+		if ( '' !== $atts['alto'] ) {
+			$estilo .= '--uhp-g-alto:' . UHP_Estilos::sanitizar_css( $atts['alto'] ) . ';';
+		}
+
+		ob_start();
+		?>
+		<figure id="<?php echo esc_attr( $id ); ?>"
+			class="<?php echo esc_attr( $clases ); ?>"
+			style="<?php echo esc_attr( $estilo ); ?>"
+			data-uhp-grafico
+			data-view="<?php echo esc_attr( $vista ); ?>"
+			data-type="<?php echo esc_attr( UHP_Security::clave( $atts['type'] ) ); ?>"
+			data-legend="<?php echo 'no' === $atts['leyenda'] ? '0' : '1'; ?>"
+			data-legend-pos="<?php echo esc_attr( UHP_Security::clave( $atts['leyenda_pos'] ) ); ?>"
+			data-legend-style="<?php echo esc_attr( UHP_Security::clave( $atts['leyenda_estilo'] ) ); ?>"
+			data-analisis="<?php echo esc_attr( UHP_Security::clave( $atts['analisis'] ) ); ?>"
+			data-acciones="<?php echo esc_attr( sanitize_text_field( $atts['acciones'] ) ); ?>">
+
+			<figcaption class="uhp-g__titulo">
+				<?php echo esc_html( '' !== $atts['titulo'] ? $atts['titulo'] : $meta['name'] ); ?>
+			</figcaption>
+
+			<?php if ( 'no' !== $atts['barra'] ) : ?>
+				<div class="uhp-g__barra" role="toolbar"
+					aria-label="<?php esc_attr_e( 'Acciones del gráfico', 'urkunina-5000' ); ?>"></div>
+			<?php endif; ?>
+
+			<div class="uhp-g__lienzo"></div>
+			<?php echo $this->skeleton( __( 'Cargando el gráfico…', 'urkunina-5000' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+
+			<?php if ( 'no' !== $atts['analisis'] ) : ?>
+				<div class="uhp-g__analisis-caja uhp-g__analisis"></div>
+			<?php endif; ?>
+
+			<p class="uhp-g__fuente"></p>
+		</figure>
+		<?php
+		return ob_get_clean();
+	}
+
+	/* ================================================================= */
+	/* [urkunina_analisis]                                               */
+	/* ================================================================= */
+
+	/**
+	 * Solo el texto de análisis de una vista, sin el gráfico.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_analisis( $atts ) {
+		$atts = $this->fusionar(
+			array(
+				'view' => 'tamizaje_hp',
+				'modo' => 'ambos',
+			),
+			$atts,
+			'urkunina_analisis'
+		);
+
+		$vista = UHP_Security::clave( $atts['view'] );
+		if ( ! UHP_Views::existe( $vista ) ) {
+			return $this->aviso( __( 'La vista solicitada no existe.', 'urkunina-5000' ) );
+		}
+
+		wp_enqueue_style( UHP_Assets::P . 'grafico' );
+		wp_enqueue_script( UHP_Assets::P . 'grafico' );
+
+		$id = $this->id( 'uhpa' );
+
+		ob_start();
+		?>
+		<div id="<?php echo esc_attr( $id ); ?>"
+			class="uhp uhp-g__analisis-caja"
+			style="<?php echo esc_attr( UHP_Estilos::inline( $atts ) ); ?>"
+			data-uhp-analisis
+			data-view="<?php echo esc_attr( $vista ); ?>"
+			data-modo="<?php echo esc_attr( UHP_Security::clave( $atts['modo'] ) ); ?>">
+			<div class="uhp-g__analisis-cuerpo"></div>
+			<?php echo $this->skeleton( __( 'Cargando el análisis…', 'urkunina-5000' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	/* ================================================================= */
+	/* [urkunina_mapa]                                                   */
+	/* ================================================================= */
+
+	/**
+	 * Mapa coroplético de Nariño sobre OpenStreetMap.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_mapa( $atts ) {
+		$atts = $this->fusionar(
+			array(
+				'titulo'    => __( 'Nariño — resultados por municipio', 'urkunina-5000' ),
+				'indicador' => 'lpm',
+				'teselas'   => 'osm',
+				'lat'       => 1.30,
+				'lon'       => -77.60,
+				'zoom'      => 8,
+				'alto'      => '',
+				'selector'  => 'si',
+			),
+			$atts,
+			'urkunina_mapa'
+		);
+
+		UHP_Estilos::encolar_fuentes();
+		wp_enqueue_style( UHP_Assets::P . 'mapa' );
+		UHP_Assets::encolar_libreria( 'leaflet' );
+		wp_enqueue_script( UHP_Assets::P . 'mapa' );
+
+		$lat = (float) $atts['lat'];
+		$lon = (float) $atts['lon'];
+		if ( ! UHP_Security::validar_bbox( $lat, $lon ) ) {
+			$lat = 1.30;
+			$lon = -77.60;
+		}
+
+		$id          = $this->id( 'uhpm' );
+		$indicadores = UHP_Rest::indicadores_mapa();
+		$indicador   = UHP_Security::clave( $atts['indicador'] );
+		if ( ! isset( $indicadores[ $indicador ] ) ) {
+			$indicador = 'lpm';
+		}
+
+		$estilo = UHP_Estilos::inline( $atts );
+		if ( '' !== $atts['alto'] ) {
+			$estilo .= '--uhp-mapa-alto:' . UHP_Estilos::sanitizar_css( $atts['alto'] ) . ';';
+		}
+
+		ob_start();
+		?>
+		<div id="<?php echo esc_attr( $id ); ?>"
+			class="uhp uhp-mapa"
+			style="<?php echo esc_attr( $estilo ); ?>"
+			data-uhp-mapa
+			data-indicador="<?php echo esc_attr( $indicador ); ?>"
+			data-teselas="<?php echo esc_attr( UHP_Security::clave( $atts['teselas'] ) ); ?>"
+			data-lat="<?php echo esc_attr( $lat ); ?>"
+			data-lon="<?php echo esc_attr( $lon ); ?>"
+			data-zoom="<?php echo esc_attr( (int) $atts['zoom'] ); ?>">
+
+			<div class="uhp-mapa__cab">
+				<h3 class="uhp-mapa__titulo"><?php echo esc_html( $atts['titulo'] ); ?></h3>
+				<?php if ( 'no' !== $atts['selector'] ) : ?>
+					<div class="uhp-mapa__control">
+						<label class="uhp-mapa__label" for="<?php echo esc_attr( $id . '-ind' ); ?>">
+							<?php esc_html_e( 'Indicador', 'urkunina-5000' ); ?>
+						</label>
+						<select class="uhp-mapa__select" id="<?php echo esc_attr( $id . '-ind' ); ?>" data-uhp-indicador>
+							<?php foreach ( $indicadores as $clave => $meta ) : ?>
+								<option value="<?php echo esc_attr( $clave ); ?>" <?php selected( $clave, $indicador ); ?>>
+									<?php echo esc_html( $meta['etiqueta'] ); ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+					</div>
+				<?php endif; ?>
+			</div>
+
+			<div class="uhp-mapa__lienzo"></div>
+			<?php echo $this->skeleton( __( 'Cargando el mapa de Nariño…', 'urkunina-5000' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+
+			<p class="uhp-mapa__pie">
+				<?php esc_html_e( 'Cartografía: © colaboradores de OpenStreetMap (ODbL). Geometría municipal: marco geoestadístico del DANE. Datos: proyecto URKUNINA 5000 (BPIN 2015000100064).', 'urkunina-5000' ); ?>
+			</p>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	/* ================================================================= */
+	/* [urkunina_kpi]                                                    */
+	/* ================================================================= */
+
+	/**
+	 * Tarjetas con las cifras principales del proyecto.
+	 *
+	 * A diferencia del resto, se renderiza en servidor: son seis cifras
+	 * fijas que conviene que estén en el HTML para SEO y para quien
+	 * navegue sin JavaScript.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_kpi( $atts ) {
+		$atts = $this->fusionar(
+			array(
+				'solo'  => '',
+				'notas' => 'si',
+			),
+			$atts,
+			'urkunina_kpi'
+		);
+
+		UHP_Estilos::encolar_fuentes();
+		wp_enqueue_style( UHP_Assets::P . 'base' );
+
+		$kpis = UHP_Rest::kpis();
+
+		if ( '' !== $atts['solo'] ) {
+			$pedidos = array_filter( array_map( array( UHP_Security::class, 'clave' ), explode( ',', $atts['solo'] ) ) );
+			$kpis    = array_values(
+				array_filter(
+					$kpis,
+					static function ( $k ) use ( $pedidos ) {
+						return in_array( $k['clave'], $pedidos, true );
+					}
+				)
+			);
+		}
+
+		if ( ! $kpis ) {
+			return $this->aviso( __( 'No hay cifras disponibles: revise los archivos de datos del plugin.', 'urkunina-5000' ) );
+		}
+
+		ob_start();
+		?>
+		<div class="uhp uhp-kpi" style="<?php echo esc_attr( UHP_Estilos::inline( $atts ) ); ?>">
+			<?php foreach ( $kpis as $k ) : ?>
+				<div class="uhp-kpi__tarjeta">
+					<span class="uhp-kpi__valor"><?php echo esc_html( $this->formato( $k['valor'], $k['formato'] ) ); ?></span>
+					<span class="uhp-kpi__etiqueta"><?php echo esc_html( $k['etiqueta'] ); ?></span>
+					<?php if ( 'no' !== $atts['notas'] && ! empty( $k['nota'] ) ) : ?>
+						<span class="uhp-kpi__nota"><?php echo esc_html( $k['nota'] ); ?></span>
+					<?php endif; ?>
+				</div>
+			<?php endforeach; ?>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	/* ================================================================= */
+	/* [urkunina_tabla]                                                  */
+	/* ================================================================= */
+
+	/**
+	 * Tabla de datos de una vista, renderizada en servidor.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_tabla( $atts ) {
+		$atts = $this->fusionar(
+			array(
+				'view'   => 'prev_subregion_lpm',
+				'titulo' => '',
+				'limite' => 0,
+			),
+			$atts,
+			'urkunina_tabla'
+		);
+
+		$vista = UHP_Security::clave( $atts['view'] );
+		if ( ! UHP_Views::existe( $vista ) ) {
+			return $this->aviso( __( 'La vista solicitada no existe.', 'urkunina-5000' ) );
+		}
+
+		UHP_Estilos::encolar_fuentes();
+		wp_enqueue_style( UHP_Assets::P . 'base' );
+
+		$v     = UHP_Views::obtener( $vista );
+		$filas = $v['data'];
+		if ( ! $filas ) {
+			return $this->aviso( __( 'Esta vista no tiene datos disponibles.', 'urkunina-5000' ) );
+		}
+
+		$limite = (int) $atts['limite'];
+		if ( $limite > 0 ) {
+			$filas = array_slice( $filas, 0, $limite );
+		}
+		$columnas = array_keys( $filas[0] );
+
+		ob_start();
+		?>
+		<div class="uhp" style="<?php echo esc_attr( UHP_Estilos::inline( $atts ) ); ?>">
+			<div class="uhp-tabla-caja">
+				<table class="uhp-tabla">
+					<caption class="uhp-sr">
+						<?php echo esc_html( '' !== $atts['titulo'] ? $atts['titulo'] : $v['name'] ); ?>
+					</caption>
+					<thead>
+						<tr>
+							<?php foreach ( $columnas as $c ) : ?>
+								<th scope="col"><?php echo esc_html( $this->etiqueta_campo( $c ) ); ?></th>
+							<?php endforeach; ?>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( $filas as $fila ) : ?>
+							<tr>
+								<?php foreach ( $columnas as $c ) : ?>
+									<?php $valor = isset( $fila[ $c ] ) ? $fila[ $c ] : ''; ?>
+									<td class="<?php echo is_numeric( $valor ) && ! is_string( $valor ) ? 'uhp-num' : ''; ?>">
+										<?php echo esc_html( $this->celda( $valor ) ); ?>
+									</td>
+								<?php endforeach; ?>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			</div>
+			<?php if ( ! empty( $v['fuente'] ) ) : ?>
+				<p class="uhp-fuentes"><?php echo esc_html( 'Fuente: ' . $v['fuente'] ); ?></p>
+			<?php endif; ?>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	/* ================================================================= */
+	/* [urkunina_ficha]                                                  */
+	/* ================================================================= */
+
+	/**
+	 * Ficha resumen del proyecto.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_ficha( $atts ) {
+		$atts = $this->fusionar( array( 'titulo' => '' ), $atts, 'urkunina_ficha' );
+
+		UHP_Estilos::encolar_fuentes();
+		wp_enqueue_style( UHP_Assets::P . 'base' );
+
+		$campos = array(
+			__( 'Nombre del proyecto', 'urkunina-5000' )   => UHP_Datos::valor( 'proyecto', 'identificacion.nombre_completo', '' ),
+			__( 'Código BPIN', 'urkunina-5000' )           => UHP_Datos::valor( 'proyecto', 'identificacion.bpin', '' ),
+			__( 'Formulador de la ficha MGA', 'urkunina-5000' ) => UHP_Datos::valor( 'proyecto', 'identificacion.formulador_ficha_mga', '' ),
+			__( 'Instancia de aprobación', 'urkunina-5000' ) => UHP_Datos::valor( 'proyecto', 'aprobacion.instancia', '' ),
+			__( 'Acuerdo', 'urkunina-5000' )               => trim(
+				UHP_Datos::valor( 'proyecto', 'aprobacion.acuerdo', '' ) . ' — ' .
+				UHP_Datos::valor( 'proyecto', 'aprobacion.fecha_acuerdo', '' ),
+				' —'
+			),
+			__( 'Presupuesto total', 'urkunina-5000' )     => UHP_Analisis::pesos( UHP_Datos::valor( 'proyecto', 'financiacion.presupuesto_total', 0 ) ),
+			__( 'Inicio de ejecución', 'urkunina-5000' )   => UHP_Datos::valor( 'proyecto', 'ejecucion.fecha_inicio', '' ),
+			__( 'Fin del trabajo de campo', 'urkunina-5000' ) => UHP_Datos::valor( 'proyecto', 'ejecucion.fecha_fin_trabajo_campo', '' ),
+			__( 'Estado', 'urkunina-5000' )                => UHP_Datos::valor( 'proyecto', 'ejecucion.estado', '' ),
+			__( 'Ejecución física', 'urkunina-5000' )      => UHP_Analisis::pct( UHP_Datos::valor( 'proyecto', 'ejecucion.ejecucion_fisica_porcentaje', 0 ) ),
+			__( 'Ejecución financiera', 'urkunina-5000' )  => UHP_Analisis::pct( UHP_Datos::valor( 'proyecto', 'ejecucion.ejecucion_financiera_porcentaje', 0 ) ),
+		);
+
+		$origen = UHP_Datos::valor( 'proyecto', 'identificacion.origen_del_nombre', array() );
+
+		ob_start();
+		?>
+		<div class="uhp uhp-ficha" style="<?php echo esc_attr( UHP_Estilos::inline( $atts ) ); ?>">
+			<h3 class="uhp-ficha__titulo">
+				<?php echo esc_html( '' !== $atts['titulo'] ? $atts['titulo'] : __( 'Ficha del proyecto', 'urkunina-5000' ) ); ?>
+			</h3>
+			<?php if ( ! empty( $origen['vocablo'] ) ) : ?>
+				<p class="uhp-ficha__sub">
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: 1: vocablo, 2: significado, 3: referencia geográfica. */
+							__( '«%1$s» significa «%2$s» y alude al %3$s.', 'urkunina-5000' ),
+							$origen['vocablo'],
+							isset( $origen['significado'] ) ? $origen['significado'] : '',
+							isset( $origen['referencia'] ) ? $origen['referencia'] : ''
+						)
+					);
+					?>
+				</p>
+			<?php endif; ?>
+			<dl class="uhp-ficha__dl">
+				<?php foreach ( $campos as $etiqueta => $valor ) : ?>
+					<?php if ( '' === $valor || null === $valor ) { continue; } ?>
+					<dt><?php echo esc_html( $etiqueta ); ?></dt>
+					<dd><?php echo esc_html( $valor ); ?></dd>
+				<?php endforeach; ?>
+			</dl>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	/* ================================================================= */
+	/* [urkunina_dato]                                                   */
+	/* ================================================================= */
+
+	/**
+	 * Un solo valor del conjunto de datos, para intercalar en un párrafo.
+	 *
+	 * Ejemplo: [urkunina_dato archivo="tamizaje" ruta="infeccion_h_pylori.positivos.porcentaje" formato="porcentaje"]
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_dato( $atts ) {
+		$atts = $this->fusionar(
+			array(
+				'archivo' => '',
+				'ruta'    => '',
+				'formato' => 'auto',
+			),
+			$atts,
+			'urkunina_dato'
+		);
+
+		$clave = UHP_Security::clave( $atts['archivo'] );
+		$reg   = UHP_Datos::registro();
+		if ( ! isset( $reg[ $clave ] ) ) {
+			return '';
+		}
+
+		// La ruta solo puede contener claves: nada de rutas de sistema.
+		$ruta = preg_replace( '/[^A-Za-z0-9_.\-]/', '', (string) $atts['ruta'] );
+		if ( '' === $ruta ) {
+			return '';
+		}
+
+		$valor = UHP_Datos::valor( $clave, $ruta, null );
+		if ( null === $valor || is_array( $valor ) ) {
+			return '';
+		}
+
+		return '<span class="uhp-dato">' . esc_html( $this->formato( $valor, $atts['formato'] ) ) . '</span>';
+	}
+
+	/* ================================================================= */
+	/* Utilidades                                                        */
+	/* ================================================================= */
+
+	/**
+	 * Fusiona los atributos con los valores por defecto aplicando shortcode_atts.
+	 *
+	 * @param array  $def  Valores por defecto.
+	 * @param array  $atts Atributos recibidos.
+	 * @param string $tag  Nombre del shortcode.
+	 * @return array
+	 */
+	private function fusionar( $def, $atts, $tag ) {
+		$atts = shortcode_atts( $def, is_array( $atts ) ? $atts : array(), $tag );
+		foreach ( $atts as $k => $v ) {
+			if ( is_string( $v ) ) {
+				$atts[ $k ] = sanitize_text_field( $v );
+			}
+		}
+		return $atts;
+	}
+
+	/**
+	 * Identificador único para el contenedor de una instancia.
+	 *
+	 * @param string $prefijo Prefijo legible.
+	 * @return string
+	 */
+	private function id( $prefijo ) {
+		self::$contador++;
+		return $prefijo . '-' . self::$contador;
+	}
+
+	/**
+	 * Marca del esqueleto de carga.
+	 *
+	 * @param string $mensaje Texto mostrado.
+	 * @return string HTML ya escapado.
+	 */
+	private function skeleton( $mensaje ) {
+		return '<div class="uhp-skeleton" role="status" aria-live="polite">'
+			. '<span class="uhp-skeleton__giro" aria-hidden="true"></span>'
+			. '<span class="uhp-skeleton__txt">' . esc_html( $mensaje ) . '</span>'
+			. '</div>';
+	}
+
+	/**
+	 * Aviso visible en lugar del componente cuando la configuración falla.
+	 *
+	 * @param string $mensaje Texto del aviso.
+	 * @return string HTML ya escapado.
+	 */
+	private function aviso( $mensaje ) {
+		return '<div class="uhp"><div class="uhp-error" role="alert">'
+			. '<p class="uhp-error__txt">' . esc_html( $mensaje ) . '</p>'
+			. '</div></div>';
+	}
+
+	/**
+	 * Formatea un valor según el tipo indicado.
+	 *
+	 * @param mixed  $valor Valor.
+	 * @param string $tipo  auto | entero | porcentaje | pesos.
+	 * @return string
+	 */
+	private function formato( $valor, $tipo ) {
+		switch ( $tipo ) {
+			case 'porcentaje':
+				return UHP_Analisis::pct( $valor );
+			case 'entero':
+				return number_format( (float) $valor, 0, ',', '.' );
+			case 'pesos':
+				return UHP_Analisis::pesos( $valor );
+			default:
+				return is_numeric( $valor ) ? UHP_Analisis::num( $valor ) : (string) $valor;
+		}
+	}
+
+	/**
+	 * Contenido legible de una celda de tabla.
+	 *
+	 * @param mixed $valor Valor crudo.
+	 * @return string
+	 */
+	private function celda( $valor ) {
+		if ( is_bool( $valor ) ) {
+			return $valor ? '✓' : '—';
+		}
+		if ( is_numeric( $valor ) && ! is_string( $valor ) ) {
+			return UHP_Analisis::num( $valor );
+		}
+		return (string) $valor;
+	}
+
+	/**
+	 * Etiqueta legible del nombre de un campo.
+	 *
+	 * @param string $campo Nombre del campo.
+	 * @return string
+	 */
+	private function etiqueta_campo( $campo ) {
+		$mapa = array(
+			'zona'         => __( 'Zona de riesgo', 'urkunina-5000' ),
+			'incidencia'   => __( 'Incidencia (por 100.000)', 'urkunina-5000' ),
+			'ambito'       => __( 'Ámbito', 'urkunina-5000' ),
+			'tasa'         => __( 'Tasa (por 100.000)', 'urkunina-5000' ),
+			'municipio'    => __( 'Municipio', 'urkunina-5000' ),
+			'mortalidad'   => __( 'Mortalidad (por 100.000)', 'urkunina-5000' ),
+			'resultado'    => __( 'Resultado', 'urkunina-5000' ),
+			'personas'     => __( 'Personas', 'urkunina-5000' ),
+			'porcentaje'   => __( 'Porcentaje', 'urkunina-5000' ),
+			'indicador'    => __( 'Indicador', 'urkunina-5000' ),
+			'positivos'    => __( 'Positivos', 'urkunina-5000' ),
+			'negativos'    => __( 'Negativos', 'urkunina-5000' ),
+			'prevalencia'  => __( 'Prevalencia (%)', 'urkunina-5000' ),
+			'subregion'    => __( 'Subregión', 'urkunina-5000' ),
+			'valor'        => __( 'Valor', 'urkunina-5000' ),
+			'categoria'    => __( 'Categoría', 'urkunina-5000' ),
+			'tipo'         => __( 'Tipo', 'urkunina-5000' ),
+			'cantidad'     => __( 'Muestras', 'urkunina-5000' ),
+			'casos'        => __( 'Casos', 'urkunina-5000' ),
+			'estado'       => __( 'Estado', 'urkunina-5000' ),
+			'fuente'       => __( 'Fuente', 'urkunina-5000' ),
+			'producto'     => __( 'Producto', 'urkunina-5000' ),
+			'avance'       => __( 'Avance (%)', 'urkunina-5000' ),
+			'meta'         => __( 'Meta', 'urkunina-5000' ),
+			'ejecutado'    => __( 'Ejecutado', 'urkunina-5000' ),
+			'anio'         => __( 'Año', 'urkunina-5000' ),
+			'publicaciones' => __( 'Publicaciones', 'urkunina-5000' ),
+			'entidades'    => __( 'Entidades', 'urkunina-5000' ),
+			'posicion'     => __( 'Posición', 'urkunina-5000' ),
+			'divipola'     => __( 'DIVIPOLA', 'urkunina-5000' ),
+			'territorio'   => __( 'Territorio', 'urkunina-5000' ),
+			'nivel_riesgo' => __( 'Nivel de riesgo', 'urkunina-5000' ),
+			'poblacion'    => __( 'Población predominante', 'urkunina-5000' ),
+		);
+		if ( isset( $mapa[ $campo ] ) ) {
+			return $mapa[ $campo ];
+		}
+		return ucfirst( str_replace( '_', ' ', $campo ) );
+	}
+}

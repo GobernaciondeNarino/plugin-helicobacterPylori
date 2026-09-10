@@ -1,0 +1,440 @@
+/* =====================================================================
+   Panel de administración de URKUNINA 5000.
+
+   Se apoya en la retícula y la tipografía de WordPress pero define su
+   propio sistema de tarjetas. Todo cuelga de `.uhpa-*`, de modo que estos
+   estilos no alcanzan a ninguna otra pantalla del escritorio.
+   ===================================================================== */
+
+.uhpa-wrap {
+  --uhpa-verde: #10A13B;
+  --uhpa-amarillo: #FFD500;
+  --uhpa-azul: #003366;
+  --uhpa-tinta: #1d2327;
+  --uhpa-suave: #5b6773;
+  --uhpa-linea: #dcdfe3;
+  --uhpa-superficie: #f6f8fa;
+  --uhpa-radio: 10px;
+
+  max-width: 1520px;
+}
+
+/* ---------- Cabecera ---------- */
+.uhpa-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 0 6px;
+  padding: 18px 22px;
+  background: #fff;
+  border: 1px solid var(--uhpa-linea);
+  border-radius: var(--uhpa-radio);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+}
+.uhpa-cabecera__marca {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 5px;
+  background: linear-gradient(160deg, var(--uhpa-verde) 0%, #0B7A2C 55%, var(--uhpa-amarillo) 55%, #E5BF00 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+}
+.uhpa-cabecera__t { margin: 0; padding: 0; font-size: 1.35rem; line-height: 1.2; color: var(--uhpa-azul); }
+.uhpa-cabecera__s { margin: 3px 0 0; font-size: .88rem; color: var(--uhpa-suave); max-width: 92ch; }
+.uhpa-cabecera__meta {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  font-size: .74rem;
+  color: var(--uhpa-suave);
+  text-align: right;
+}
+
+/* ---------- Pestañas ---------- */
+.uhpa-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 14px 0 0;
+  padding: 4px;
+  background: var(--uhpa-superficie);
+  border: 1px solid var(--uhpa-linea);
+  border-radius: var(--uhpa-radio);
+}
+.uhpa-tab {
+  padding: 7px 14px;
+  font-size: .85rem;
+  text-decoration: none;
+  color: var(--uhpa-suave);
+  border-radius: 7px;
+  transition: background .14s, color .14s;
+}
+.uhpa-tab:hover { background: #fff; color: var(--uhpa-azul); }
+.uhpa-tab.is-activa {
+  background: var(--uhpa-azul);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: inset 0 -3px 0 var(--uhpa-amarillo);
+}
+.uhpa-tab:focus-visible { outline: 2px solid var(--uhpa-amarillo); outline-offset: 1px; }
+
+/* ---------- Contenedor y rejillas ---------- */
+.uhpa { margin-top: 16px; }
+.uhpa-rejilla { display: grid; gap: 16px; margin-bottom: 16px; }
+.uhpa-rejilla--2 { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+.uhpa-rejilla--3 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.uhpa-rejilla--4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.uhpa-columna { display: flex; flex-direction: column; gap: 16px; }
+.uhpa-fila3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+/* ---------- Tarjeta ---------- */
+.uhpa-card {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid var(--uhpa-linea);
+  border-radius: var(--uhpa-radio);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+  overflow: hidden;
+}
+.uhpa-card__cab {
+  padding: 15px 20px 13px;
+  background: linear-gradient(180deg, var(--uhpa-superficie), #fff);
+  border-bottom: 1px solid var(--uhpa-linea);
+}
+.uhpa-card__cab h2 {
+  margin: 0;
+  padding: 0;
+  font-size: 1.02rem;
+  line-height: 1.3;
+  color: var(--uhpa-azul);
+}
+.uhpa-card__cab h2::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--uhpa-verde);
+}
+.uhpa-card__cab p { margin: 5px 0 0; font-size: .84rem; line-height: 1.5; color: var(--uhpa-suave); }
+.uhpa-card__cuerpo { padding: 16px 20px 18px; flex: 1; }
+.uhpa-card__cuerpo--plano { padding: 0; }
+
+.uhpa-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 9px;
+  font-size: .76rem;
+  color: var(--uhpa-suave);
+}
+.uhpa-meta code { font-size: .74rem; }
+
+.uhpa-h3 {
+  margin: 16px 0 6px;
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  color: var(--uhpa-suave);
+}
+.uhpa-h3:first-child { margin-top: 0; }
+.uhpa-texto { margin: 0 0 9px; font-size: .87rem; line-height: 1.6; max-width: 88ch; }
+.uhpa-texto--num {
+  padding: 8px 11px;
+  background: rgba(0, 51, 102, .04);
+  border-left: 3px solid var(--uhpa-azul);
+  border-radius: 0 5px 5px 0;
+  font-variant-numeric: tabular-nums;
+}
+.uhpa-nota { display: block; margin: 5px 0 0; font-size: .78rem; line-height: 1.5; color: var(--uhpa-suave); }
+.uhpa-ayuda { margin: 0 0 8px; font-size: .82rem; color: var(--uhpa-suave); }
+.uhpa-ayuda code { margin-right: 4px; }
+.uhpa-vacio {
+  margin: 0;
+  padding: 18px;
+  text-align: center;
+  font-size: .85rem;
+  color: var(--uhpa-suave);
+  background: var(--uhpa-superficie);
+  border-radius: 7px;
+}
+
+/* ---------- Métricas ---------- */
+.uhpa-metrica {
+  padding: 16px 18px;
+  background: #fff;
+  border: 1px solid var(--uhpa-linea);
+  border-top: 3px solid var(--uhpa-verde);
+  border-radius: var(--uhpa-radio);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+}
+.uhpa-metrica--aviso { border-top-color: #DBA617; }
+.uhpa-metrica--error { border-top-color: #C0392B; }
+.uhpa-metrica__valor {
+  display: block;
+  font-size: 1.85rem;
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--uhpa-azul);
+  font-variant-numeric: tabular-nums;
+}
+.uhpa-metrica__etq { display: block; margin-top: 5px; font-size: .87rem; font-weight: 600; }
+.uhpa-metrica__nota { display: block; margin-top: 3px; font-size: .76rem; color: var(--uhpa-suave); line-height: 1.4; }
+
+/* ---------- Tablas ---------- */
+.uhpa-tabla { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.uhpa-tabla th,
+.uhpa-tabla td { padding: 10px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid #eef1f4; }
+.uhpa-tabla thead th {
+  font-size: .76rem;
+  font-weight: 600;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  color: var(--uhpa-suave);
+  background: var(--uhpa-superficie);
+  white-space: nowrap;
+}
+.uhpa-tabla tbody th { font-weight: 600; width: 24%; }
+.uhpa-tabla tbody tr:last-child td,
+.uhpa-tabla tbody tr:last-child th { border-bottom: 0; }
+.uhpa-tabla--rayada tbody tr:nth-child(even) { background: #fbfcfd; }
+.uhpa-tabla--compacta th,
+.uhpa-tabla--compacta td { padding: 7px 10px; font-size: .82rem; }
+.uhpa-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.uhpa-url { font-size: .72rem; word-break: break-all; color: var(--uhpa-suave); }
+
+/* ---------- Estados ---------- */
+.uhpa-punto {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: #b7bfc7;
+}
+.uhpa-punto--ok { background: var(--uhpa-verde); }
+.uhpa-punto--aviso { background: #DBA617; }
+.uhpa-punto--modificado { background: #2E6FA8; }
+.uhpa-punto--error,
+.uhpa-punto--falta { background: #C0392B; }
+
+.uhpa-alerta {
+  margin: 0 0 14px;
+  padding: 13px 16px;
+  border-radius: 8px;
+  border-left: 4px solid;
+  font-size: .86rem;
+}
+.uhpa-alerta p { margin: 4px 0 0; line-height: 1.55; }
+.uhpa-alerta--aviso { background: #FFF8E5; border-left-color: #DBA617; color: #6B4E00; }
+.uhpa-alerta--error { background: #FDF0EF; border-left-color: #C0392B; color: #7B241C; }
+
+/* ---------- Listas ---------- */
+.uhpa-lista { margin: 0; padding: 0; list-style: none; font-size: .85rem; }
+.uhpa-lista li { padding: 7px 0; border-bottom: 1px solid #f0f2f5; line-height: 1.55; }
+.uhpa-lista li:last-child { border-bottom: 0; }
+.uhpa-lista--check li { position: relative; padding-left: 24px; }
+.uhpa-lista--check li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 13px;
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid var(--uhpa-verde);
+  border-bottom: 2px solid var(--uhpa-verde);
+  transform: rotate(-45deg);
+}
+.uhpa-lista a { margin-left: 6px; }
+
+/* ---------- Chips y etiquetas ---------- */
+.uhpa-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 4px; }
+.uhpa-chip {
+  padding: 3px 10px;
+  font-size: .76rem;
+  color: var(--uhpa-suave);
+  background: var(--uhpa-superficie);
+  border: 1px solid var(--uhpa-linea);
+  border-radius: 999px;
+}
+.uhpa-chip--activo {
+  color: #fff;
+  background: var(--uhpa-verde);
+  border-color: var(--uhpa-verde);
+  font-weight: 600;
+}
+.uhpa-etiqueta {
+  padding: 2px 8px;
+  font-size: .72rem;
+  color: var(--uhpa-azul);
+  background: rgba(0, 51, 102, .07);
+  border-radius: 4px;
+}
+
+/* ---------- Copiable ---------- */
+.uhpa-copiable {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin: 0 0 7px;
+  border: 1px solid var(--uhpa-linea);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--uhpa-superficie);
+}
+.uhpa-copiable code {
+  flex: 1;
+  padding: 7px 11px;
+  font-size: .78rem;
+  background: transparent;
+  color: var(--uhpa-tinta);
+  word-break: break-all;
+}
+.uhpa-copiar {
+  flex: none;
+  padding: 0 13px;
+  font: inherit;
+  font-size: .76rem;
+  color: var(--uhpa-azul);
+  background: #fff;
+  border: 0;
+  border-left: 1px solid var(--uhpa-linea);
+  cursor: pointer;
+}
+.uhpa-copiar:hover { background: var(--uhpa-azul); color: #fff; }
+.uhpa-copiar.is-ok { background: var(--uhpa-verde); color: #fff; }
+
+/* ---------- Mini tarjeta ---------- */
+.uhpa-mini {
+  padding: 14px 16px;
+  background: var(--uhpa-superficie);
+  border: 1px solid var(--uhpa-linea);
+  border-radius: 9px;
+}
+.uhpa-mini strong { display: block; font-size: .9rem; color: var(--uhpa-azul); }
+.uhpa-mini p { margin: 4px 0 9px; font-size: .8rem; line-height: 1.5; color: var(--uhpa-suave); }
+
+/* ---------- Acciones ---------- */
+.uhpa-accion {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 13px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+.uhpa-accion:last-child { border-bottom: 0; }
+.uhpa-accion strong { display: block; font-size: .88rem; }
+.uhpa-accion p { margin: 4px 0 0; font-size: .8rem; line-height: 1.5; color: var(--uhpa-suave); }
+.uhpa-accion .button { flex: none; margin-top: 2px; }
+
+/* ---------- Formularios ---------- */
+.uhpa-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: .78rem;
+  font-weight: 600;
+  letter-spacing: .2px;
+  text-transform: uppercase;
+  color: var(--uhpa-suave);
+}
+.uhpa-input,
+.uhpa-select { width: 100%; max-width: 100%; }
+.uhpa-file { display: block; margin-bottom: 10px; font-size: .85rem; }
+.uhpa-color { display: flex; align-items: center; gap: 12px; margin: 0 0 9px; }
+.uhpa-color .uhpa-label { flex: 1; margin: 0; text-transform: none; font-weight: 500; font-size: .84rem; }
+.uhpa-color input[type="color"] { width: 46px; height: 30px; padding: 2px; border: 1px solid var(--uhpa-linea); border-radius: 5px; cursor: pointer; }
+.uhpa-color code { font-size: .72rem; color: var(--uhpa-suave); min-width: 68px; }
+
+/* ---------- Editor JSON ---------- */
+.uhpa-editor {
+  width: 100%;
+  font-family: Menlo, Consolas, "Courier New", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  tab-size: 2;
+  background: #fbfcfd;
+  border: 1px solid var(--uhpa-linea);
+  border-radius: 7px;
+  resize: vertical;
+}
+.uhpa-editor:focus { border-color: var(--uhpa-verde); box-shadow: 0 0 0 1px var(--uhpa-verde); }
+.uhpa-editor-pie { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 0; }
+.uhpa-editor-estado { font-size: .8rem; }
+.uhpa-editor-estado.is-ok { color: #0B5C24; }
+.uhpa-editor-estado.is-error { color: #C0392B; }
+
+/* ---------- Esquema del tablero ---------- */
+.uhpa-esquema {
+  margin: 0 0 14px;
+  border: 1px solid var(--uhpa-linea);
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: .74rem;
+  text-align: center;
+  color: var(--uhpa-suave);
+}
+.uhpa-esquema__cab { padding: 9px; background: var(--uhpa-azul); color: #fff; font-weight: 600; }
+.uhpa-esquema__fila { display: grid; grid-template-columns: 0.9fr 1.6fr 1.2fr; }
+.uhpa-esquema__izq,
+.uhpa-esquema__centro,
+.uhpa-esquema__der { padding: 26px 8px; border-right: 1px solid var(--uhpa-linea); }
+.uhpa-esquema__der { border-right: 0; }
+.uhpa-esquema__centro { background: #eef4f9; color: var(--uhpa-azul); font-weight: 600; }
+
+/* ---------- Vista previa de apariencia ---------- */
+.uhpa-preview {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: end;
+  padding: 18px;
+  background: var(--uhp-fondo, #fff);
+  border: 1px solid var(--uhp-linea, #e2e8f0);
+  border-radius: var(--uhp-radio, 12px);
+}
+.uhpa-preview__kpi b {
+  display: block;
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--uhp-azul, #003366);
+}
+.uhpa-preview__kpi span { display: block; margin-top: 4px; font-size: .78rem; color: var(--uhp-suave, #5b6773); }
+.uhpa-preview__barras { display: flex; align-items: flex-end; gap: 6px; height: 74px; }
+.uhpa-preview__barras i { flex: 1; border-radius: 3px 3px 0 0; background: var(--uhp-verde, #10A13B); }
+.uhpa-preview__barras i:nth-child(2) { background: var(--uhp-azul, #003366); }
+.uhpa-preview__barras i:nth-child(3) { background: var(--uhp-amarillo, #FFD500); }
+.uhpa-preview__barras i:nth-child(4) { background: var(--uhp-suave, #5b6773); }
+.uhpa-preview__txt {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  font-size: .84rem;
+  color: var(--uhp-tinta, #0f172a);
+}
+
+/* ---------- Pie ---------- */
+.uhpa-pie {
+  margin: 22px 0 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--uhpa-linea);
+}
+.uhpa-pie p { margin: 0; font-size: .78rem; line-height: 1.55; color: var(--uhpa-suave); max-width: 100ch; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 960px) {
+  .uhpa-rejilla--2 { grid-template-columns: 1fr; }
+  .uhpa-fila3 { grid-template-columns: 1fr; }
+  .uhpa-cabecera { flex-wrap: wrap; }
+  .uhpa-cabecera__meta { margin-left: 0; align-items: flex-start; text-align: left; }
+  .uhpa-esquema__fila { grid-template-columns: 1fr; }
+  .uhpa-esquema__izq,
+  .uhpa-esquema__centro { border-right: 0; border-bottom: 1px solid var(--uhpa-linea); }
+}
