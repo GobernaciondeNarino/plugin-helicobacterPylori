@@ -218,7 +218,20 @@ function uhp_cargar_clases_de_datos() {
  * una copia que podría quedar desfasada.
  * ---------------------------------------------------------------------- */
 
-/** @var array<string,bool> Recursos que los shortcodes pidieron encolar. */
+/*
+ * Registro de recursos con resolución de dependencias.
+ *
+ * No es un adorno: las páginas de prueba se construyen a partir de lo que
+ * los shortcodes encolan DE VERDAD, resolviendo el mismo grafo de
+ * dependencias que resolvería WordPress. La primera versión de estas
+ * pruebas listaba los scripts a mano y por eso no detectó que el tablero
+ * usaba UHPMapa sin declarar uhp-mapa como dependencia: la página de
+ * prueba lo cargaba aunque el plugin no lo pidiera.
+ */
+$GLOBALS['uhp_test_recursos'] = array(
+	'script' => array(),
+	'style'  => array(),
+);
 $GLOBALS['uhp_test_encolados'] = array();
 
 function shortcode_atts( $pares, $atts, $shortcode = '' ) {
@@ -230,20 +243,98 @@ function shortcode_atts( $pares, $atts, $shortcode = '' ) {
 	return $salida;
 }
 
-function wp_enqueue_style( $handle ) {
-	$GLOBALS['uhp_test_encolados'][ 'style:' . $handle ] = true;
+function uhp_test_registrar( $tipo, $handle, $src, $deps ) {
+	if ( isset( $GLOBALS['uhp_test_recursos'][ $tipo ][ $handle ] ) ) {
+		return; // Ya registrado: gana el primero, como en WordPress.
+	}
+	$GLOBALS['uhp_test_recursos'][ $tipo ][ $handle ] = array(
+		'src'  => (string) $src,
+		'deps' => array_values( array_filter( (array) $deps ) ),
+	);
 }
 
-function wp_enqueue_script( $handle ) {
+function wp_register_script( $handle, $src = '', $deps = array(), $ver = false, $footer = false ) {
+	uhp_test_registrar( 'script', $handle, $src, $deps );
+}
+
+function wp_register_style( $handle, $src = '', $deps = array(), $ver = false, $media = 'all' ) {
+	uhp_test_registrar( 'style', $handle, $src, $deps );
+}
+
+function wp_enqueue_script( $handle, $src = '', $deps = array(), $ver = false, $footer = false ) {
+	if ( '' !== $src ) {
+		uhp_test_registrar( 'script', $handle, $src, $deps );
+	}
 	$GLOBALS['uhp_test_encolados'][ 'script:' . $handle ] = true;
 }
 
-function wp_register_style() {}
-function wp_register_script() {}
+function wp_enqueue_style( $handle, $src = '', $deps = array(), $ver = false, $media = 'all' ) {
+	if ( '' !== $src ) {
+		uhp_test_registrar( 'style', $handle, $src, $deps );
+	}
+	$GLOBALS['uhp_test_encolados'][ 'style:' . $handle ] = true;
+}
+
+function wp_script_is( $handle, $estado = 'enqueued' ) {
+	if ( 'registered' === $estado ) {
+		return isset( $GLOBALS['uhp_test_recursos']['script'][ $handle ] );
+	}
+	return isset( $GLOBALS['uhp_test_encolados'][ 'script:' . $handle ] );
+}
+
+function wp_style_is( $handle, $estado = 'enqueued' ) {
+	if ( 'registered' === $estado ) {
+		return isset( $GLOBALS['uhp_test_recursos']['style'][ $handle ] );
+	}
+	return isset( $GLOBALS['uhp_test_encolados'][ 'style:' . $handle ] );
+}
+
 function wp_add_inline_script() {}
 function wp_add_inline_style() {}
-function wp_style_is() { return false; }
-function wp_script_is() { return false; }
+
+/**
+ * Resuelve el grafo de dependencias y devuelve los handles en el orden en
+ * que WordPress los imprimiría: cada dependencia antes de quien la pide.
+ *
+ * @param string $tipo 'script' o 'style'.
+ * @return string[]
+ */
+function uhp_test_resolver( $tipo ) {
+	$registro = $GLOBALS['uhp_test_recursos'][ $tipo ];
+	$orden    = array();
+	$visto    = array();
+
+	$visitar = function ( $handle ) use ( &$visitar, $registro, &$orden, &$visto ) {
+		if ( isset( $visto[ $handle ] ) ) {
+			return;
+		}
+		$visto[ $handle ] = true;
+		if ( ! isset( $registro[ $handle ] ) ) {
+			// Dependencia no registrada: WordPress omitiría el recurso. Se
+			// deja constancia para que la prueba pueda fallar por ello.
+			$GLOBALS['uhp_test_faltantes'][] = $tipo . ':' . $handle;
+			return;
+		}
+		foreach ( $registro[ $handle ]['deps'] as $dep ) {
+			$visitar( $dep );
+		}
+		$orden[] = $handle;
+	};
+
+	foreach ( array_keys( $GLOBALS['uhp_test_encolados'] ) as $clave ) {
+		list( $t, $handle ) = explode( ':', $clave, 2 );
+		if ( $t === $tipo ) {
+			$visitar( $handle );
+		}
+	}
+	return $orden;
+}
+
+/** Reinicia lo encolado entre una página de prueba y la siguiente. */
+function uhp_test_limpiar_encolados() {
+	$GLOBALS['uhp_test_encolados'] = array();
+	$GLOBALS['uhp_test_faltantes'] = array();
+}
 
 function esc_url( $url ) {
 	return htmlspecialchars( (string) $url, ENT_QUOTES, 'UTF-8' );

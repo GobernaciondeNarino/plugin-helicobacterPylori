@@ -25,10 +25,30 @@ geometría municipal— en componentes publicables desde el editor de WordPress:
 | Gráfico de cualquiera de las 24 vistas del catálogo | `[urkunina_grafico view="…"]` |
 | Mapa coroplético de los 64 municipios sobre OpenStreetMap | `[urkunina_mapa]` |
 | Tarjetas con las cifras clave del proyecto | `[urkunina_kpi]` |
-| Texto de análisis de una vista, sin el gráfico | `[urkunina_analisis view="…"]` |
 | Tabla accesible de los datos de una vista | `[urkunina_tabla view="…"]` |
 | Ficha de identificación y ejecución del proyecto | `[urkunina_ficha]` |
 | Un dato suelto intercalado en un párrafo | `[urkunina_dato archivo="…" ruta="…"]` |
+
+Los textos de cada vista son shortcodes independientes del gráfico, para poder
+maquetarlos por libre —el gráfico en una columna y su lectura en otra, o el texto
+abriendo la sección y el gráfico cerrándola—:
+
+| Pieza de texto | Shortcode |
+|---|---|
+| Nombre de la vista, con la etiqueta que se le indique | `[urkunina_titulo view="…" etiqueta="h3"]` |
+| Qué muestra el gráfico y cómo leerlo | `[urkunina_descripcion view="…"]` |
+| Qué significa lo que se ve | `[urkunina_interpretacion view="…"]` |
+| Lectura automática del hallazgo principal | `[urkunina_resumen view="…"]` |
+| Cifras de apoyo redactadas a partir de los datos | `[urkunina_cifras view="…"]` |
+| Atribución de la fuente del dato | `[urkunina_fuente view="…"]` |
+| Varias de las anteriores en un solo bloque | `[urkunina_analisis view="…" modo="completo"]` |
+
+Los siete se renderizan en el servidor: el texto viaja en el HTML, sin petición
+ni parpadeo, y sigue ahí con JavaScript desactivado o para un buscador.
+
+> **La atribución dejó de ser automática.** Como `[urkunina_grafico]` ya no
+> imprime la línea de fuente, publique `[urkunina_fuente view="…"]` junto a cada
+> gráfico: citar la procedencia del dato es obligatorio.
 
 El catálogo completo, con todos los atributos y ejemplos copiables, está en el
 panel: **URKUNINA 5000 → Shortcodes**.
@@ -48,7 +68,8 @@ y `mbstring`. Para la escena 3D, un navegador con WebGL 2.
 
 Publicar el tablero requiere una plantilla de página de ancho completo y sin
 barra lateral: el contenedor ocupa el 100 % del ancho y toda la altura de la
-ventana.
+ventana. Viste la misma paleta que el objeto 3D —fondo oscuro, verde y amarillo
+institucionales— para que ambos se lean como una sola pieza.
 
 ---
 

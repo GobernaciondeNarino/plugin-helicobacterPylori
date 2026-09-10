@@ -82,7 +82,9 @@ final class UHP_Activator {
 			'mapa_lat'    => 1.30,
 			'mapa_lon'    => -77.60,
 			'mapa_zoom'   => 8,
-			'teselas'     => 'osm',
+			// El tablero viste la identidad del objeto 3D, así que su capa
+			// base por defecto es la oscura.
+			'teselas'     => 'oscuro',
 			'panel_izq'   => 1,
 			'panel_der'   => 1,
 			'mostrar_kpi' => 1,

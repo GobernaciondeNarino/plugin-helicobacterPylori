@@ -20,9 +20,11 @@ API pública y escribe en un solo directorio, el suyo, siempre por la misma
 función. Los datos que publica son agregados por municipio, subregión o
 categoría, ya divulgados institucionalmente.
 
-Se aplicaron **tres endurecimientos preventivos** sobre puntos que hoy no son
+Se aplicaron **dos endurecimientos preventivos** sobre puntos que hoy no son
 explotables pero que reducen el margen de error de quien mantenga el código en
-el futuro. Los tres están corregidos y verificados en esta misma entrega.
+el futuro (H-01 y H-02), y se corrigieron **tres defectos funcionales** que
+detectó la verificación dinámica (H-03 a H-05). Los cinco están corregidos y
+verificados en esta misma entrega.
 
 El barrido automático arrojó 56 candidatos. Los 56 se verificaron uno a uno y
 **los 56 son falsos positivos**; quedan documentados en la sección 5 para que
@@ -61,7 +63,7 @@ despliegue, no de código: verificar tras la instalación que el directorio
   estático de secretos y patrones peligrosos.
 - Revisión manual dirigida: escapado de salida, capacidades, nonces, guardas de
   acceso directo, funciones peligrosas y flujo de escritura.
-- Playwright sobre Chromium — 20 pruebas de comportamiento real en navegador.
+- Playwright sobre Chromium — 23 pruebas de comportamiento real en navegador.
 - `php -l` sobre los 14 archivos PHP y `node --check` sobre los 7 de JavaScript.
 
 ---
@@ -73,11 +75,15 @@ despliegue, no de código: verificar tras la instalación que el directorio
 | H-01 | Los objetos de configuración se serializaban sin escapar `<` ni `&` | Informativa | `class-uhp-assets.php` | Corregido |
 | H-02 | El saneador de CSS dejaba pasar la comilla simple | Informativa | `class-uhp-estilos.php` | Corregido |
 | H-03 | La ficha del municipio se destruía al cambiar de capa base | Informativa | `class-uhp-shortcodes.php` | Corregido |
+| H-04 | El tablero usaba `UHPMapa` sin declararlo como dependencia | Informativa | `class-uhp-assets.php` | Corregido |
+| H-05 | El renderer usaba `UHPcore` sin declararlo como dependencia | Informativa | `class-uhp-assets.php` | Corregido |
 | O-01 | Los respaldos se protegen solo con `.htaccess` | Observación | `data/respaldos/` | Aceptado |
 
-Ninguno alcanza severidad Baja o superior: los tres hallazgos son
-endurecimientos sobre puntos sin ruta de explotación actual, conforme al
-principio de que *un hallazgo sin ruta de explotación es una observación*.
+Ninguno alcanza severidad Baja o superior. H-01 y H-02 son endurecimientos
+sobre puntos sin ruta de explotación actual, conforme al principio de que *un
+hallazgo sin ruta de explotación es una observación*; H-03, H-04 y H-05 son
+defectos funcionales sin consecuencia de seguridad, y se incluyen porque los
+detectó la verificación de esta misma auditoría.
 
 ---
 
@@ -214,6 +220,62 @@ ficha», en verde.
 
 ---
 
+### [H-04] El tablero usaba `UHPMapa` sin declararlo como dependencia
+
+**Severidad:** Informativa (defecto funcional) · **Componente:** `includes/class-uhp-assets.php` · **Control:** —
+
+**Qué pasa.** El tablero construye su mapa a través de `UHPMapa`, que vive en
+`assets/js/uhp-mapa.js`, pero ni el registro del script ni el shortcode
+declaraban ese archivo. En el sitio real el mapa no llegaba a dibujarse y el
+mensaje de error culpaba a Leaflet, que sí estaba cargado.
+
+**Cómo se reproduce.** Publicar `[urkunina_dashboard]` en una página: el hueco
+del mapa muestra «No se pudo iniciar el mapa: la librería Leaflet no está
+disponible».
+
+**Impacto.** No es de seguridad. La función central del tablero quedaba
+inutilizada y el diagnóstico apuntaba al componente equivocado, que es lo que
+convierte un fallo de diez minutos en uno de una tarde.
+
+**Remediación.** `uhp-dashboard` declara `uhp-mapa` entre sus dependencias, de
+script y de estilo; el shortcode encola solo su handle principal y deja que el
+grafo arrastre el resto. Los dos motivos posibles se distinguen ahora en el
+mensaje.
+
+**Verificación.** Prueba «carga el módulo de mapa del plugin, no solo Leaflet».
+
+---
+
+### [H-05] El renderer usaba `UHPcore` sin declararlo como dependencia
+
+**Severidad:** Informativa (defecto funcional) · **Componente:** `includes/class-uhp-assets.php` · **Control:** —
+
+**Qué pasa.** `assets/js/uhp-renderer.js` captura `window.UHPcore` al cargarse y
+lo usa para la rampa de color y el formato de cifras, pero se registraba
+declarando solo `d3plus`. WordPress lo imprimía **antes** que el núcleo, de modo
+que la referencia quedaba indefinida.
+
+**Cómo se reproduce.** Publicar cualquier vista de mapa de calor —las de
+ranking, como `prev_lpm_municipios` o `metas_mga`—: son las que piden la rampa
+de color y por tanto las únicas que tocaban la referencia indefinida.
+
+**Impacto.** No es de seguridad. Las nueve vistas de mapa de calor, de las 24
+del catálogo, no se dibujaban con su tipo por defecto. Se
+agravaba porque el manejador de errores del gráfico trataba la excepción de
+dibujo como un fallo de red y mostraba «No se pudo cargar el gráfico»,
+señalando de nuevo al culpable equivocado.
+
+**Remediación.** `uhp-renderer` declara `uhp-core` además de `d3plus`. Aparte,
+el hidratador separa el fallo de red del fallo de dibujo con `then(éxito,
+fallo)` y deja traza en consola; y `UHPRenderer.render()` protege también su
+propio respaldo, para que un fallo del respaldo no escape al llamador.
+
+**Verificación.** Las ocho vistas de la página de gráficos se dibujan, y la
+generación de páginas de prueba resuelve ahora el grafo real de dependencias
+(sección 5).
+
+---
+
 ## 5. Observaciones y descartes
 
 ### [O-01] Los respaldos se protegen solo con `.htaccess` — Aceptado
@@ -238,6 +300,18 @@ datos sensibles lo revise antes.
 | `PHP-010` posible SSRF | 6 | Son lecturas de archivo local: rutas construidas desde `UHP_DIR` más una entrada de la lista blanca, o `$_FILES[…]['tmp_name']` con `is_uploaded_file()` como guarda previa. Nunca una URL. |
 | `SEC-010` contraseña embebida | 2 | La regla detectó la palabra «clave» en nombres de variable (`$clave`, `$clave_base`), que en este código significa «clave de registro», no «contraseña». No hay ninguna credencial en el repositorio. |
 | `PHP-013` hash débil | 1 | `md5()` deriva el nombre de un transitorio para el límite de peticiones, no un hash de contraseña. `$clave_base` es un literal del propio código y la IP está validada: no hay entrada que permita provocar una colisión. Es la misma práctica que usa el núcleo de WordPress para nombrar transitorios. |
+
+### Por qué la suite no detectaba H-04 ni H-05
+
+Las páginas de prueba enumeraban a mano los CSS y los JS de cada componente, en
+vez de derivarlos de lo que el plugin encola. Cargaban de más y, con ello,
+tapaban dos dependencias no declaradas.
+
+Corregido de raíz: `tests/generar-paginas.php` resuelve ahora el mismo grafo de
+dependencias que resolvería WordPress, a partir de lo que cada shortcode encoló
+de verdad, y una dependencia declarada que nadie registró detiene la generación
+con un error explícito. Es la clase de fallo que ninguna revisión de código
+detecta con fiabilidad y que una prueba fiel detecta siempre.
 
 ### Comprobaciones que resultaron correctas
 
@@ -283,6 +357,8 @@ datos sensibles lo revise antes.
 | H-01 | Serializar con banderas HEX | 15 min | Desarrollo | — | **Hecho** |
 | H-02 | Eliminar la comilla simple en el saneador de CSS | 20 min | Desarrollo | — | **Hecho** |
 | H-03 | Sacar la ficha del nodo que el mapa reconstruye | 20 min | Desarrollo | — | **Hecho** |
+| H-04 | Declarar `uhp-mapa` como dependencia del tablero | 15 min | Desarrollo | — | **Hecho** |
+| H-05 | Declarar `uhp-core` como dependencia del renderer | 15 min | Desarrollo | — | **Hecho** |
 | O-01 | Revisar la protección de respaldos si una fase futura añade datos sensibles | — | Desarrollo | Fase siguiente | Documentado |
 | D-01 | Verificar tras la instalación que `data/` es escribible solo por el usuario del servidor web | 10 min | Infraestructura | Al desplegar | Pendiente |
 
@@ -310,7 +386,7 @@ en esta sesión y no debe darse por hecho a partir de este informe.
 
 ```
 php tests/test-datos.php     →  263 de 263 comprobaciones en verde
-npx playwright test          →   20 de 20 pruebas de navegador en verde
+npx playwright test          →   23 de 23 pruebas de navegador en verde
 php -l  (14 archivos)        →  sin errores de sintaxis
 node --check (7 archivos)    →  sin errores de sintaxis
 ```

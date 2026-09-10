@@ -32,7 +32,16 @@ final class UHP_Shortcodes {
 		add_shortcode( 'urkunina_3d', array( $this, 'sc_3d' ) );
 		add_shortcode( 'urkunina_dashboard', array( $this, 'sc_dashboard' ) );
 		add_shortcode( 'urkunina_grafico', array( $this, 'sc_grafico' ) );
+
+		// Los textos de una vista van aparte del gráfico: cada uno es su
+		// propio shortcode para poder maquetarlos por libre en la página.
 		add_shortcode( 'urkunina_analisis', array( $this, 'sc_analisis' ) );
+		add_shortcode( 'urkunina_titulo', array( $this, 'sc_titulo' ) );
+		add_shortcode( 'urkunina_descripcion', array( $this, 'sc_descripcion' ) );
+		add_shortcode( 'urkunina_interpretacion', array( $this, 'sc_interpretacion' ) );
+		add_shortcode( 'urkunina_resumen', array( $this, 'sc_resumen' ) );
+		add_shortcode( 'urkunina_cifras', array( $this, 'sc_cifras' ) );
+		add_shortcode( 'urkunina_fuente', array( $this, 'sc_fuente' ) );
 		add_shortcode( 'urkunina_mapa', array( $this, 'sc_mapa' ) );
 		add_shortcode( 'urkunina_kpi', array( $this, 'sc_kpi' ) );
 		add_shortcode( 'urkunina_tabla', array( $this, 'sc_tabla' ) );
@@ -218,12 +227,12 @@ final class UHP_Shortcodes {
 		);
 
 		UHP_Estilos::encolar_fuentes();
+		// Basta encolar el tablero: sus dependencias declaradas arrastran el
+		// módulo de mapa, el renderer, el núcleo, Leaflet y D3plus. Enumerar
+		// aquí cada pieza a mano fue justo lo que dejó fuera uhp-mapa en la
+		// primera versión y rompió el mapa del tablero.
 		wp_enqueue_style( UHP_Assets::P . 'dashboard' );
-		UHP_Assets::encolar_libreria( 'leaflet' );
-		UHP_Assets::encolar_libreria( 'd3plus' );
 		wp_enqueue_script( UHP_Assets::P . 'dashboard' );
-		wp_enqueue_script( UHP_Assets::P . 'renderer' );
-		wp_enqueue_script( UHP_Assets::P . 'core' );
 
 		// Coordenadas fuera de Nariño delatarían un error de configuración:
 		// se cae al centro del departamento antes que mostrar otro sitio.
@@ -322,7 +331,6 @@ final class UHP_Shortcodes {
 				'leyenda'      => 'si',
 				'leyenda_pos'  => 'bottom',
 				'leyenda_estilo' => 'text',
-				'analisis'     => 'ambos',
 				'acciones'     => '',
 				'barra'        => 'si',
 			),
@@ -366,12 +374,13 @@ final class UHP_Shortcodes {
 			data-legend="<?php echo 'no' === $atts['leyenda'] ? '0' : '1'; ?>"
 			data-legend-pos="<?php echo esc_attr( UHP_Security::clave( $atts['leyenda_pos'] ) ); ?>"
 			data-legend-style="<?php echo esc_attr( UHP_Security::clave( $atts['leyenda_estilo'] ) ); ?>"
-			data-analisis="<?php echo esc_attr( UHP_Security::clave( $atts['analisis'] ) ); ?>"
 			data-acciones="<?php echo esc_attr( sanitize_text_field( $atts['acciones'] ) ); ?>">
 
-			<figcaption class="uhp-g__titulo">
-				<?php echo esc_html( '' !== $atts['titulo'] ? $atts['titulo'] : $meta['name'] ); ?>
-			</figcaption>
+			<?php if ( 'no' !== $atts['titulo'] ) : ?>
+				<figcaption class="uhp-g__titulo">
+					<?php echo esc_html( '' !== $atts['titulo'] ? $atts['titulo'] : $meta['name'] ); ?>
+				</figcaption>
+			<?php endif; ?>
 
 			<?php if ( 'no' !== $atts['barra'] ) : ?>
 				<div class="uhp-g__barra" role="toolbar"
@@ -380,12 +389,6 @@ final class UHP_Shortcodes {
 
 			<div class="uhp-g__lienzo"></div>
 			<?php echo $this->skeleton( __( 'Cargando el gráfico…', 'urkunina-5000' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-
-			<?php if ( 'no' !== $atts['analisis'] ) : ?>
-				<div class="uhp-g__analisis-caja uhp-g__analisis"></div>
-			<?php endif; ?>
-
-			<p class="uhp-g__fuente"></p>
 		</figure>
 		<?php
 		return ob_get_clean();
@@ -411,29 +414,197 @@ final class UHP_Shortcodes {
 			'urkunina_analisis'
 		);
 
+		$modo = UHP_Security::clave( $atts['modo'] );
+
+		// Cada modo es una combinación de las piezas sueltas. Se mantiene
+		// como atajo para quien quiera el bloque completo sin componerlo.
+		$combinaciones = array(
+			'descripcion'  => array( 'descripcion' ),
+			'analisis'     => array( 'interpretacion' ),
+			'descriptivo'  => array( 'resumen' ),
+			'cuantitativo' => array( 'cifras' ),
+			'ambos'        => array( 'descripcion', 'resumen', 'cifras' ),
+			'completo'     => array( 'descripcion', 'interpretacion', 'resumen', 'cifras' ),
+		);
+		$partes = isset( $combinaciones[ $modo ] ) ? $combinaciones[ $modo ] : $combinaciones['ambos'];
+
+		return $this->bloque_texto( $atts, $partes, 'uhp-texto-grupo' );
+	}
+
+	/* ================================================================= */
+	/* Piezas de texto sueltas                                           */
+	/*                                                                   */
+	/* Cada texto de una vista es su propio shortcode para poder          */
+	/* maquetarlo por libre: el gráfico va en una columna y su lectura    */
+	/* en otra, o el texto abre la sección y el gráfico la cierra.        */
+	/* Todos se renderizan en servidor —el contenido llega en el HTML,    */
+	/* sin petición ni parpadeo— y funcionan sin JavaScript.              */
+	/* ================================================================= */
+
+	/**
+	 * [urkunina_titulo] — nombre de la vista.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_titulo( $atts ) {
+		$atts = $this->fusionar(
+			array(
+				'view'      => 'tamizaje_hp',
+				'etiqueta'  => 'h3',
+			),
+			$atts,
+			'urkunina_titulo'
+		);
+
 		$vista = UHP_Security::clave( $atts['view'] );
 		if ( ! UHP_Views::existe( $vista ) ) {
 			return $this->aviso( __( 'La vista solicitada no existe.', 'urkunina-5000' ) );
 		}
 
-		wp_enqueue_style( UHP_Assets::P . 'grafico' );
-		wp_enqueue_script( UHP_Assets::P . 'grafico' );
+		// Solo encabezados y párrafo: la etiqueta la elige quien maqueta,
+		// pero no puede introducir marcado arbitrario.
+		$etiqueta = UHP_Security::clave( $atts['etiqueta'] );
+		if ( ! in_array( $etiqueta, array( 'h2', 'h3', 'h4', 'h5', 'p' ), true ) ) {
+			$etiqueta = 'h3';
+		}
 
-		$id = $this->id( 'uhpa' );
+		$meta = UHP_Views::meta( $vista );
 
-		ob_start();
-		?>
-		<div id="<?php echo esc_attr( $id ); ?>"
-			class="uhp uhp-g__analisis-caja"
-			style="<?php echo esc_attr( UHP_Estilos::inline( $atts ) ); ?>"
-			data-uhp-analisis
-			data-view="<?php echo esc_attr( $vista ); ?>"
-			data-modo="<?php echo esc_attr( UHP_Security::clave( $atts['modo'] ) ); ?>">
-			<div class="uhp-g__analisis-cuerpo"></div>
-			<?php echo $this->skeleton( __( 'Cargando el análisis…', 'urkunina-5000' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-		</div>
-		<?php
-		return ob_get_clean();
+		UHP_Estilos::encolar_fuentes();
+		wp_enqueue_style( UHP_Assets::P . 'base' );
+
+		return sprintf(
+			'<%1$s class="uhp uhp-titulo" style="%2$s">%3$s</%1$s>',
+			$etiqueta,
+			esc_attr( UHP_Estilos::inline( $atts ) ),
+			esc_html( $meta['name'] )
+		);
+	}
+
+	/**
+	 * [urkunina_descripcion] — qué muestra el gráfico y cómo leerlo.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_descripcion( $atts ) {
+		return $this->bloque_texto( $atts, array( 'descripcion' ), '', 'urkunina_descripcion' );
+	}
+
+	/**
+	 * [urkunina_interpretacion] — qué significa lo que se ve.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_interpretacion( $atts ) {
+		return $this->bloque_texto( $atts, array( 'interpretacion' ), '', 'urkunina_interpretacion' );
+	}
+
+	/**
+	 * [urkunina_resumen] — lectura automática del hallazgo principal.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_resumen( $atts ) {
+		return $this->bloque_texto( $atts, array( 'resumen' ), '', 'urkunina_resumen' );
+	}
+
+	/**
+	 * [urkunina_cifras] — cifras de apoyo redactadas a partir de los datos.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_cifras( $atts ) {
+		return $this->bloque_texto( $atts, array( 'cifras' ), '', 'urkunina_cifras' );
+	}
+
+	/**
+	 * [urkunina_fuente] — atribución de la fuente de la vista.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_fuente( $atts ) {
+		return $this->bloque_texto( $atts, array( 'fuente' ), '', 'urkunina_fuente' );
+	}
+
+	/**
+	 * Renderiza una o varias piezas de texto de una vista.
+	 *
+	 * @param array    $atts   Atributos del shortcode.
+	 * @param string[] $partes Piezas a pintar, en orden.
+	 * @param string   $clase  Clase extra del contenedor.
+	 * @param string   $tag    Nombre del shortcode, para shortcode_atts.
+	 * @return string
+	 */
+	private function bloque_texto( $atts, $partes, $clase = '', $tag = 'urkunina_analisis' ) {
+		$atts = $this->fusionar(
+			array(
+				'view' => 'tamizaje_hp',
+				'modo' => '',
+			),
+			$atts,
+			$tag
+		);
+
+		$vista = UHP_Security::clave( $atts['view'] );
+		if ( ! UHP_Views::existe( $vista ) ) {
+			return $this->aviso(
+				sprintf(
+					/* translators: %s: identificador de vista solicitado. */
+					__( 'La vista «%s» no existe. Consulte el catálogo en URKUNINA 5000 → Gráficos.', 'urkunina-5000' ),
+					$vista
+				)
+			);
+		}
+
+		$v      = UHP_Views::obtener( $vista );
+		$textos = array(
+			'descripcion'    => array( $v['descripcion_larga'], 'uhp-texto--descripcion', 'p' ),
+			'interpretacion' => array( $v['analisis_largo'], 'uhp-texto--interpretacion', 'p' ),
+			'resumen'        => array( $v['analisis']['descriptivo'], 'uhp-texto--resumen', 'p' ),
+			'cifras'         => array( $v['analisis']['cuantitativo'], 'uhp-texto--cifras', 'p' ),
+			'fuente'         => array(
+				$v['fuente'] ? sprintf(
+					/* translators: %s: fuente del dato. */
+					__( 'Fuente: %s', 'urkunina-5000' ),
+					$v['fuente']
+				) : '',
+				'uhp-texto--fuente',
+				'p',
+			),
+		);
+
+		$html = '';
+		foreach ( $partes as $parte ) {
+			if ( empty( $textos[ $parte ][0] ) ) {
+				continue;
+			}
+			$html .= sprintf(
+				'<%1$s class="uhp-texto %2$s">%3$s</%1$s>',
+				$textos[ $parte ][2],
+				esc_attr( $textos[ $parte ][1] ),
+				esc_html( $textos[ $parte ][0] )
+			);
+		}
+
+		if ( '' === $html ) {
+			return '';
+		}
+
+		UHP_Estilos::encolar_fuentes();
+		wp_enqueue_style( UHP_Assets::P . 'base' );
+
+		return sprintf(
+			'<div class="%1$s" style="%2$s">%3$s</div>',
+			esc_attr( trim( 'uhp ' . $clase ) ),
+			esc_attr( UHP_Estilos::inline( $atts ) ),
+			$html // Ya escapado pieza a pieza.
+		);
 	}
 
 	/* ================================================================= */

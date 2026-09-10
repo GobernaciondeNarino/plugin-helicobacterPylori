@@ -53,32 +53,83 @@ add_filter(
 	2
 );
 
-$sc = new UHP_Shortcodes();
+$assets = new UHP_Assets();
+$assets->registrar();          // registra el grafo real de dependencias
+$GLOBALS['uhp_sc'] = new UHP_Shortcodes();
+$GLOBALS['uhp_test_faltantes'] = array();
+
+/**
+ * Mapea un handle de WordPress a la URL que sirve el servidor de pruebas.
+ *
+ * Los recursos propios del plugin salen de /assets; los de terceros, del
+ * espejo local de tests/vendor. Devolver '' descarta el recurso.
+ *
+ * @param string $tipo   'script' o 'style'.
+ * @param string $handle Handle de WordPress.
+ * @return string
+ */
+function url_de_handle( $tipo, $handle ) {
+	$vendor = array(
+		'script' => array(
+			'd3plus'  => '/assets/js/vendor-d3plus.js',
+			'leaflet' => '/assets/js/vendor-leaflet.js',
+			'd3'      => '',      // ningún componente lo usa directamente
+			'plotly'  => '',      // registrado pero sin usar todavía
+		),
+		'style'  => array(
+			'leaflet' => '/assets/css/leaflet-vendor.css',
+		),
+	);
+
+	if ( isset( $vendor[ $tipo ][ $handle ] ) ) {
+		return $vendor[ $tipo ][ $handle ];
+	}
+
+	// Las tipografías de Google se excluyen a propósito: la suite no debe
+	// depender de la red más que para el espejo de Three.js.
+	if ( 'uhp-fuentes' === $handle ) {
+		return '';
+	}
+
+	if ( 0 === strpos( $handle, 'uhp-' ) ) {
+		$archivo = ( 'uhp-base' === $handle ) ? 'uhp' : $handle;
+		return '/assets/' . ( 'script' === $tipo ? 'js/' : 'css/' ) . $archivo . ( 'script' === $tipo ? '.js' : '.css' );
+	}
+
+	return '';
+}
 
 /**
  * Envuelve el marcado de un shortcode en una página completa.
  *
- * Reproduce lo que WordPress imprimiría: las variables de apariencia, el
- * objeto de configuración del front y las hojas y scripts del plugin.
+ * Los CSS y los JS NO se listan a mano: se resuelven del grafo de
+ * dependencias que el propio plugin declaró y que los shortcodes
+ * encolaron. Así la página de prueba carga exactamente lo que cargaría
+ * WordPress, ni más ni menos.
  *
- * @param string   $titulo Título de la página.
- * @param string   $cuerpo Marcado del shortcode.
- * @param string[] $css    Hojas de estilo del plugin a incluir.
- * @param array    $js     Scripts a incluir: array(ruta, esModulo).
- * @param string   $extra  Marcado o script adicional.
+ * @param string $titulo Título de la página.
+ * @param string $cuerpo Marcado del shortcode.
  * @return string
  */
-function pagina( $titulo, $cuerpo, $css, $js, $extra = '' ) {
+function pagina( $titulo, $cuerpo ) {
 	$hojas = '';
-	foreach ( $css as $c ) {
-		$hojas .= '<link rel="stylesheet" href="/assets/css/' . $c . '.css">' . "\n";
+	foreach ( uhp_test_resolver( 'style' ) as $handle ) {
+		$url = url_de_handle( 'style', $handle );
+		if ( '' !== $url ) {
+			$hojas .= '<link rel="stylesheet" href="' . $url . '" data-handle="' . $handle . '">' . "\n";
+		}
 	}
 
 	$scripts = '';
-	foreach ( $js as $par ) {
-		list( $ruta, $modulo ) = $par;
+	foreach ( uhp_test_resolver( 'script' ) as $handle ) {
+		$url = url_de_handle( 'script', $handle );
+		if ( '' === $url ) {
+			continue;
+		}
+		// El mismo criterio que UHP_Assets::marcar_modulos() en producción.
+		$modulo   = ( UHP_Assets::P . '3d' === $handle );
 		$scripts .= '<script ' . ( $modulo ? 'type="module" ' : '' ) .
-			'src="/assets/js/' . $ruta . '.js"></script>' . "\n";
+			'src="' . $url . '" data-handle="' . $handle . '"></script>' . "\n";
 	}
 
 	$config = json_encode(
@@ -97,7 +148,8 @@ function pagina( $titulo, $cuerpo, $css, $js, $extra = '' ) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>' . htmlspecialchars( $titulo ) . ' — prueba</title>
 <!-- Sin Google Fonts a propósito: la suite no debe depender de la red más
-     que para Three.js, y el CSS del plugin ya declara pila de respaldo. -->
+     que para el espejo de Three.js, y el CSS del plugin ya declara pila de
+     respaldo. -->
 ' . $hojas . '<style>' . UHP_Estilos::css_global() . '
 body{margin:0;font-family:system-ui,sans-serif;background:#fff;}
 .pagina{max-width:1400px;margin:0 auto;padding:0 16px;}
@@ -106,137 +158,174 @@ body{margin:0;font-family:system-ui,sans-serif;background:#fff;}
 </head>
 <body>
 ' . $cuerpo . '
-' . $extra . '
 ' . $scripts . '</body>
 </html>';
+}
+
+/**
+ * Construye una página aislando lo que encola cada shortcode.
+ *
+ * @param string   $nombre Nombre del archivo, sin extensión.
+ * @param string   $titulo Título de la página.
+ * @param callable $pintar Devuelve el marcado; se le pasa UHP_Shortcodes.
+ * @return string
+ */
+function construir( $nombre, $titulo, $pintar ) {
+	uhp_test_limpiar_encolados();
+	$cuerpo = $pintar( $GLOBALS['uhp_sc'] );
+	return pagina( $titulo, $cuerpo );
 }
 
 /* ------------------------------------------------------------------ */
 
 $paginas = array();
 
-/* --- Objeto 3D --- */
-$paginas['objeto-3d'] = pagina(
+$paginas['objeto-3d'] = construir(
+	'objeto-3d',
 	'Objeto 3D',
-	$sc->sc_3d( array( 'alto' => '100vh' ) ),
-	array( 'uhp-3d' ),
-	array( array( 'uhp-core', false ), array( 'uhp-3d', true ) )
+	function ( $sc ) {
+		return $sc->sc_3d( array( 'alto' => '100vh' ) );
+	}
 );
 
-/* --- Objeto 3D embebido dentro de una página con más contenido --- */
-$paginas['objeto-3d-embebido'] = pagina(
+$paginas['objeto-3d-embebido'] = construir(
+	'objeto-3d-embebido',
 	'Objeto 3D embebido',
-	'<div class="pagina"><h1>Antes de la escena</h1><p>Contenido de la página anfitriona.</p>' .
-	$sc->sc_3d( array( 'alto' => '600px' ) ) .
-	'<h2>Después de la escena</h2><p>Más contenido para comprobar que la escena no se apodera de la página.</p></div>',
-	array( 'uhp-3d' ),
-	array( array( 'uhp-core', false ), array( 'uhp-3d', true ) )
+	function ( $sc ) {
+		return '<div class="pagina"><h1>Antes de la escena</h1>' .
+			'<p>Contenido de la página anfitriona.</p>' .
+			$sc->sc_3d( array( 'alto' => '600px' ) ) .
+			'<h2>Después de la escena</h2>' .
+			'<p>Más contenido para comprobar que la escena no se apodera de la página.</p></div>';
+	}
 );
 
-/* --- Tablero completo --- */
-$paginas['tablero'] = pagina(
+$paginas['tablero'] = construir(
+	'tablero',
 	'Tablero',
-	$sc->sc_dashboard( array() ),
-	array( 'leaflet-vendor', 'uhp', 'uhp-grafico', 'uhp-dashboard' ),
-	array(
-		array( 'vendor-d3plus', false ),
-		array( 'vendor-leaflet', false ),
-		array( 'uhp-core', false ),
-		array( 'uhp-renderer', false ),
-		array( 'uhp-mapa', false ),
-		array( 'uhp-dashboard', false ),
-	)
+	function ( $sc ) {
+		return $sc->sc_dashboard( array() );
+	}
 );
 
-/* --- Gráficos: uno por tipo compatible de una vista representativa --- */
-$graficos = '';
-foreach ( array(
-	array( 'tamizaje_hp', 'donut' ),
-	array( 'prev_lpm_municipios', 'bar' ),
-	array( 'prev_subregion', 'bar' ),
-	array( 'tamizaje_comparado', 'stacked_bar' ),
-	array( 'publicaciones_anio', 'line' ),
-	array( 'biobanco_tipos', 'treemap' ),
-	array( 'metas_mga', 'bar' ),
-	array( 'perfil_etnia', 'pie' ),
-) as $par ) {
-	$graficos .= $sc->sc_grafico(
-		array(
-			'view' => $par[0],
-			'type' => $par[1],
-			'alto' => '360px',
-		)
-	);
-}
-$paginas['graficos'] = pagina(
+$paginas['graficos'] = construir(
+	'graficos',
 	'Gráficos',
-	'<div class="pagina">' . $graficos . '</div>',
-	array( 'uhp', 'uhp-grafico' ),
-	array(
-		array( 'vendor-d3plus', false ),
-		array( 'uhp-core', false ),
-		array( 'uhp-renderer', false ),
-		array( 'uhp-grafico', false ),
-	)
+	function ( $sc ) {
+		$vistas = array(
+			array( 'tamizaje_hp', 'donut' ),
+			array( 'prev_lpm_municipios', 'bar' ),
+			array( 'prev_subregion', 'bar' ),
+			array( 'tamizaje_comparado', 'stacked_bar' ),
+			array( 'publicaciones_anio', 'line' ),
+			array( 'biobanco_tipos', 'treemap' ),
+			array( 'metas_mga', 'bar' ),
+			array( 'perfil_etnia', 'pie' ),
+		);
+		$html = '';
+		foreach ( $vistas as $par ) {
+			$html .= $sc->sc_grafico(
+				array(
+					'view' => $par[0],
+					'type' => $par[1],
+					'alto' => '360px',
+				)
+			);
+		}
+		return '<div class="pagina">' . $html . '</div>';
+	}
 );
 
-/* --- Mapa --- */
-$paginas['mapa'] = pagina(
+$paginas['maqueta'] = construir(
+	'maqueta',
+	'Gráfico y textos maquetados por separado',
+	function ( $sc ) {
+		$vista = 'tamizaje_hp';
+
+		// El caso de uso que motiva la separación: el gráfico en una
+		// columna y su lectura en otra. Ninguna de las dos piezas sabe de
+		// la otra, que es justo lo que permite maquetarlas por libre.
+		return '<div class="pagina">' .
+			$sc->sc_titulo(
+				array(
+					'view'     => $vista,
+					'etiqueta' => 'h2',
+				)
+			) .
+			'<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">' .
+			'<div data-columna="grafico">' .
+			$sc->sc_grafico(
+				array(
+					'view'   => $vista,
+					'type'   => 'donut',
+					'alto'   => '360px',
+					'titulo' => 'no',
+				)
+			) .
+			'</div>' .
+			'<div data-columna="texto">' .
+			$sc->sc_descripcion( array( 'view' => $vista ) ) .
+			$sc->sc_interpretacion( array( 'view' => $vista ) ) .
+			$sc->sc_resumen( array( 'view' => $vista ) ) .
+			$sc->sc_cifras( array( 'view' => $vista ) ) .
+			$sc->sc_fuente( array( 'view' => $vista ) ) .
+			'</div></div>' .
+			// El atajo agrupado, para comprobar que sigue funcionando.
+			'<div data-columna="grupo">' .
+			$sc->sc_analisis(
+				array(
+					'view' => 'prev_subregion',
+					'modo' => 'completo',
+				)
+			) .
+			'</div></div>';
+	}
+);
+
+$paginas['mapa'] = construir(
+	'mapa',
 	'Mapa',
-	'<div class="pagina">' . $sc->sc_mapa( array( 'alto' => '560px' ) ) . '</div>',
-	array( 'leaflet-vendor', 'uhp', 'uhp-mapa' ),
-	array(
-		array( 'vendor-leaflet', false ),
-		array( 'uhp-core', false ),
-		array( 'uhp-mapa', false ),
-	)
+	function ( $sc ) {
+		return '<div class="pagina">' . $sc->sc_mapa( array( 'alto' => '560px' ) ) . '</div>';
+	}
 );
 
-/* --- Componentes renderizados en servidor --- */
-$paginas['servidor'] = pagina(
+$paginas['servidor'] = construir(
+	'servidor',
 	'Componentes de servidor',
-	'<div class="pagina">' .
-	$sc->sc_kpi( array() ) .
-	$sc->sc_ficha( array() ) .
-	$sc->sc_tabla( array( 'view' => 'prev_subregion_lpm' ) ) .
-	'<p>Prevalencia de infección: ' .
-	$sc->sc_dato(
-		array(
-			'archivo' => 'tamizaje',
-			'ruta'    => 'infeccion_h_pylori.positivos.porcentaje',
-			'formato' => 'porcentaje',
-		)
-	) . '</p>' .
-	'</div>',
-	array( 'uhp' ),
-	array()
+	function ( $sc ) {
+		return '<div class="pagina">' .
+			$sc->sc_kpi( array() ) .
+			$sc->sc_ficha( array() ) .
+			$sc->sc_tabla( array( 'view' => 'prev_subregion_lpm' ) ) .
+			'<p>Prevalencia de infección: ' .
+			$sc->sc_dato(
+				array(
+					'archivo' => 'tamizaje',
+					'ruta'    => 'infeccion_h_pylori.positivos.porcentaje',
+					'formato' => 'porcentaje',
+				)
+			) . '</p></div>';
+	}
 );
 
-/* --- Convivencia: tablero, gráficos y objeto 3D en la MISMA página --- */
-$paginas['convivencia'] = pagina(
+$paginas['convivencia'] = construir(
+	'convivencia',
 	'Convivencia de componentes',
-	'<div class="pagina"><h1>Tres componentes en una página</h1>' .
-	$sc->sc_kpi( array() ) .
-	$sc->sc_grafico(
-		array(
-			'view' => 'zonas_riesgo',
-			'type' => 'bar',
-			'alto' => '300px',
-		)
-	) .
-	$sc->sc_mapa( array( 'alto' => '380px' ) ) .
-	'</div>' .
-	$sc->sc_3d( array( 'alto' => '500px' ) ),
-	array( 'leaflet-vendor', 'uhp', 'uhp-grafico', 'uhp-mapa', 'uhp-3d' ),
-	array(
-		array( 'vendor-d3plus', false ),
-		array( 'vendor-leaflet', false ),
-		array( 'uhp-core', false ),
-		array( 'uhp-renderer', false ),
-		array( 'uhp-grafico', false ),
-		array( 'uhp-mapa', false ),
-		array( 'uhp-3d', true ),
-	)
+	function ( $sc ) {
+		return '<div class="pagina"><h1>Tres componentes en una página</h1>' .
+			$sc->sc_kpi( array() ) .
+			$sc->sc_grafico(
+				array(
+					'view' => 'zonas_riesgo',
+					'type' => 'bar',
+					'alto' => '300px',
+				)
+			) .
+			$sc->sc_mapa( array( 'alto' => '380px' ) ) .
+			'</div>' .
+			$sc->sc_3d( array( 'alto' => '500px' ) );
+	}
 );
 
 foreach ( $paginas as $nombre => $html ) {
@@ -245,7 +334,14 @@ foreach ( $paginas as $nombre => $html ) {
 	printf( "  %-28s %s\n", $nombre . '.html', size_format( filesize( $ruta ) ) );
 }
 
-echo "Listo. Recursos que los shortcodes pidieron encolar:\n";
-foreach ( array_keys( $GLOBALS['uhp_test_encolados'] ) as $handle ) {
-	echo '  · ' . $handle . "\n";
+// Una dependencia declarada pero no registrada haría que WordPress omitiera
+// el recurso en silencio. Aquí se convierte en un fallo ruidoso.
+if ( ! empty( $GLOBALS['uhp_test_faltantes'] ) ) {
+	echo "\nDependencias declaradas que nadie registró:\n";
+	foreach ( array_unique( $GLOBALS['uhp_test_faltantes'] ) as $f ) {
+		echo '  · ' . $f . "\n";
+	}
+	exit( 1 );
 }
+
+echo "Listo.\n";
