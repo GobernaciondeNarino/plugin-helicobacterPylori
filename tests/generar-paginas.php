@@ -208,6 +208,14 @@ $paginas['tablero'] = construir(
 	}
 );
 
+$paginas['tablero-claro'] = construir(
+	'tablero-claro',
+	'Tablero en tema claro',
+	function ( $sc ) {
+		return $sc->sc_dashboard( array( 'tema' => 'claro' ) );
+	}
+);
+
 $paginas['graficos'] = construir(
 	'graficos',
 	'Gráficos',

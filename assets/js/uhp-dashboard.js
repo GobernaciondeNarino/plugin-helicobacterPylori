@@ -28,9 +28,14 @@
   });
 
   function iniciar(raiz) {
+    var tema = raiz.getAttribute('data-tema') === 'claro' ? 'claro' : 'oscuro';
+
     var st = {
+      tema: tema,
       indicador: raiz.getAttribute('data-indicador') || 'lpm',
-      teselas: raiz.getAttribute('data-teselas') || 'oscuro',
+      // La capa base por defecto sigue al tema: el servidor ya la resuelve,
+      // pero si el atributo llegara vacío se decide aquí igual.
+      teselas: raiz.getAttribute('data-teselas') || tema,
       lat: raiz.getAttribute('data-lat'),
       lon: raiz.getAttribute('data-lon'),
       zoom: raiz.getAttribute('data-zoom'),
@@ -136,9 +141,9 @@
     var selBase = C.el('select', 'uhp-db__select');
     selBase.id = uid('base');
     [
-      ['oscuro', 'Tono oscuro (identidad del tablero)'],
+      ['oscuro', 'Tono oscuro' + (st.tema === 'oscuro' ? ' (la del tema)' : '')],
+      ['claro', 'Tono claro' + (st.tema === 'claro' ? ' (la del tema)' : '')],
       ['osm', 'OpenStreetMap estándar'],
-      ['claro', 'Tono claro'],
       ['humanitario', 'Humanitarian OSM']
     ].forEach(function (par) {
       var o = C.el('option', '', par[1]);
@@ -286,8 +291,9 @@
       lon: st.lon,
       zoom: st.zoom,
       teselas: st.teselas,
-      // El tablero viste la identidad del objeto 3D: fondo oscuro.
-      tema: 'oscuro',
+      // El mapa se tiñe con el tema del tablero: el borde de los
+      // municipios, el relleno de «sin dato» y el resalte cambian con él.
+      tema: st.tema,
       indicador: st.indicador,
       alSeleccionar: function (divipola, nombre, valor) {
         pintarFicha(nodos, st, divipola, nombre, valor);
@@ -335,7 +341,10 @@
 
         window.UHPRenderer.render(nodos.grafico, p, {
           legendPos: 'bottom',
-          tema: 'oscuro',
+          // Sin esto, D3plus pinta los ejes y la leyenda en tonos para
+          // fondo claro y el gráfico del panel se vuelve ilegible en cuanto
+          // el tablero es oscuro. Vale en los dos sentidos.
+          tema: st.tema,
           reducirMovimiento: reducirMovimiento
         });
 

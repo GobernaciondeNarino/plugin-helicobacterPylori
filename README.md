@@ -21,7 +21,7 @@ de WordPress:
 
 | Componente | Shortcode |
 |---|---|
-| Tablero completo con mapa, controles, filtros y gráficos | `[urkunina_dashboard]` |
+| Tablero completo con mapa, controles, filtros y gráficos | `[urkunina_dashboard tema="oscuro\|claro"]` |
 | Recreación 3D de *Helicobacter pylori* con línea de tiempo | `[urkunina_3d]` |
 | Gráfico de cualquiera de las 24 vistas del catálogo | `[urkunina_grafico view="…"]` |
 | Mapa coroplético de los 64 municipios sobre OpenStreetMap | `[urkunina_mapa]` |
@@ -76,8 +76,15 @@ departamento con o sin cartografía de fondo según convenga a la página.
 
 Publicar el tablero requiere una plantilla de página de ancho completo y sin
 barra lateral: el contenedor ocupa el 100 % del ancho y toda la altura de la
-ventana. Viste la misma paleta que el objeto 3D —fondo oscuro, verde y amarillo
-institucionales— para que ambos se lean como una sola pieza.
+ventana.
+
+Tiene **dos temas**. El oscuro es el de por defecto y viste la misma paleta que
+el objeto 3D —fondo oscuro, verde y amarillo institucionales— para que ambos se
+lean como una sola pieza. El claro, `[urkunina_dashboard tema="claro"]`, sirve
+para páginas de fondo blanco y para imprimir. El tema viste todo el tablero:
+paneles, controles, fichas, la leyenda y la atribución del mapa, la capa base de
+cartografía y la tinta con la que se dibujan los gráficos. También se elige de
+una vez para todo el sitio en **URKUNINA 5000 → Componentes**.
 
 ---
 

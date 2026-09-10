@@ -1,15 +1,24 @@
 /* =====================================================================
    [urkunina_dashboard] — tablero completo.
 
-   IDENTIDAD VISUAL: la del objeto 3D ([urkunina_3d]). Mismos tokens —
-   fondo #0C1116, paneles translúcidos con desenfoque y borde blanco al
-   9 %, verde #10A13B y amarillo #FFD500 de la Gobernación de Nariño,
-   tinta clara #E7EDF1— para que quien pase de la escena al tablero
-   perciba una sola pieza y no dos productos distintos.
+   DOS TEMAS. El de por defecto es el OSCURO, con la identidad del objeto
+   3D ([urkunina_3d]): fondo #0C1116, paneles translúcidos con desenfoque
+   y borde blanco al 9 %, verde #10A13B y amarillo #FFD500 de la
+   Gobernación de Nariño, tinta clara #E7EDF1 — para que quien pase de la
+   escena al tablero perciba una sola pieza y no dos productos distintos.
+   El CLARO (`.uhp-db--claro`) sirve para páginas de fondo blanco, para
+   imprimir y para quien necesite más luz.
 
-   Los tokens se declaran aquí con el prefijo --uhp-db- en vez de
-   reutilizar los --uhp3d-, porque el objeto 3D puede no estar en la
-   página: el tablero tiene que sostenerse solo.
+   REGLA DE ESTA HOJA: ni un color literal fuera del bloque de tokens.
+   Cada superficie, tinta, borde, velo y sombra tiene su token --uhp-db-*,
+   y el tema claro se limita a redefinirlos. Es lo que permite que un
+   retoque de paleta no obligue a repasar seiscientas líneas, y lo que
+   evita que un color se quede oscuro en el tema claro por descuido: si no
+   hay literales, no hay nada que se pueda olvidar.
+
+   Los tokens llevan el prefijo --uhp-db- en vez de reutilizar los
+   --uhp3d-, porque el objeto 3D puede no estar en la página: el tablero
+   tiene que sostenerse solo.
 
    Contenedor a width:100% y height:100vh (configurable con el atributo
    `alto`), repartido en cuatro zonas:
@@ -24,9 +33,12 @@
    Por debajo de 1100 px la rejilla se apila y el mapa conserva altura
    propia, de modo que el tablero sigue siendo usable en móvil.
 
-   Accesibilidad: todos los pares tinta/fondo de esta hoja superan 4,5:1
-   (texto normal) o 3:1 (texto grande y elementos gráficos), conforme al
-   Anexo 1 de la Resolución 1519 de 2020.
+   Accesibilidad: en los DOS temas, todos los pares tinta/fondo de esta
+   hoja superan 4,5:1 (texto normal) o 3:1 (texto grande y elementos
+   gráficos), conforme al Anexo 1 de la Resolución 1519 de 2020. Por eso
+   hay tokens separados para la cifra destacada y para el rótulo de la
+   leyenda: el amarillo institucional sobre fondo claro no llega ni a 2:1,
+   de modo que en el tema claro esos dos papeles los cubre el azul.
    ===================================================================== */
 
 .uhp-db {
@@ -36,6 +48,10 @@
   --uhp-db-amarillo: #FFD500;
   --uhp-db-alarma: #E2453C;
 
+  /* `fondo`, `verde-claro` y `panel-alto` se declaran aunque ninguna regla
+     los consuma hoy: son el registro de la paleta del objeto 3D y la
+     prueba de identidad los compara token a token con los --uhp3d-. Si se
+     borran, esa prueba deja de vigilar nada. */
   --uhp-db-fondo: #0C1116;
   --uhp-db-fondo-hondo: #060A0D;
   --uhp-db-panel: rgba(9, 15, 20, .82);
@@ -45,6 +61,69 @@
   --uhp-db-texto: #E7EDF1;
   --uhp-db-texto-medio: #A9B7C1;
   --uhp-db-texto-tenue: #8FA0AC;
+
+  /* --- Superficies compuestas --- */
+  /* Degradado del lienzo: el mismo del fondo de la escena 3D. */
+  --uhp-db-lienzo:
+    radial-gradient(120% 90% at 50% 8%, #16222B 0%, #0C1116 45%, #05080B 100%);
+  --uhp-db-cab-a: rgba(6, 10, 13, .96);
+  --uhp-db-cab-b: rgba(6, 10, 13, .78);
+  --uhp-db-panel-cab: rgba(6, 10, 13, .9);
+  --uhp-db-velo: rgba(6, 10, 13, .9);
+  --uhp-db-atrib: rgba(6, 10, 13, .82);
+  --uhp-db-leaflet-btn: rgba(9, 15, 20, .92);
+  --uhp-db-tip-flecha: rgba(9, 15, 20, .82);
+  /* Fondo del <option> nativo: el sistema lo pinta con SU color, de modo
+     que sin esto las opciones salen en blanco sobre blanco. */
+  --uhp-db-opcion: #0F1720;
+
+  /* --- Controles --- */
+  --uhp-db-control: rgba(255, 255, 255, .06);
+  --uhp-db-control-alto: rgba(16, 161, 59, .24);
+  --uhp-db-control-alto-suave: rgba(16, 161, 59, .18);
+  --uhp-db-control-alto-txt: #FFFFFF;
+  --uhp-db-scroll: rgba(255, 255, 255, .16);
+  --uhp-db-punteado: rgba(255, 255, 255, .08);
+  --uhp-db-filete: rgba(255, 255, 255, .1);
+  --uhp-db-muestra-borde: rgba(255, 255, 255, .2);
+  --uhp-db-giro: rgba(255, 255, 255, .18);
+
+  /* --- Acentos con dos lecturas ---
+     `cifra` es el número grande de la ficha y del tooltip; `rotulo` es el
+     encabezado de la leyenda y el punto del panel de gráficos. En oscuro
+     son el verde claro y el amarillo; en claro no llegarían al contraste
+     mínimo y los cubren el verde oscuro y el azul institucional. */
+  --uhp-db-cifra: #3FD26E;
+  --uhp-db-rotulo: #FFD500;
+  --uhp-db-kpi-fondo: rgba(16, 161, 59, .10);
+  --uhp-db-kpi-val: #FFFFFF;
+
+  /* --- Riesgo clínico ---
+     Codifican el nivel, no decoran: tienen que leerse en los dos temas. */
+  --uhp-db-riesgo-alto: #E2453C;
+  --uhp-db-riesgo-medio: #FFD500;
+  --uhp-db-riesgo-bajo: #3FD26E;
+  --uhp-db-halo-alto: 0 0 8px rgba(226, 69, 60, .6);
+  --uhp-db-halo-medio: 0 0 8px rgba(255, 213, 0, .5);
+  --uhp-db-halo-bajo: 0 0 8px rgba(63, 210, 110, .5);
+
+  /* --- Estados --- */
+  --uhp-db-error-fondo: rgba(226, 69, 60, .12);
+  --uhp-db-error-borde: rgba(226, 69, 60, .4);
+  --uhp-db-error-txt: #FFC9C5;
+  --uhp-db-btn-txt: #05230F;
+  --uhp-db-btn-alto: #3FD26E;
+
+  /* --- Foco ---
+     El anillo de foco es un elemento gráfico obligatorio y necesita 3:1
+     contra lo que tiene al lado. El amarillo institucional lo cumple de
+     sobra sobre el fondo oscuro; sobre blanco no llega ni a 2:1, así que
+     el tema claro lo cambia por el azul de la entidad. */
+  --uhp-db-foco: #FFD500;
+
+  /* --- Sombras --- */
+  --uhp-db-sombra: 0 18px 50px rgba(0, 0, 0, .5);
+  --uhp-db-sombra-tip: 0 10px 28px rgba(0, 0, 0, .5);
 
   --uhp-db-r-s: 4px;
   --uhp-db-r-m: 10px;
@@ -67,9 +146,7 @@
   height: var(--uhp-alto, 100vh);
   min-height: 560px;
   margin: 0;
-  /* El mismo degradado radial que el fondo de la escena 3D. */
-  background:
-    radial-gradient(120% 90% at 50% 8%, #16222B 0%, var(--uhp-db-fondo) 45%, #05080B 100%);
+  background: var(--uhp-db-lienzo);
   color: var(--uhp-db-texto);
   font-family: var(--uhp-fuente, system-ui, sans-serif);
   overflow: hidden;
@@ -77,9 +154,108 @@
   contain: layout paint style;
 }
 
-/* Foco visible en amarillo institucional, como en la escena 3D. */
+/* =====================================================================
+   TEMA CLARO — `[urkunina_dashboard tema="claro"]`
+
+   Solo redefine tokens: ni una regla de disposición, ni un selector
+   nuevo. Si algo se ve mal aquí, el arreglo está en el token, no en una
+   excepción.
+
+   Contraste verificado sobre el fondo #F4F7FA y sobre el panel #FFFFFF
+   (Anexo 1 de la Resolución 1519 de 2020):
+
+     texto #0F172A / panel #FFFFFF ................. 17,9:1
+     texto-medio #45525F / panel #FFFFFF ............  8,0:1
+     texto-tenue #55636F / panel #FFFFFF ............  6,3:1
+     cifra #0B7A2C / panel #FFFFFF ..................  5,1:1
+     rotulo #003366 / panel #FFFFFF ................. 14,4:1
+     kpi-val #0B3D18 / kpi-fondo #E9F4ED ............ 11,7:1
+
+   El amarillo institucional NO se usa como tinta en este tema: sobre
+   blanco no llega a 2:1. Sigue estando en la franja de identidad de la
+   cabecera y en el punto de riesgo medio, que son elementos gráficos con
+   su propio borde, no texto.
+   ===================================================================== */
+.uhp-db--claro {
+  --uhp-db-fondo: #F4F7FA;
+  --uhp-db-fondo-hondo: #E9EEF3;
+  --uhp-db-panel: rgba(255, 255, 255, .94);
+  --uhp-db-panel-borde: rgba(15, 23, 42, .12);
+  --uhp-db-panel-alto: rgba(15, 23, 42, .04);
+
+  --uhp-db-texto: #0F172A;
+  --uhp-db-texto-medio: #45525F;
+  --uhp-db-texto-tenue: #55636F;
+
+  /* Sin degradado radial: en claro produce una mancha sucia en el centro.
+     Un plano liso es además lo que pide el manual para material impreso. */
+  --uhp-db-lienzo: linear-gradient(180deg, #FFFFFF 0%, #F4F7FA 100%);
+  --uhp-db-cab-a: #FFFFFF;
+  --uhp-db-cab-b: #F4F7FA;
+  --uhp-db-panel-cab: rgba(255, 255, 255, .95);
+  --uhp-db-velo: rgba(255, 255, 255, .92);
+  --uhp-db-atrib: rgba(255, 255, 255, .88);
+  --uhp-db-leaflet-btn: #FFFFFF;
+  --uhp-db-tip-flecha: rgba(255, 255, 255, .96);
+  --uhp-db-opcion: #FFFFFF;
+
+  --uhp-db-control: #FFFFFF;
+  --uhp-db-control-alto: rgba(16, 161, 59, .14);
+  --uhp-db-control-alto-suave: rgba(16, 161, 59, .09);
+  --uhp-db-control-alto-txt: #0B5C24;
+  --uhp-db-scroll: rgba(15, 23, 42, .22);
+  --uhp-db-punteado: rgba(15, 23, 42, .12);
+  --uhp-db-filete: rgba(15, 23, 42, .1);
+  --uhp-db-muestra-borde: rgba(15, 23, 42, .28);
+  --uhp-db-giro: rgba(15, 23, 42, .16);
+
+  /* El verde claro y el amarillo del tema oscuro no llegan al contraste
+     mínimo sobre blanco: aquí los cubren el verde oscurecido y el azul
+     institucional. */
+  --uhp-db-cifra: #0B7A2C;
+  --uhp-db-rotulo: #003366;
+  --uhp-db-kpi-fondo: #E9F4ED;
+  --uhp-db-kpi-val: #0B3D18;
+
+  /* Los puntos de riesgo conservan el código de color, oscurecido lo justo
+     para separarse del blanco. El halo se apaga. */
+  --uhp-db-riesgo-alto: #C0392B;
+  --uhp-db-riesgo-medio: #C98A00;
+  --uhp-db-riesgo-bajo: #0B7A2C;
+  --uhp-db-halo-alto: none;
+  --uhp-db-halo-medio: none;
+  --uhp-db-halo-bajo: none;
+
+  --uhp-db-foco: #003366;
+
+  --uhp-db-error-fondo: #FFF5F4;
+  --uhp-db-error-borde: #F3C9C5;
+  --uhp-db-error-txt: #7B241C;
+  --uhp-db-btn-txt: #FFFFFF;
+  --uhp-db-btn-alto: #0B7A2C;
+
+  --uhp-db-sombra: 0 14px 38px rgba(15, 23, 42, .16);
+  --uhp-db-sombra-tip: 0 8px 22px rgba(15, 23, 42, .14);
+}
+
+/* El desenfoque de los paneles se hereda del tema oscuro, donde separa el
+   panel del degradado de fondo. En claro, sobre un plano liso, solo cuesta
+   pintura: se retira. */
+.uhp-db--claro .uhp-db__lateral,
+.uhp-db--claro .uhp-db__panel,
+.uhp-db--claro .uhp-db__panel-cab,
+.uhp-db--claro .uhp-db .uhp-mapa__leyenda,
+.uhp-db--claro .uhp-mapa__leyenda,
+.uhp-db--claro .uhp-mapa__tip,
+.uhp-db--claro .uhp-db__ficha {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Foco visible, en amarillo sobre el tema oscuro —como en la escena 3D—
+   y en azul sobre el claro. */
 .uhp-db :focus-visible {
-  outline: 2px solid var(--uhp-db-amarillo);
+  outline: 2px solid var(--uhp-db-foco);
   outline-offset: 2px;
   border-radius: var(--uhp-db-r-s);
 }
@@ -92,7 +268,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 13px 20px 11px;
-  background: linear-gradient(180deg, rgba(6, 10, 13, .96) 0%, rgba(6, 10, 13, .78) 100%);
+  background: linear-gradient(180deg, var(--uhp-db-cab-a) 0%, var(--uhp-db-cab-b) 100%);
   color: var(--uhp-db-texto);
   overflow: hidden;
 }
@@ -141,14 +317,14 @@
   padding-bottom: 2px;
 }
 .uhp-db__kpis::-webkit-scrollbar { height: 5px; }
-.uhp-db__kpis::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .16); border-radius: 3px; }
+.uhp-db__kpis::-webkit-scrollbar-thumb { background: var(--uhp-db-scroll); border-radius: 3px; }
 
 .uhp-db__kpi {
   flex: none;
   min-width: 128px;
   padding: 6px 11px;
   border-radius: var(--uhp-db-r-s);
-  background: rgba(16, 161, 59, .10);
+  background: var(--uhp-db-kpi-fondo);
   border-left: 2px solid var(--uhp-db-verde);
 }
 .uhp-db__kpi-val {
@@ -157,7 +333,7 @@
   font-weight: 700;
   font-size: 1.28rem;
   line-height: 1.1;
-  color: #fff;
+  color: var(--uhp-db-kpi-val);
   font-variant-numeric: tabular-nums;
 }
 .uhp-db__kpi-etq {
@@ -197,7 +373,7 @@
 .uhp-db__lateral::-webkit-scrollbar,
 .uhp-db__panel::-webkit-scrollbar { width: 6px; }
 .uhp-db__lateral::-webkit-scrollbar-thumb,
-.uhp-db__panel::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .16); border-radius: 3px; }
+.uhp-db__panel::-webkit-scrollbar-thumb { background: var(--uhp-db-scroll); border-radius: 3px; }
 
 .uhp-db__panel-cab {
   position: sticky;
@@ -208,7 +384,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 11px 16px;
-  background: rgba(6, 10, 13, .9);
+  background: var(--uhp-db-panel-cab);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--uhp-db-panel-borde);
@@ -251,13 +427,13 @@
   font-size: .72rem;
   line-height: 1;
   color: var(--uhp-db-texto);
-  background: rgba(255, 255, 255, .06);
+  background: var(--uhp-db-control);
   border: 1px solid var(--uhp-db-panel-borde);
   border-radius: 50%;
   cursor: pointer;
   transition: background .15s, border-color .15s;
 }
-.uhp-db__plegar:hover { background: rgba(16, 161, 59, .24); border-color: var(--uhp-db-verde); }
+.uhp-db__plegar:hover { background: var(--uhp-db-control-alto); border-color: var(--uhp-db-verde); }
 
 /* Panel plegado: se reduce a la anchura de su botón. */
 .uhp-db__lateral.is-plegado,
@@ -311,16 +487,16 @@
   font: inherit;
   font-size: .85rem;
   color: var(--uhp-db-texto);
-  background: rgba(255, 255, 255, .06);
+  background: var(--uhp-db-control);
   border: 1px solid var(--uhp-db-panel-borde);
   border-radius: var(--uhp-db-r-s);
   cursor: pointer;
   transition: background .15s, border-color .15s;
 }
-.uhp-db__select:hover { background: rgba(16, 161, 59, .18); border-color: var(--uhp-db-verde); }
+.uhp-db__select:hover { background: var(--uhp-db-control-alto-suave); border-color: var(--uhp-db-verde); }
 /* El desplegable nativo se pinta con el fondo del sistema: las opciones
    necesitan color propio o quedarían en blanco sobre blanco. */
-.uhp-db__select option { background: #0F1720; color: var(--uhp-db-texto); }
+.uhp-db__select option { background: var(--uhp-db-opcion); color: var(--uhp-db-texto); }
 
 .uhp-db__nota {
   margin: 8px 0 0;
@@ -338,16 +514,16 @@
   font: inherit;
   font-size: .78rem;
   color: var(--uhp-db-texto-medio);
-  background: rgba(255, 255, 255, .06);
+  background: var(--uhp-db-control);
   border: 1px solid var(--uhp-db-panel-borde);
   border-radius: 999px;
   cursor: pointer;
   transition: background .15s, border-color .15s, color .15s;
 }
 .uhp-db__chip:hover {
-  background: rgba(16, 161, 59, .22);
+  background: var(--uhp-db-control-alto);
   border-color: var(--uhp-db-verde);
-  color: #fff;
+  color: var(--uhp-db-control-alto-txt);
 }
 
 .uhp-db__zona {
@@ -356,7 +532,7 @@
   gap: 9px;
   padding: 4px 0;
   font-size: .8rem;
-  border-bottom: 1px dotted rgba(255, 255, 255, .08);
+  border-bottom: 1px dotted var(--uhp-db-punteado);
 }
 .uhp-db__zona:last-child { border-bottom: 0; }
 .uhp-db__zona-pt {
@@ -365,10 +541,12 @@
   flex: none;
   border-radius: 50%;
 }
-/* Colores clínicos: codifican el nivel de riesgo y no se retematizan. */
-.uhp-db__zona-pt--roja { background: #E2453C; box-shadow: 0 0 8px rgba(226, 69, 60, .6); }
-.uhp-db__zona-pt--amarilla { background: #FFD500; box-shadow: 0 0 8px rgba(255, 213, 0, .5); }
-.uhp-db__zona-pt--verde { background: #3FD26E; box-shadow: 0 0 8px rgba(63, 210, 110, .5); }
+/* Colores clínicos: codifican el nivel de riesgo, de modo que SÍ tienen
+   que verse en los dos temas. El halo, que sobre fondo oscuro los hace
+   brillar, se apaga en el claro porque ahí solo emborrona el punto. */
+.uhp-db__zona-pt--roja { background: var(--uhp-db-riesgo-alto); box-shadow: var(--uhp-db-halo-alto); }
+.uhp-db__zona-pt--amarilla { background: var(--uhp-db-riesgo-medio); box-shadow: var(--uhp-db-halo-medio); }
+.uhp-db__zona-pt--verde { background: var(--uhp-db-riesgo-bajo); box-shadow: var(--uhp-db-halo-bajo); }
 .uhp-db__zona-etq { flex: 1; color: var(--uhp-db-texto-medio); }
 .uhp-db__zona-val {
   font-family: var(--uhp-fuente-etq, inherit);
@@ -391,26 +569,26 @@
   inset: auto 0 0 0;
   z-index: 500;
   justify-content: center;
-  background: rgba(6, 10, 13, .9);
+  background: var(--uhp-db-velo);
   color: var(--uhp-db-texto-medio);
 }
-.uhp-db__mapa .uhp-skeleton__giro { border-color: rgba(255, 255, 255, .18); border-top-color: var(--uhp-db-verde); }
+.uhp-db__mapa .uhp-skeleton__giro { border-color: var(--uhp-db-giro); border-top-color: var(--uhp-db-verde); }
 
 /* Controles y atribución de Leaflet, dentro del tablero, en tono oscuro.
    Anidado bajo .uhp-db a propósito: no debe alcanzar a los mapas de otro
    plugin en la misma página. */
 .uhp-db .leaflet-control-attribution {
-  background: rgba(6, 10, 13, .82);
+  background: var(--uhp-db-atrib);
   color: var(--uhp-db-texto-tenue);
   font-size: 10.5px;
 }
 .uhp-db .leaflet-control-attribution a { color: var(--uhp-db-texto-medio); }
 .uhp-db .leaflet-bar a {
-  background: rgba(9, 15, 20, .92);
+  background: var(--uhp-db-leaflet-btn);
   color: var(--uhp-db-texto);
   border-bottom-color: var(--uhp-db-panel-borde);
 }
-.uhp-db .leaflet-bar a:hover { background: rgba(16, 161, 59, .28); color: #fff; }
+.uhp-db .leaflet-bar a:hover { background: var(--uhp-db-control-alto); color: var(--uhp-db-control-alto-txt); }
 .uhp-db .uhp-mapa__leyenda {
   background: var(--uhp-db-panel);
   backdrop-filter: blur(14px);
@@ -418,26 +596,26 @@
   border-color: var(--uhp-db-panel-borde);
   color: var(--uhp-db-texto);
 }
-.uhp-db .uhp-mapa__leyenda strong { color: var(--uhp-db-amarillo); }
+.uhp-db .uhp-mapa__leyenda strong { color: var(--uhp-db-rotulo); }
 .uhp-db .uhp-mapa__rango,
 .uhp-db .uhp-mapa__sindato { color: var(--uhp-db-texto-tenue); }
-.uhp-db .uhp-mapa__sindato { border-top-color: rgba(255, 255, 255, .1); }
-.uhp-db .uhp-mapa__sindato i { border-color: rgba(255, 255, 255, .2); }
+.uhp-db .uhp-mapa__sindato { border-top-color: var(--uhp-db-filete); }
+.uhp-db .uhp-mapa__sindato i { border-color: var(--uhp-db-muestra-borde); }
 .uhp-db .uhp-mapa__tip {
   background: var(--uhp-db-panel);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-color: var(--uhp-db-panel-borde);
   color: var(--uhp-db-texto);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+  box-shadow: var(--uhp-db-sombra-tip);
 }
-.uhp-db .uhp-mapa__tip-val { color: var(--uhp-db-verde-claro); }
+.uhp-db .uhp-mapa__tip-val { color: var(--uhp-db-cifra); }
 .uhp-db .uhp-mapa__tip-etq { color: var(--uhp-db-texto-tenue); }
 /* Leaflet dibuja la flechita del tooltip con el fondo por defecto. */
-.uhp-db .leaflet-tooltip-left.uhp-mapa__tip::before { border-left-color: rgba(9, 15, 20, .82); }
-.uhp-db .leaflet-tooltip-right.uhp-mapa__tip::before { border-right-color: rgba(9, 15, 20, .82); }
-.uhp-db .leaflet-tooltip-top.uhp-mapa__tip::before { border-top-color: rgba(9, 15, 20, .82); }
-.uhp-db .leaflet-tooltip-bottom.uhp-mapa__tip::before { border-bottom-color: rgba(9, 15, 20, .82); }
+.uhp-db .leaflet-tooltip-left.uhp-mapa__tip::before { border-left-color: var(--uhp-db-tip-flecha); }
+.uhp-db .leaflet-tooltip-right.uhp-mapa__tip::before { border-right-color: var(--uhp-db-tip-flecha); }
+.uhp-db .leaflet-tooltip-top.uhp-mapa__tip::before { border-top-color: var(--uhp-db-tip-flecha); }
+.uhp-db .leaflet-tooltip-bottom.uhp-mapa__tip::before { border-bottom-color: var(--uhp-db-tip-flecha); }
 
 /* ---------- Panel de gráficos ---------- */
 .uhp-db__grafico-caja { padding: 13px 15px 4px; }
@@ -457,7 +635,7 @@
   margin-right: 8px;
   border-radius: 50%;
   vertical-align: middle;
-  background: var(--uhp-db-amarillo);
+  background: var(--uhp-db-rotulo);
 }
 .uhp-db__grafico {
   width: 100%;
@@ -480,7 +658,7 @@
   font-family: var(--uhp-fuente-etq, inherit);
   font-size: .8rem;
   color: var(--uhp-db-texto);
-  background: rgba(16, 161, 59, .10);
+  background: var(--uhp-db-kpi-fondo);
   border-left: 2px solid var(--uhp-db-verde);
   border-radius: 0 var(--uhp-db-r-s) var(--uhp-db-r-s) 0;
   font-variant-numeric: tabular-nums;
@@ -503,7 +681,7 @@
   border: 1px solid var(--uhp-db-panel-borde);
   border-left: 3px solid var(--uhp-db-verde);
   border-radius: var(--uhp-db-r-s) var(--uhp-db-r-m) var(--uhp-db-r-m) var(--uhp-db-r-s);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, .5);
+  box-shadow: var(--uhp-db-sombra);
   color: var(--uhp-db-texto);
 }
 .uhp-db__ficha.is-activa { display: block; }
@@ -532,13 +710,13 @@
   font: inherit;
   font-size: .74rem;
   color: var(--uhp-db-texto-medio);
-  background: rgba(255, 255, 255, .06);
+  background: var(--uhp-db-control);
   border: 1px solid var(--uhp-db-panel-borde);
   border-radius: 50%;
   cursor: pointer;
   transition: background .15s, border-color .15s;
 }
-.uhp-db__ficha-x:hover { background: rgba(16, 161, 59, .24); border-color: var(--uhp-db-verde); color: #fff; }
+.uhp-db__ficha-x:hover { background: var(--uhp-db-control-alto); border-color: var(--uhp-db-verde); color: var(--uhp-db-control-alto-txt); }
 .uhp-db__ficha-cuerpo { padding: 12px; }
 .uhp-db__ficha-dato b {
   display: block;
@@ -546,7 +724,7 @@
   font-weight: 700;
   font-size: 1.55rem;
   line-height: 1.05;
-  color: var(--uhp-db-verde-claro);
+  color: var(--uhp-db-cifra);
   font-variant-numeric: tabular-nums;
 }
 .uhp-db__ficha-dato span { display: block; margin-top: 3px; font-size: .78rem; color: var(--uhp-db-texto-tenue); }
@@ -556,13 +734,13 @@
 /* ---------- Errores dentro del tablero ---------- */
 .uhp-db .uhp-error {
   margin: 14px;
-  background: rgba(226, 69, 60, .12);
-  border-color: rgba(226, 69, 60, .4);
+  background: var(--uhp-db-error-fondo);
+  border-color: var(--uhp-db-error-borde);
   border-left-color: var(--uhp-db-alarma);
 }
-.uhp-db .uhp-error__txt { color: #FFC9C5; }
-.uhp-db .uhp-error__btn { background: var(--uhp-db-verde); color: #05230F; font-weight: 600; }
-.uhp-db .uhp-error__btn:hover { background: var(--uhp-db-verde-claro); }
+.uhp-db .uhp-error__txt { color: var(--uhp-db-error-txt); }
+.uhp-db .uhp-error__btn { background: var(--uhp-db-verde); color: var(--uhp-db-btn-txt); font-weight: 600; }
+.uhp-db .uhp-error__btn:hover { background: var(--uhp-db-btn-alto); }
 .uhp-db .uhp-skeleton { color: var(--uhp-db-texto-tenue); }
 
 /* ---------- Responsive ---------- */

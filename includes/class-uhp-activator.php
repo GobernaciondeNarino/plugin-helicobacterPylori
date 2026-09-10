@@ -56,17 +56,39 @@ final class UHP_Activator {
 	}
 
 	/**
-	 * Crea las opciones que aún no existan, sin pisar las del administrador.
+	 * Crea las opciones que aún no existan y completa las que se quedaron
+	 * cortas, sin pisar nunca lo que haya elegido el administrador.
 	 */
 	private static function sembrar_opciones() {
-		if ( false === get_option( 'uhp_estilo', false ) ) {
-			add_option( 'uhp_estilo', UHP_Estilos::por_defecto(), '', false );
+		self::sembrar( 'uhp_estilo', UHP_Estilos::por_defecto() );
+		self::sembrar( 'uhp_dashboard', self::dashboard_por_defecto() );
+		self::sembrar( 'uhp_3d', self::tresd_por_defecto() );
+	}
+
+	/**
+	 * Siembra una opción y le añade las claves que le falten.
+	 *
+	 * Crear la opción solo si no existe no basta: al añadir un ajuste nuevo
+	 * —el tema del tablero, sin ir más lejos— las instalaciones que ya
+	 * tenían la opción guardada se quedaban sin esa clave, y el formulario
+	 * del panel la leía vacía. Se completa con el valor por defecto y se
+	 * respeta todo lo demás.
+	 *
+	 * @param string $clave    Nombre de la opción.
+	 * @param array  $defectos Valores por defecto.
+	 * @return void
+	 */
+	private static function sembrar( $clave, $defectos ) {
+		$actual = get_option( $clave, false );
+
+		if ( false === $actual || ! is_array( $actual ) ) {
+			add_option( $clave, $defectos, '', false );
+			return;
 		}
-		if ( false === get_option( 'uhp_dashboard', false ) ) {
-			add_option( 'uhp_dashboard', self::dashboard_por_defecto(), '', false );
-		}
-		if ( false === get_option( 'uhp_3d', false ) ) {
-			add_option( 'uhp_3d', self::tresd_por_defecto(), '', false );
+
+		$faltantes = array_diff_key( $defectos, $actual );
+		if ( ! empty( $faltantes ) ) {
+			update_option( $clave, array_merge( $defectos, $actual ), false );
 		}
 	}
 
@@ -82,9 +104,12 @@ final class UHP_Activator {
 			'mapa_lat'    => 1.30,
 			'mapa_lon'    => -77.60,
 			'mapa_zoom'   => 8,
-			// El tablero viste la identidad del objeto 3D, así que su capa
-			// base por defecto es la oscura.
-			'teselas'     => 'oscuro',
+			// El tablero viste la identidad del objeto 3D, así que su tema
+			// por defecto es el oscuro. La capa base va en «auto»: sigue al
+			// tema, que es lo que casi siempre se quiere y lo que evita el
+			// descuido de cambiar a claro y quedarse con teselas oscuras.
+			'tema'        => 'oscuro',
+			'teselas'     => 'auto',
 			'panel_izq'   => 1,
 			'panel_der'   => 1,
 			'mostrar_kpi' => 1,

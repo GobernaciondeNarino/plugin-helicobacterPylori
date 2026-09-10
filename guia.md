@@ -387,27 +387,83 @@ que produce filas, que sus filas traen todas las dimensiones y medidas que
 declara, que su tipo por defecto es compatible y que sus dos textos llegan a
 los 375 caracteres.
 
-### 4.8 Identidad visual del tablero
+### 4.8 Los dos temas del tablero
 
-El tablero viste la paleta del objeto 3D: fondo `#0C1116`, paneles
-translúcidos con desenfoque y borde blanco al 9 %, verde `#10A13B` y amarillo
-`#FFD500` de la Gobernación, tinta clara `#E7EDF1`. Quien pasa de la escena al
-tablero debe percibir una sola pieza, no dos productos distintos.
+El tablero se publica en **oscuro** o en **claro**, con
+`[urkunina_dashboard tema="claro"]` o desde **Componentes** en el panel. El
+oscuro es el de por defecto y el de la identidad del proyecto; el claro existe
+para páginas de fondo blanco, para imprimir y para quien necesite más luz.
+
+El tema no es un fondo: viste **todo** el tablero —paneles, controles,
+selectores, chips, fichas, tooltip, leyenda del mapa, controles y atribución de
+Leaflet, y la tinta con la que se dibujan los gráficos del panel—. Un tema a
+medias es peor que ninguno: una ficha clara sobre un tablero oscuro se lee
+peor que las dos piezas claras.
+
+#### 4.8.1 El tema oscuro
+
+Viste la paleta del objeto 3D: fondo `#0C1116`, paneles translúcidos con
+desenfoque y borde blanco al 9 %, verde `#10A13B` y amarillo `#FFD500` de la
+Gobernación, tinta clara `#E7EDF1`. Quien pasa de la escena al tablero debe
+percibir una sola pieza, no dos productos distintos.
 
 Tres consecuencias que no son solo de color:
 
-- **La capa base por defecto es la oscura** (CARTO dark, sobre datos de
-  OpenStreetMap). Las demás siguen disponibles en el selector y en Componentes.
+- **La capa base es la oscura** (CARTO dark, sobre datos de OpenStreetMap).
 - **Los gráficos se tiñen para fondo oscuro.** D3plus pinta los ejes en tonos
-  pensados para fondo claro; el renderer acepta `tema: 'oscuro'` y fija la
-  tinta de títulos, etiquetas, rejilla y leyenda. La paleta categórica también
-  cambia: el verde institucional y el azul de encabezados no llegan al
-  contraste mínimo sobre `#0C1116`, así que el tema oscuro usa versiones
-  aclaradas. Todos los pares tinta/fondo se verificaron por cálculo y superan
-  4,5:1 en texto y 3:1 en elemento gráfico.
+  pensados para fondo claro; el renderer acepta `tema` y fija la tinta de
+  títulos, etiquetas, rejilla y leyenda. La paleta categórica también cambia:
+  el verde institucional y el azul de encabezados no llegan al contraste mínimo
+  sobre `#0C1116`, así que el tema oscuro usa versiones aclaradas.
 - **El filete de «municipio priorizado» se atenúa.** 55 de los 64 municipios lo
   son: a plena intensidad sobre fondo oscuro el mapa se convertía en una malla
   verde que ya no distinguía nada.
+
+#### 4.8.2 El tema claro
+
+`.uhp-db--claro` **solo redefine tokens**: ni una regla de disposición, ni un
+selector nuevo. Si algo se ve mal en claro, el arreglo está en el token, no en
+una excepción.
+
+Para que eso sea posible, la hoja del tablero tiene una regla dura: **ni un
+color literal fuera del bloque de tokens**. Cada superficie, tinta, borde, velo
+y sombra tiene su `--uhp-db-*`. Hay una prueba de la capa de datos que lee la
+hoja y falla si aparece un literal, y otra que comprueba que el tema claro
+redefine todos los tokens que dependen del tema. Sin las dos, un color se queda
+oscuro sobre fondo blanco y nadie se entera hasta que lo ve un ciudadano.
+
+Dos tokens existen precisamente porque el tema cambia el papel de un color:
+
+| Token | Oscuro | Claro | Por qué |
+|---|---|---|---|
+| `--uhp-db-cifra` | `#3FD26E` | `#0B7A2C` | El número grande de la ficha y del tooltip. El verde claro sobre blanco no llega a 2:1 |
+| `--uhp-db-rotulo` | `#FFD500` | `#003366` | El encabezado de la leyenda y el punto del panel. El amarillo institucional sobre blanco tampoco |
+| `--uhp-db-foco` | `#FFD500` | `#003366` | El anillo de foco es un elemento gráfico obligatorio y necesita 3:1 contra lo que tiene al lado |
+
+El amarillo institucional no desaparece del tema claro: sigue en la franja de
+identidad de la cabecera y en el punto de riesgo medio, que son elementos
+gráficos con su propio contorno, no texto.
+
+Los puntos de riesgo clínico **sí** se retematizan, al contrario que el resto de
+colores de dato: codifican el nivel de riesgo y tienen que leerse en los dos
+temas, así que en claro se oscurecen y pierden el halo, que sobre blanco solo
+emborrona el punto.
+
+#### 4.8.3 La capa base sigue al tema
+
+`teselas` por defecto vale `auto`: la capa base la decide el tema —clara con el
+tema claro, oscura con el oscuro—. Un tablero claro con teselas oscuras se lee
+fatal y es el descuido más fácil de cometer al cambiar solo el tema. Pedir una
+capa concreta (`teselas="humanitario"`) sigue mandando sobre el automatismo.
+
+#### 4.8.4 Accesibilidad
+
+Todos los pares tinta/fondo se verificaron **en el navegador, sobre el tablero
+ya pintado**, en los dos temas: mínimo 7,15:1 en oscuro y 5,48:1 en claro, por
+encima del 4,5:1 que exige el Anexo 1 de la Resolución 1519 de 2020 para texto
+normal.
+
+#### 4.8.5 Tokens propios
 
 Los tokens del tablero se declaran con prefijo propio (`--uhp-db-*`) en vez de
 reutilizar los `--uhp3d-*`, porque el objeto 3D puede no estar en la página.
@@ -530,7 +586,7 @@ npm run test:datos   # capa de datos, sin WordPress
 npm test             # lo anterior más las pruebas de navegador
 ```
 
-### 8.1 Capa de datos — 311 comprobaciones
+### 8.1 Capa de datos — 321 comprobaciones
 
 `tests/test-datos.php` ejecuta las clases del plugin fuera de WordPress, con
 sustitutos mínimos de sus funciones (`tests/stubs-wordpress.php`). Comprueba
@@ -544,7 +600,7 @@ cifras cuadran entre sí: los positivos y negativos suman 5.000, la distribució
 municipal de casos suma el total declarado, las muestras por tipo suman el
 inventario y las fuentes de financiación suman el presupuesto.
 
-### 8.2 Navegador — 36 pruebas
+### 8.2 Navegador — 39 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a
@@ -566,8 +622,11 @@ se descarga una sola vez por página; que el mapa pinta los 64 municipios sobre 
 leyenda y su atribución, que cambiar de indicador no vuelve a descargar la
 geometría y que los polígonos son accesibles con teclado; que el tablero ocupa
 el 100 % de ancho y 100vh de alto, que sus filtros responden, que al pulsar un
-municipio se abre su ficha, que los paneles se pliegan y que en móvil las zonas
-se apilan sin desbordar; que las cifras, la ficha y la tabla llegan en el HTML
+municipio se abre su ficha, que los paneles se pliegan, que en móvil las zonas
+se apilan sin desbordar y que **el tema claro no deja ni una superficie oscura
+dentro** —ni en los controles, ni en la ficha, ni en la leyenda, ni en la
+atribución del mapa—, con la capa base y la tinta de los gráficos siguiendo al
+tema; que las cifras, la ficha y la tabla llegan en el HTML
 **con el JavaScript desactivado**; y que mapa, gráfico y escena 3D funcionan
 juntos en una misma página con una sola instancia de cada librería.
 

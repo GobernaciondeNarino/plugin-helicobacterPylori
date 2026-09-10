@@ -13,7 +13,7 @@
  */
 
 require_once __DIR__ . '/stubs-wordpress.php';
-uhp_cargar_clases_de_datos();
+uhp_cargar_shortcodes();   // carga también las clases de datos
 
 use GobernacionNarino\Urkunina\UHP_Datos;
 use GobernacionNarino\Urkunina\UHP_Municipios;
@@ -466,6 +466,114 @@ $carga_ind = UHP_Rest::carga_geomapa( '', 'inventado' );
 comprobar(
 	'lpm' === $carga_ind['clave'],
 	'Un indicador inexistente cae al indicador por defecto'
+);
+
+/* ---------------------------------------------------------------- */
+echo "\n5d. Tema del tablero\n";
+
+$sc = new GobernacionNarino\Urkunina\UHP_Shortcodes();
+
+$oscuro = $sc->sc_dashboard( array() );
+$claro  = $sc->sc_dashboard( array( 'tema' => 'claro' ) );
+$raro   = $sc->sc_dashboard( array( 'tema' => 'fucsia' ) );
+
+comprobar(
+	false !== strpos( $oscuro, 'uhp-db--oscuro' ) && false !== strpos( $oscuro, 'data-tema="oscuro"' ),
+	'Sin atributo, el tablero sale en el tema oscuro'
+);
+comprobar(
+	false !== strpos( $claro, 'uhp-db--claro' ) && false !== strpos( $claro, 'data-tema="claro"' ),
+	'tema="claro" marca el tablero con su clase y su atributo'
+);
+comprobar(
+	false !== strpos( $raro, 'uhp-db--oscuro' ),
+	'Un tema desconocido cae al oscuro, que es la identidad del proyecto'
+);
+
+// La capa base sigue al tema salvo que se pida una concreta: un tablero
+// claro con teselas oscuras es el descuido más fácil al cambiar el tema.
+comprobar(
+	false !== strpos( $claro, 'data-teselas="claro"' ),
+	'El tablero claro pide la capa base clara'
+);
+comprobar(
+	false !== strpos( $oscuro, 'data-teselas="oscuro"' ),
+	'El tablero oscuro pide la capa base oscura'
+);
+$forzado = $sc->sc_dashboard(
+	array(
+		'tema'    => 'claro',
+		'teselas' => 'humanitario',
+	)
+);
+comprobar(
+	false !== strpos( $forzado, 'data-teselas="humanitario"' ),
+	'Una capa base pedida a mano manda sobre la del tema'
+);
+
+/* La hoja del tablero tiene una regla: ni un color literal fuera del
+   bloque de tokens. Es lo que permite que el tema claro se limite a
+   redefinirlos, y lo que evita que un color se quede oscuro por descuido. */
+$hoja = file_get_contents( UHP_DIR . 'assets/css/uhp-dashboard.css' );
+$tras = substr( $hoja, strpos( $hoja, '/* Foco visible' ) );
+preg_match_all( '/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/', $tras, $literales );
+$colados = array_values(
+	array_filter(
+		$literales[0],
+		static function ( $c ) {
+			// La parada transparente de la franja de identidad es la misma
+			// en los dos temas: no hay nada que retematizar.
+			return 'rgba(255, 213, 0, 0)' !== $c;
+		}
+	)
+);
+comprobar(
+	0 === count( $colados ),
+	sprintf(
+		'La hoja del tablero no usa colores literales fuera de los tokens%s',
+		$colados ? ' — colados: ' . implode( ', ', array_unique( $colados ) ) : ''
+	)
+);
+
+// Y el tema claro tiene que redefinir TODOS los tokens de color, no solo
+// algunos: uno olvidado se queda oscuro sobre fondo blanco.
+preg_match( '/\.uhp-db \{(.*?)\n\}/s', $hoja, $bloque_oscuro );
+preg_match( '/\.uhp-db--claro \{(.*?)\n\}/s', $hoja, $bloque_claro );
+preg_match_all( '/--uhp-db-[a-z0-9-]+(?=\s*:)/', $bloque_oscuro[1], $t_oscuro );
+preg_match_all( '/--uhp-db-[a-z0-9-]+(?=\s*:)/', $bloque_claro[1], $t_claro );
+
+// Los que NO dependen del tema: identidad de marca y medidas.
+$compartidos = array(
+	'--uhp-db-verde',
+	'--uhp-db-verde-claro',
+	'--uhp-db-amarillo',
+	'--uhp-db-alarma',
+	'--uhp-db-r-s',
+	'--uhp-db-r-m',
+	'--uhp-db-cab',
+	'--uhp-db-lateral',
+	'--uhp-db-panel-ancho',
+);
+$sin_redefinir = array_diff( $t_oscuro[0], $t_claro[0], $compartidos );
+comprobar(
+	0 === count( $sin_redefinir ),
+	sprintf(
+		'El tema claro redefine todos los tokens que dependen del tema%s',
+		$sin_redefinir ? ' — faltan: ' . implode( ', ', $sin_redefinir ) : ''
+	)
+);
+
+/* Los ajustes nuevos tienen que llegar a las instalaciones que ya tenían
+   la opción guardada: crear la opción solo si falta dejaba sin `tema` a
+   todo el que actualizara. */
+$defectos = GobernacionNarino\Urkunina\UHP_Activator::dashboard_por_defecto();
+comprobar(
+	isset( $defectos['tema'] ) && 'oscuro' === $defectos['tema'],
+	'El tablero declara su tema por defecto'
+);
+comprobar(
+	isset( $defectos['teselas'] ) && 'auto' === $defectos['teselas'],
+	'La capa base por defecto es «auto»: sigue al tema'
 );
 
 /* ---------------------------------------------------------------- */
