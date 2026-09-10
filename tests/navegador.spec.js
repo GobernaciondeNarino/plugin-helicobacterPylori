@@ -358,6 +358,88 @@ test.describe('Tablero', () => {
     expect((await panel.boundingBox()).width).toBeLessThan(anchoInicial);
   });
 
+  test('carga el módulo de mapa del plugin, no solo Leaflet', async ({ page }) => {
+    // El tablero construye su mapa a través de UHPMapa. Que Leaflet esté
+    // cargado no basta: si uhp-mapa.js no llega, el mapa no se dibuja.
+    // Esta comprobación existe porque esa dependencia faltaba y la suite
+    // no lo detectaba: la página de prueba lo cargaba por su cuenta.
+    await page.goto(BASE + '/paginas/tablero.html');
+
+    const cargado = await page.evaluate(() => ({
+      uhpMapa: typeof window.UHPMapa,
+      leaflet: typeof window.L,
+      renderer: typeof window.UHPRenderer,
+      d3plus: typeof window.d3plus
+    }));
+    expect(cargado.uhpMapa).toBe('object');
+    expect(cargado.leaflet).toBe('object');
+    expect(cargado.renderer).toBe('object');
+    expect(cargado.d3plus).toBe('object');
+
+    // Y no queda ningún mensaje de error en el hueco del mapa.
+    await expect(page.locator('.uhp-db__mapa .uhp-error')).toHaveCount(0);
+  });
+
+  test('viste la paleta del objeto 3D', async ({ page }) => {
+    // Los tokens del tablero tienen que ser los mismos que los del
+    // objeto 3D: si alguien retoca la paleta de la escena, esta prueba
+    // avisa de que el tablero se quedó atrás.
+    await page.goto(BASE + '/paginas/objeto-3d.html');
+    const escena = await page.evaluate(() => {
+      const cs = getComputedStyle(document.querySelector('.uhp3d'));
+      return {
+        verde: cs.getPropertyValue('--uhp3d-verde').trim(),
+        verdeClaro: cs.getPropertyValue('--uhp3d-verde-claro').trim(),
+        amarillo: cs.getPropertyValue('--uhp3d-amarillo').trim(),
+        fondo: cs.getPropertyValue('--uhp3d-fondo').trim(),
+        panel: cs.getPropertyValue('--uhp3d-panel').trim(),
+        panelBorde: cs.getPropertyValue('--uhp3d-panel-borde').trim(),
+        texto: cs.getPropertyValue('--uhp3d-texto').trim(),
+        textoMedio: cs.getPropertyValue('--uhp3d-texto-medio').trim(),
+        textoTenue: cs.getPropertyValue('--uhp3d-texto-tenue').trim()
+      };
+    });
+
+    await page.goto(BASE + '/paginas/tablero.html');
+    const tablero = await page.evaluate(() => {
+      const cs = getComputedStyle(document.querySelector('.uhp-db'));
+      return {
+        verde: cs.getPropertyValue('--uhp-db-verde').trim(),
+        verdeClaro: cs.getPropertyValue('--uhp-db-verde-claro').trim(),
+        amarillo: cs.getPropertyValue('--uhp-db-amarillo').trim(),
+        fondo: cs.getPropertyValue('--uhp-db-fondo').trim(),
+        panel: cs.getPropertyValue('--uhp-db-panel').trim(),
+        panelBorde: cs.getPropertyValue('--uhp-db-panel-borde').trim(),
+        texto: cs.getPropertyValue('--uhp-db-texto').trim(),
+        textoMedio: cs.getPropertyValue('--uhp-db-texto-medio').trim(),
+        textoTenue: cs.getPropertyValue('--uhp-db-texto-tenue').trim()
+      };
+    });
+
+    expect(tablero).toEqual(escena);
+  });
+
+  test('los gráficos del panel se tiñen para fondo oscuro', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero.html');
+    await expect(page.locator('[data-uhp-zona="grafico"] svg')).toHaveCount(1, { timeout: 20000 });
+    await expect(page.locator('[data-uhp-zona="grafico"] svg text')).not.toHaveCount(0, { timeout: 20000 });
+
+    const tintas = await page.evaluate(() => {
+      const textos = document.querySelectorAll('[data-uhp-zona="grafico"] svg text');
+      const set = new Set();
+      textos.forEach((t) => set.add(t.getAttribute('fill') || getComputedStyle(t).fill));
+      return Array.from(set);
+    });
+
+    // D3plus pinta los ejes en tonos para fondo claro si no se le dice lo
+    // contrario. Aquí toda la tinta tiene que ser la del tema oscuro.
+    const esperadas = ['#A9B7C1', '#FFD500', '#E7EDF1'];
+    tintas.forEach((t) => {
+      expect(esperadas, 'tinta inesperada en el gráfico del tablero: ' + t).toContain(t);
+    });
+    expect(tintas.length).toBeGreaterThan(0);
+  });
+
   test('en móvil las zonas se apilan sin desbordar', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 780 });
     await page.goto(BASE + '/paginas/tablero.html');

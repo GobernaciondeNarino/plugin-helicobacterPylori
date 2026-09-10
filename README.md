@@ -48,7 +48,8 @@ y `mbstring`. Para la escena 3D, un navegador con WebGL 2.
 
 Publicar el tablero requiere una plantilla de página de ancho completo y sin
 barra lateral: el contenedor ocupa el 100 % del ancho y toda la altura de la
-ventana.
+ventana. Viste la misma paleta que el objeto 3D —fondo oscuro, verde y amarillo
+institucionales— para que ambos se lean como una sola pieza.
 
 ---
 

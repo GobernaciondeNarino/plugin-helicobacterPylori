@@ -1,8 +1,18 @@
 /* =====================================================================
    [urkunina_dashboard] — tablero completo.
 
+   IDENTIDAD VISUAL: la del objeto 3D ([urkunina_3d]). Mismos tokens —
+   fondo #0C1116, paneles translúcidos con desenfoque y borde blanco al
+   9 %, verde #10A13B y amarillo #FFD500 de la Gobernación de Nariño,
+   tinta clara #E7EDF1— para que quien pase de la escena al tablero
+   perciba una sola pieza y no dos productos distintos.
+
+   Los tokens se declaran aquí con el prefijo --uhp-db- en vez de
+   reutilizar los --uhp3d-, porque el objeto 3D puede no estar en la
+   página: el tablero tiene que sostenerse solo.
+
    Contenedor a width:100% y height:100vh (configurable con el atributo
-   `alto`), repartido en una rejilla de cuatro zonas:
+   `alto`), repartido en cuatro zonas:
 
      ┌─────────────────────────────────────────────┐
      │ cabecera + cintillo de indicadores           │
@@ -11,62 +21,95 @@
      │ y filtros│  (centro)         │ y análisis   │
      └──────────┴───────────────────┴──────────────┘
 
-   Por debajo de 1100 px la rejilla se apila y el mapa conserva una altura
+   Por debajo de 1100 px la rejilla se apila y el mapa conserva altura
    propia, de modo que el tablero sigue siendo usable en móvil.
+
+   Accesibilidad: todos los pares tinta/fondo de esta hoja superan 4,5:1
+   (texto normal) o 3:1 (texto grande y elementos gráficos), conforme al
+   Anexo 1 de la Resolución 1519 de 2020.
    ===================================================================== */
 
 .uhp-db {
-  --uhp-db-cab: 116px;
+  /* --- Paleta del objeto 3D --- */
+  --uhp-db-verde: #10A13B;
+  --uhp-db-verde-claro: #3FD26E;
+  --uhp-db-amarillo: #FFD500;
+  --uhp-db-alarma: #E2453C;
+
+  --uhp-db-fondo: #0C1116;
+  --uhp-db-fondo-hondo: #060A0D;
+  --uhp-db-panel: rgba(9, 15, 20, .82);
+  --uhp-db-panel-borde: rgba(255, 255, 255, .09);
+  --uhp-db-panel-alto: rgba(255, 255, 255, .05);
+
+  --uhp-db-texto: #E7EDF1;
+  --uhp-db-texto-medio: #A9B7C1;
+  --uhp-db-texto-tenue: #8FA0AC;
+
+  --uhp-db-r-s: 4px;
+  --uhp-db-r-m: 10px;
+
+  /* --- Retícula --- */
+  --uhp-db-cab: 118px;
   --uhp-db-lateral: 300px;
-  --uhp-db-panel: 380px;
-  --uhp-db-hueco: 1px;
+  --uhp-db-panel-ancho: 380px;
 
   position: relative;
   display: grid;
   grid-template-rows: var(--uhp-db-cab) 1fr;
-  grid-template-columns: var(--uhp-db-lateral) 1fr var(--uhp-db-panel);
+  grid-template-columns: var(--uhp-db-lateral) 1fr var(--uhp-db-panel-ancho);
   grid-template-areas:
     "cabecera cabecera cabecera"
     "controles mapa panel";
-  gap: var(--uhp-db-hueco);
+  gap: 1px;
 
   width: 100%;
   height: var(--uhp-alto, 100vh);
   min-height: 560px;
   margin: 0;
-  background: var(--uhp-linea, #e2e8f0);
-  color: var(--uhp-tinta, #0f172a);
+  /* El mismo degradado radial que el fondo de la escena 3D. */
+  background:
+    radial-gradient(120% 90% at 50% 8%, #16222B 0%, var(--uhp-db-fondo) 45%, #05080B 100%);
+  color: var(--uhp-db-texto);
   font-family: var(--uhp-fuente, system-ui, sans-serif);
   overflow: hidden;
   /* Aísla el repintado del tablero del resto de la página. */
   contain: layout paint style;
 }
 
+/* Foco visible en amarillo institucional, como en la escena 3D. */
+.uhp-db :focus-visible {
+  outline: 2px solid var(--uhp-db-amarillo);
+  outline-offset: 2px;
+  border-radius: var(--uhp-db-r-s);
+}
+
 /* ---------- Cabecera ---------- */
 .uhp-db__cabecera {
   grid-area: cabecera;
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 20px 10px;
-  background: var(--uhp-azul, #003366);
-  color: #fff;
+  gap: 10px;
+  padding: 13px 20px 11px;
+  background: linear-gradient(180deg, rgba(6, 10, 13, .96) 0%, rgba(6, 10, 13, .78) 100%);
+  color: var(--uhp-db-texto);
   overflow: hidden;
 }
+/* Franja verde-amarillo del manual de identidad, idéntica a la del 3D. */
 .uhp-db__cabecera::after {
   content: "";
   position: absolute;
-  top: var(--uhp-db-cab);
   left: 0;
   right: 0;
+  bottom: 0;
   height: 3px;
   background: linear-gradient(90deg,
-    var(--uhp-verde, #10A13B) 0%,
-    var(--uhp-verde, #10A13B) 42%,
-    var(--uhp-amarillo, #FFD500) 42%,
-    var(--uhp-amarillo, #FFD500) 62%,
+    var(--uhp-db-verde) 0%,
+    var(--uhp-db-verde) 42%,
+    var(--uhp-db-amarillo) 42%,
+    var(--uhp-db-amarillo) 62%,
     rgba(255, 213, 0, 0) 100%);
-  z-index: 2;
 }
 .uhp-db__marca { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .uhp-db__titulo {
@@ -75,55 +118,86 @@
   font-size: clamp(1rem, 2vw, 1.22rem);
   font-weight: 600;
   line-height: 1.2;
-  color: #fff;
+  letter-spacing: .1px;
+  color: var(--uhp-db-texto);
+  border: 0;
 }
 .uhp-db__subtitulo {
   margin: 0;
   font-family: var(--uhp-fuente-etq, inherit);
   font-size: .78rem;
   letter-spacing: .3px;
-  color: rgba(255, 255, 255, .72);
+  color: var(--uhp-db-texto-tenue);
 }
 
-/* ---------- Cintillo de indicadores ---------- */
+/* ---------- Cintillo de indicadores ----------
+   Tratamiento de las `.cifra` del objeto 3D: bloque con velo verde y
+   filete izquierdo, número en blanco y etiqueta en tinta tenue. */
 .uhp-db__kpis {
   display: flex;
-  gap: 22px;
+  gap: 8px;
   overflow-x: auto;
   scrollbar-width: thin;
   padding-bottom: 2px;
 }
-.uhp-db__kpi { flex: none; min-width: 118px; }
+.uhp-db__kpis::-webkit-scrollbar { height: 5px; }
+.uhp-db__kpis::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .16); border-radius: 3px; }
+
+.uhp-db__kpi {
+  flex: none;
+  min-width: 128px;
+  padding: 6px 11px;
+  border-radius: var(--uhp-db-r-s);
+  background: rgba(16, 161, 59, .10);
+  border-left: 2px solid var(--uhp-db-verde);
+}
 .uhp-db__kpi-val {
   display: block;
   font-family: var(--uhp-fuente-etq, inherit);
   font-weight: 700;
-  font-size: 1.32rem;
-  line-height: 1.05;
-  color: var(--uhp-amarillo, #FFD500);
+  font-size: 1.28rem;
+  line-height: 1.1;
+  color: #fff;
   font-variant-numeric: tabular-nums;
 }
 .uhp-db__kpi-etq {
   display: block;
-  font-size: .76rem;
+  margin-top: 2px;
+  font-size: .755rem;
   line-height: 1.25;
-  color: rgba(255, 255, 255, .92);
+  color: var(--uhp-db-texto-tenue);
 }
 .uhp-db__kpi-nota { display: none; }
 
-/* ---------- Paneles laterales ---------- */
+/* ---------- Paneles laterales ----------
+   Mismo panel translúcido con desenfoque que la columna de lectura y la
+   instrumentación de la escena 3D. */
 .uhp-db__lateral,
 .uhp-db__panel {
   position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--uhp-fondo, #fff);
+  background: var(--uhp-db-panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--uhp-db-panel-borde);
+  color: var(--uhp-db-texto);
   overflow-y: auto;
   overscroll-behavior: contain;
-  transition: width .24s ease, padding .24s ease;
+  transition: width .24s ease;
 }
-.uhp-db__lateral { grid-area: controles; }
-.uhp-db__panel { grid-area: panel; }
+.uhp-db__lateral {
+  grid-area: controles;
+  border-left: 3px solid var(--uhp-db-verde);
+}
+.uhp-db__panel {
+  grid-area: panel;
+  border-right: 3px solid var(--uhp-db-verde);
+}
+.uhp-db__lateral::-webkit-scrollbar,
+.uhp-db__panel::-webkit-scrollbar { width: 6px; }
+.uhp-db__lateral::-webkit-scrollbar-thumb,
+.uhp-db__panel::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .16); border-radius: 3px; }
 
 .uhp-db__panel-cab {
   position: sticky;
@@ -134,125 +208,172 @@
   justify-content: space-between;
   gap: 10px;
   padding: 11px 16px;
-  background: var(--uhp-superficie, #f8fafc);
-  border-bottom: 1px solid var(--uhp-linea, #e2e8f0);
+  background: rgba(6, 10, 13, .9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--uhp-db-panel-borde);
 }
 .uhp-db__panel-t {
   margin: 0;
   padding: 0;
-  font-size: .86rem;
-  font-weight: 600;
-  letter-spacing: .2px;
-  text-transform: uppercase;
-  color: var(--uhp-azul, #003366);
-}
-.uhp-db__plegar {
-  width: 28px;
-  height: 28px;
-  flex: none;
-  font: inherit;
+  font-family: var(--uhp-fuente-etq, inherit);
   font-size: .8rem;
-  line-height: 1;
-  color: var(--uhp-suave, #5b6773);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--uhp-db-texto);
+  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
-.uhp-db__plegar:hover { background: #fff; border-color: var(--uhp-linea, #e2e8f0); }
+/* Punto verde con halo, como el título de la instrumentación del 3D. */
+.uhp-db__panel-t::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--uhp-db-verde);
+  box-shadow: 0 0 9px var(--uhp-db-verde);
+}
+
+/* Botón redondo de los mandos de la escena 3D. */
+.uhp-db__plegar {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  font-size: .72rem;
+  line-height: 1;
+  color: var(--uhp-db-texto);
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--uhp-db-panel-borde);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.uhp-db__plegar:hover { background: rgba(16, 161, 59, .24); border-color: var(--uhp-db-verde); }
 
 /* Panel plegado: se reduce a la anchura de su botón. */
 .uhp-db__lateral.is-plegado,
 .uhp-db__panel.is-plegado { overflow: hidden; }
 .uhp-db__lateral.is-plegado > :not(.uhp-db__panel-cab),
 .uhp-db__panel.is-plegado > :not(.uhp-db__panel-cab) { display: none; }
-.uhp-db:has(.uhp-db__lateral.is-plegado) { grid-template-columns: 46px 1fr var(--uhp-db-panel); }
-.uhp-db:has(.uhp-db__panel.is-plegado) { grid-template-columns: var(--uhp-db-lateral) 1fr 46px; }
-.uhp-db:has(.uhp-db__lateral.is-plegado):has(.uhp-db__panel.is-plegado) { grid-template-columns: 46px 1fr 46px; }
+.uhp-db:has(.uhp-db__lateral.is-plegado) { grid-template-columns: 50px 1fr var(--uhp-db-panel-ancho); }
+.uhp-db:has(.uhp-db__panel.is-plegado) { grid-template-columns: var(--uhp-db-lateral) 1fr 50px; }
+.uhp-db:has(.uhp-db__lateral.is-plegado):has(.uhp-db__panel.is-plegado) { grid-template-columns: 50px 1fr 50px; }
 .uhp-db__lateral.is-plegado .uhp-db__panel-t,
 .uhp-db__panel.is-plegado .uhp-db__panel-t { display: none; }
+.uhp-db__lateral.is-plegado .uhp-db__panel-cab,
+.uhp-db__panel.is-plegado .uhp-db__panel-cab { justify-content: center; padding: 11px 8px; }
 
 /* ---------- Controles ---------- */
 .uhp-db__controles { padding: 14px 16px 20px; }
 .uhp-db__grupo {
-  padding-bottom: 16px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--uhp-linea, #e2e8f0);
+  padding-bottom: 15px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid var(--uhp-db-panel-borde);
 }
 .uhp-db__grupo:last-child { border-bottom: 0; margin-bottom: 0; }
 .uhp-db__grupo-t {
   margin: 0 0 3px;
   padding: 0;
-  font-size: .84rem;
+  font-size: .85rem;
   font-weight: 600;
-  color: var(--uhp-tinta, #0f172a);
+  color: var(--uhp-db-texto);
+  border: 0;
 }
 .uhp-db__grupo-ayuda {
   margin: 0 0 9px;
   font-size: .75rem;
   line-height: 1.45;
-  color: var(--uhp-suave, #5b6773);
+  color: var(--uhp-db-texto-tenue);
 }
 .uhp-db__label {
   display: block;
   margin-bottom: 4px;
-  font-size: .74rem;
-  font-weight: 600;
-  letter-spacing: .2px;
+  font-family: var(--uhp-fuente-etq, inherit);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .5px;
   text-transform: uppercase;
-  color: var(--uhp-suave, #5b6773);
+  color: var(--uhp-db-texto-tenue);
 }
 .uhp-db__select {
   width: 100%;
   min-height: 36px;
-  padding: 6px 9px;
+  padding: 7px 10px;
   font: inherit;
   font-size: .85rem;
-  color: var(--uhp-tinta, #0f172a);
-  background: #fff;
-  border: 1px solid var(--uhp-linea, #e2e8f0);
-  border-radius: 7px;
+  color: var(--uhp-db-texto);
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--uhp-db-panel-borde);
+  border-radius: var(--uhp-db-r-s);
   cursor: pointer;
+  transition: background .15s, border-color .15s;
 }
+.uhp-db__select:hover { background: rgba(16, 161, 59, .18); border-color: var(--uhp-db-verde); }
+/* El desplegable nativo se pinta con el fondo del sistema: las opciones
+   necesitan color propio o quedarían en blanco sobre blanco. */
+.uhp-db__select option { background: #0F1720; color: var(--uhp-db-texto); }
+
 .uhp-db__nota {
   margin: 8px 0 0;
   font-size: .73rem;
   line-height: 1.45;
-  color: var(--uhp-suave, #5b6773);
+  color: var(--uhp-db-texto-tenue);
 }
 .uhp-db__nota:empty { display: none; }
 
 .uhp-db__chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .uhp-db__chip {
   min-height: 30px;
-  padding: 5px 11px;
+  margin: 0;
+  padding: 5px 12px;
   font: inherit;
   font-size: .78rem;
-  color: var(--uhp-azul, #003366);
-  background: var(--uhp-superficie, #f8fafc);
-  border: 1px solid var(--uhp-linea, #e2e8f0);
+  color: var(--uhp-db-texto-medio);
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--uhp-db-panel-borde);
   border-radius: 999px;
   cursor: pointer;
-  transition: background .15s, border-color .15s;
+  transition: background .15s, border-color .15s, color .15s;
 }
-.uhp-db__chip:hover { background: #fff; border-color: var(--uhp-verde, #10A13B); }
+.uhp-db__chip:hover {
+  background: rgba(16, 161, 59, .22);
+  border-color: var(--uhp-db-verde);
+  color: #fff;
+}
 
 .uhp-db__zona {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 0;
+  gap: 9px;
+  padding: 4px 0;
   font-size: .8rem;
+  border-bottom: 1px dotted rgba(255, 255, 255, .08);
 }
-.uhp-db__zona-pt { width: 11px; height: 11px; flex: none; border-radius: 50%; }
-.uhp-db__zona-pt--roja { background: #C0392B; }
-.uhp-db__zona-pt--amarilla { background: #F0A800; }
-.uhp-db__zona-pt--verde { background: #10A13B; }
-.uhp-db__zona-etq { flex: 1; color: var(--uhp-tinta, #0f172a); }
+.uhp-db__zona:last-child { border-bottom: 0; }
+.uhp-db__zona-pt {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+}
+/* Colores clínicos: codifican el nivel de riesgo y no se retematizan. */
+.uhp-db__zona-pt--roja { background: #E2453C; box-shadow: 0 0 8px rgba(226, 69, 60, .6); }
+.uhp-db__zona-pt--amarilla { background: #FFD500; box-shadow: 0 0 8px rgba(255, 213, 0, .5); }
+.uhp-db__zona-pt--verde { background: #3FD26E; box-shadow: 0 0 8px rgba(63, 210, 110, .5); }
+.uhp-db__zona-etq { flex: 1; color: var(--uhp-db-texto-medio); }
 .uhp-db__zona-val {
   font-family: var(--uhp-fuente-etq, inherit);
   font-weight: 700;
-  color: var(--uhp-azul, #003366);
+  color: var(--uhp-db-texto);
   font-variant-numeric: tabular-nums;
 }
 
@@ -260,27 +381,83 @@
 .uhp-db__mapa {
   grid-area: mapa;
   position: relative;
-  background: #EDF1F5;
+  background: var(--uhp-db-fondo-hondo);
   overflow: hidden;
 }
 .uhp-db__mapa-zona { position: absolute; inset: 0; }
-.uhp-db__mapa-lienzo { width: 100%; height: 100%; }
+.uhp-db__mapa-lienzo { width: 100%; height: 100%; background: var(--uhp-db-fondo-hondo); }
 .uhp-db__mapa .uhp-skeleton {
   position: absolute;
   inset: auto 0 0 0;
   z-index: 500;
   justify-content: center;
-  background: rgba(255, 255, 255, .9);
+  background: rgba(6, 10, 13, .9);
+  color: var(--uhp-db-texto-medio);
 }
+.uhp-db__mapa .uhp-skeleton__giro { border-color: rgba(255, 255, 255, .18); border-top-color: var(--uhp-db-verde); }
+
+/* Controles y atribución de Leaflet, dentro del tablero, en tono oscuro.
+   Anidado bajo .uhp-db a propósito: no debe alcanzar a los mapas de otro
+   plugin en la misma página. */
+.uhp-db .leaflet-control-attribution {
+  background: rgba(6, 10, 13, .82);
+  color: var(--uhp-db-texto-tenue);
+  font-size: 10.5px;
+}
+.uhp-db .leaflet-control-attribution a { color: var(--uhp-db-texto-medio); }
+.uhp-db .leaflet-bar a {
+  background: rgba(9, 15, 20, .92);
+  color: var(--uhp-db-texto);
+  border-bottom-color: var(--uhp-db-panel-borde);
+}
+.uhp-db .leaflet-bar a:hover { background: rgba(16, 161, 59, .28); color: #fff; }
+.uhp-db .uhp-mapa__leyenda {
+  background: var(--uhp-db-panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-color: var(--uhp-db-panel-borde);
+  color: var(--uhp-db-texto);
+}
+.uhp-db .uhp-mapa__leyenda strong { color: var(--uhp-db-amarillo); }
+.uhp-db .uhp-mapa__rango,
+.uhp-db .uhp-mapa__sindato { color: var(--uhp-db-texto-tenue); }
+.uhp-db .uhp-mapa__sindato { border-top-color: rgba(255, 255, 255, .1); }
+.uhp-db .uhp-mapa__sindato i { border-color: rgba(255, 255, 255, .2); }
+.uhp-db .uhp-mapa__tip {
+  background: var(--uhp-db-panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-color: var(--uhp-db-panel-borde);
+  color: var(--uhp-db-texto);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+}
+.uhp-db .uhp-mapa__tip-val { color: var(--uhp-db-verde-claro); }
+.uhp-db .uhp-mapa__tip-etq { color: var(--uhp-db-texto-tenue); }
+/* Leaflet dibuja la flechita del tooltip con el fondo por defecto. */
+.uhp-db .leaflet-tooltip-left.uhp-mapa__tip::before { border-left-color: rgba(9, 15, 20, .82); }
+.uhp-db .leaflet-tooltip-right.uhp-mapa__tip::before { border-right-color: rgba(9, 15, 20, .82); }
+.uhp-db .leaflet-tooltip-top.uhp-mapa__tip::before { border-top-color: rgba(9, 15, 20, .82); }
+.uhp-db .leaflet-tooltip-bottom.uhp-mapa__tip::before { border-bottom-color: rgba(9, 15, 20, .82); }
 
 /* ---------- Panel de gráficos ---------- */
-.uhp-db__grafico-caja { padding: 12px 14px 4px; }
+.uhp-db__grafico-caja { padding: 13px 15px 4px; }
 .uhp-db__grafico-t {
-  margin: 0 0 8px;
+  margin: 0 0 9px;
   padding: 0;
   font-size: .92rem;
   font-weight: 600;
-  color: var(--uhp-azul, #003366);
+  color: var(--uhp-db-texto);
+  border: 0;
+}
+.uhp-db__grafico-t::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--uhp-db-amarillo);
 }
 .uhp-db__grafico {
   width: 100%;
@@ -288,26 +465,31 @@
   min-height: 240px;
 }
 .uhp-db__grafico svg { display: block; width: 100%; height: 100%; }
-.uhp-db__analisis { padding: 0 14px 18px; }
+/* Estados degradados del renderer, sobre fondo oscuro. */
+.uhp-db__grafico .uhp-g__vacio { color: var(--uhp-db-texto-tenue); }
+
+.uhp-db__analisis { padding: 0 15px 18px; }
 .uhp-db__txt {
   margin: 10px 0 0;
   font-size: .84rem;
   line-height: 1.55;
-  color: var(--uhp-tinta, #0f172a);
+  color: var(--uhp-db-texto-medio);
 }
 .uhp-db__txt--num {
   padding: 8px 11px;
   font-family: var(--uhp-fuente-etq, inherit);
   font-size: .8rem;
-  color: var(--uhp-azul, #003366);
-  background: rgba(0, 51, 102, .05);
-  border-left: 3px solid var(--uhp-azul, #003366);
-  border-radius: 0 6px 6px 0;
+  color: var(--uhp-db-texto);
+  background: rgba(16, 161, 59, .10);
+  border-left: 2px solid var(--uhp-db-verde);
+  border-radius: 0 var(--uhp-db-r-s) var(--uhp-db-r-s) 0;
   font-variant-numeric: tabular-nums;
 }
-.uhp-db__fuente { margin: 10px 0 0; font-size: .73rem; color: var(--uhp-suave, #5b6773); }
+.uhp-db__fuente { margin: 11px 0 0; font-size: .73rem; color: var(--uhp-db-texto-tenue); }
 
-/* ---------- Ficha del municipio ---------- */
+/* ---------- Ficha del municipio ----------
+   Panel de lectura del objeto 3D: translúcido, filete verde a la
+   izquierda y cifra destacada en verde claro. */
 .uhp-db__ficha {
   position: absolute;
   left: 14px;
@@ -315,11 +497,14 @@
   z-index: 600;
   display: none;
   width: min(300px, calc(100% - 28px));
-  background: rgba(255, 255, 255, .97);
-  border: 1px solid var(--uhp-linea, #e2e8f0);
-  border-left: 3px solid var(--uhp-verde, #10A13B);
-  border-radius: 10px;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, .18);
+  background: var(--uhp-db-panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--uhp-db-panel-borde);
+  border-left: 3px solid var(--uhp-db-verde);
+  border-radius: var(--uhp-db-r-s) var(--uhp-db-r-m) var(--uhp-db-r-m) var(--uhp-db-r-s);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .5);
+  color: var(--uhp-db-texto);
 }
 .uhp-db__ficha.is-activa { display: block; }
 .uhp-db__ficha-cab {
@@ -327,35 +512,58 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--uhp-linea, #e2e8f0);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--uhp-db-panel-borde);
 }
-.uhp-db__ficha-t { margin: 0; padding: 0; font-size: .9rem; font-weight: 600; color: var(--uhp-azul, #003366); }
+.uhp-db__ficha-t {
+  margin: 0;
+  padding: 0;
+  font-size: .92rem;
+  font-weight: 600;
+  color: var(--uhp-db-texto);
+  border: 0;
+}
 .uhp-db__ficha-x {
   width: 26px;
   height: 26px;
   flex: none;
+  margin: 0;
+  padding: 0;
   font: inherit;
-  font-size: .78rem;
-  color: var(--uhp-suave, #5b6773);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 5px;
+  font-size: .74rem;
+  color: var(--uhp-db-texto-medio);
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--uhp-db-panel-borde);
+  border-radius: 50%;
   cursor: pointer;
+  transition: background .15s, border-color .15s;
 }
-.uhp-db__ficha-x:hover { background: var(--uhp-superficie, #f8fafc); border-color: var(--uhp-linea, #e2e8f0); }
-.uhp-db__ficha-cuerpo { padding: 11px 12px 13px; }
+.uhp-db__ficha-x:hover { background: rgba(16, 161, 59, .24); border-color: var(--uhp-db-verde); color: #fff; }
+.uhp-db__ficha-cuerpo { padding: 12px; }
 .uhp-db__ficha-dato b {
   display: block;
   font-family: var(--uhp-fuente-etq, inherit);
   font-weight: 700;
-  font-size: 1.5rem;
+  font-size: 1.55rem;
   line-height: 1.05;
-  color: var(--uhp-verde-osc, #0B7A2C);
+  color: var(--uhp-db-verde-claro);
   font-variant-numeric: tabular-nums;
 }
-.uhp-db__ficha-dato span { display: block; margin-top: 2px; font-size: .78rem; color: var(--uhp-suave, #5b6773); }
-.uhp-db__ficha-cod { margin: 10px 0 0; font-size: .72rem; color: var(--uhp-suave, #5b6773); }
+.uhp-db__ficha-dato span { display: block; margin-top: 3px; font-size: .78rem; color: var(--uhp-db-texto-tenue); }
+.uhp-db__ficha-cod { margin: 11px 0 0; font-size: .72rem; color: var(--uhp-db-texto-tenue); }
+.uhp-db__ficha .uhp-db__txt { color: var(--uhp-db-texto-medio); }
+
+/* ---------- Errores dentro del tablero ---------- */
+.uhp-db .uhp-error {
+  margin: 14px;
+  background: rgba(226, 69, 60, .12);
+  border-color: rgba(226, 69, 60, .4);
+  border-left-color: var(--uhp-db-alarma);
+}
+.uhp-db .uhp-error__txt { color: #FFC9C5; }
+.uhp-db .uhp-error__btn { background: var(--uhp-db-verde); color: #05230F; font-weight: 600; }
+.uhp-db .uhp-error__btn:hover { background: var(--uhp-db-verde-claro); }
+.uhp-db .uhp-skeleton { color: var(--uhp-db-texto-tenue); }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1100px) {
@@ -371,9 +579,9 @@
     min-height: 0;
     overflow: visible;
   }
-  .uhp-db__cabecera::after { position: static; height: 3px; margin: 6px -20px -10px; }
   .uhp-db__lateral,
-  .uhp-db__panel { overflow: visible; }
+  .uhp-db__panel { overflow: visible; border-left-width: 3px; border-right-width: 1px; }
+  .uhp-db__panel { border-left: 3px solid var(--uhp-db-verde); border-right: 1px solid var(--uhp-db-panel-borde); }
   .uhp-db__grafico { height: 300px; }
   /* Plegar no tiene sentido apilado: la rejilla vuelve a una columna. */
   .uhp-db:has(.uhp-db__lateral.is-plegado),
@@ -381,12 +589,15 @@
 }
 
 @media (max-width: 620px) {
-  .uhp-db__kpis { gap: 16px; }
-  .uhp-db__kpi-val { font-size: 1.12rem; }
+  .uhp-db__kpi { min-width: 116px; }
+  .uhp-db__kpi-val { font-size: 1.1rem; }
   .uhp-db__ficha { left: 8px; bottom: 8px; width: calc(100% - 16px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .uhp-db__lateral,
-  .uhp-db__panel { transition: none; }
+  .uhp-db__panel,
+  .uhp-db__select,
+  .uhp-db__chip,
+  .uhp-db__plegar { transition: none; }
 }

@@ -201,7 +201,7 @@ final class UHP_Admin {
 		return array(
 			'titulo'      => sanitize_text_field( isset( $entrada['titulo'] ) ? $entrada['titulo'] : $def['titulo'] ),
 			'indicador'   => in_array( $indicador, $indicadores, true ) ? $indicador : $def['indicador'],
-			'teselas'     => in_array( $teselas, array( 'osm', 'claro', 'humanitario' ), true ) ? $teselas : $def['teselas'],
+			'teselas'     => in_array( $teselas, array( 'oscuro', 'osm', 'claro', 'humanitario' ), true ) ? $teselas : $def['teselas'],
 			'mapa_lat'    => $lat,
 			'mapa_lon'    => $lon,
 			'mapa_zoom'   => min( 14, max( 5, isset( $entrada['mapa_zoom'] ) ? (int) $entrada['mapa_zoom'] : $def['mapa_zoom'] ) ),
@@ -1160,8 +1160,9 @@ final class UHP_Admin {
 						<p>
 							<label class="uhpa-label" for="uhp-db-tes"><?php esc_html_e( 'Capa base', 'urkunina-5000' ); ?></label>
 							<select id="uhp-db-tes" class="uhpa-select" name="uhp_dashboard[teselas]">
+								<option value="oscuro" <?php selected( 'oscuro', $cfg['teselas'] ); ?>><?php esc_html_e( 'Tono oscuro — identidad del objeto 3D (recomendado)', 'urkunina-5000' ); ?></option>
 								<option value="osm" <?php selected( 'osm', $cfg['teselas'] ); ?>><?php esc_html_e( 'OpenStreetMap estándar', 'urkunina-5000' ); ?></option>
-								<option value="claro" <?php selected( 'claro', $cfg['teselas'] ); ?>><?php esc_html_e( 'Tono claro (mejor contraste con la escala)', 'urkunina-5000' ); ?></option>
+								<option value="claro" <?php selected( 'claro', $cfg['teselas'] ); ?>><?php esc_html_e( 'Tono claro', 'urkunina-5000' ); ?></option>
 								<option value="humanitario" <?php selected( 'humanitario', $cfg['teselas'] ); ?>><?php esc_html_e( 'Humanitarian OSM', 'urkunina-5000' ); ?></option>
 							</select>
 						</p>

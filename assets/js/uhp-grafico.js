@@ -68,6 +68,10 @@
   }
 
   function cargar(fig, lienzo, titulo, st) {
+    // Con `then(exito, fallo)` en vez de `.then().catch()`, una excepción
+    // al pintar NO cae en el manejador de red: un error de dibujo dejaría
+    // de anunciarse como «no se pudo cargar» y apuntaría al culpable
+    // equivocado, que es justo lo que ocultó un fallo de dependencias.
     C.rest('/render', { view: st.view, type: st.type })
       .then(function (p) {
         st.payload = p;
@@ -91,9 +95,19 @@
         pintarBarra(fig, lienzo, titulo, st);
         pintarAnalisis(fig.querySelector('.uhp-g__analisis'), p, st.analisis);
         pintarFuente(fig, p);
+      }, function () {
+        C.error(lienzo, 'No se pudieron cargar los datos del gráfico.', function () {
+          cargar(fig, lienzo, titulo, st);
+        });
       })
-      .catch(function () {
-        C.error(lienzo, 'No se pudo cargar el gráfico.', function () {
+      .catch(function (err) {
+        // Llegar aquí significa que los datos sí llegaron y falló el
+        // dibujo. Se deja traza en consola: sin ella, diagnosticarlo
+        // obliga a instrumentar el navegador a mano.
+        if (window.console && console.error) {
+          console.error('[URKUNINA 5000] fallo al dibujar la vista ' + st.view, err);
+        }
+        C.error(lienzo, 'No se pudo dibujar el gráfico.', function () {
           cargar(fig, lienzo, titulo, st);
         });
       });

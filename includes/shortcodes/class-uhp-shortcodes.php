@@ -218,12 +218,12 @@ final class UHP_Shortcodes {
 		);
 
 		UHP_Estilos::encolar_fuentes();
+		// Basta encolar el tablero: sus dependencias declaradas arrastran el
+		// módulo de mapa, el renderer, el núcleo, Leaflet y D3plus. Enumerar
+		// aquí cada pieza a mano fue justo lo que dejó fuera uhp-mapa en la
+		// primera versión y rompió el mapa del tablero.
 		wp_enqueue_style( UHP_Assets::P . 'dashboard' );
-		UHP_Assets::encolar_libreria( 'leaflet' );
-		UHP_Assets::encolar_libreria( 'd3plus' );
 		wp_enqueue_script( UHP_Assets::P . 'dashboard' );
-		wp_enqueue_script( UHP_Assets::P . 'renderer' );
-		wp_enqueue_script( UHP_Assets::P . 'core' );
 
 		// Coordenadas fuera de Nariño delatarían un error de configuración:
 		// se cae al centro del departamento antes que mostrar otro sitio.

@@ -30,6 +30,32 @@
   /* Rampa de magnitud, de frío a cálido, para los rankings. */
   var CALOR = ['#EAF4FF', '#69A8D6', '#3FD26E', '#FFD500', '#F08A00', '#C0392B'];
 
+  /* Paleta categórica para fondo oscuro: los mismos matices de la clara
+     pero aclarados, porque sobre el fondo #0C1116 del objeto 3D el verde
+     institucional y el azul de encabezados no llegan al contraste mínimo
+     que exige el Anexo 1 de la Resolución 1519 de 2020. */
+  var PALETA_OSCURA = [
+    '#3FD26E', '#5FA8E0', '#FFB74D', '#C58BC7', '#4DD0C4', '#FF8A80',
+    '#A5D6A7', '#FFD54F', '#90A4AE', '#CE93D8', '#81D4FA', '#FFAB91'
+  ];
+
+  /* Tinta de los ejes, las etiquetas y la leyenda en cada tema. Los tonos
+     del tema oscuro son los del objeto 3D ([urkunina_3d]). */
+  var TINTAS = {
+    claro: {
+      titulo: '#003366',
+      etiqueta: '#5B6773',
+      leyenda: '#0F172A',
+      rejilla: '#E2E8F0'
+    },
+    oscuro: {
+      titulo: '#FFD500',
+      etiqueta: '#A9B7C1',
+      leyenda: '#E7EDF1',
+      rejilla: 'rgba(255,255,255,.10)'
+    }
+  };
+
   /* Etiquetas legibles de los campos, para ejes y tooltip. */
   var ETIQUETAS = {
     zona: 'Zona de riesgo',
@@ -115,15 +141,16 @@
 
   /* Mapa estable grupo → color. Esta es la regla de oro: el color debe
      depender del campo de serie, no de la posición de la fila. */
-  function colorPorGrupo(datos, campo) {
+  function colorPorGrupo(datos, campo, paleta) {
+    paleta = paleta || PALETA;
     var grupos = [];
     datos.forEach(function (r) {
       var g = r[campo];
       if (grupos.indexOf(g) < 0) { grupos.push(g); }
     });
     var mapa = {};
-    grupos.forEach(function (g, i) { mapa[g] = PALETA[i % PALETA.length]; });
-    return function (d) { return mapa[d[campo]] || PALETA[0]; };
+    grupos.forEach(function (g, i) { mapa[g] = paleta[i % paleta.length]; });
+    return function (d) { return mapa[d[campo]] || paleta[0]; };
   }
 
   /* Color por valor sobre el rango de la medida (mapa de calor). */
@@ -152,15 +179,36 @@
     return viz;
   }
 
+  /* Configuración de un eje con su título y su tinta.
+     No se fija `fontFamily`: D3plus mide el texto con su propia fuente
+     para ajustarlo dentro de cada forma, y pisarla rompe el ajuste. */
+  function configEje(titulo, tinta) {
+    return {
+      title: titulo,
+      titleConfig: { fontColor: tinta.titulo },
+      shapeConfig: {
+        labelConfig: { fontColor: tinta.etiqueta },
+        stroke: tinta.rejilla
+      },
+      gridConfig: { stroke: tinta.rejilla }
+    };
+  }
+
   function render(nodo, payload, opts) {
     opts = opts || {};
     var datos = (payload && payload.data) || [];
     if (nodo && !datos.length) { return vacio(nodo, payload); }
-    if (!window.d3plus) { return respaldoSVG(nodo, payload); }
     try {
+      if (!window.d3plus) { throw new Error('D3plus no está disponible.'); }
       return renderD3plus(nodo, payload, opts);
     } catch (e) {
-      return respaldoSVG(nodo, payload);
+      // El respaldo tampoco puede tumbar a quien llamó: si falla, se cae
+      // al estado «sin datos», que no depende de nada más.
+      try {
+        return respaldoSVG(nodo, payload);
+      } catch (e2) {
+        return vacio(nodo, payload);
+      }
     }
   }
 
@@ -233,15 +281,17 @@
        categorías sobra y se apaga. No se fija labelConfig.fontFamily:
        d3plus mide el texto con su propia fuente para ajustarlo dentro de
        cada forma, y pisarla lo rompe. */
+    var oscuro = 'oscuro' === opts.tema;
+    var tinta = oscuro ? TINTAS.oscuro : TINTAS.claro;
+
     var esMagnitud = ['bar', 'treemap', 'box_whisker'].indexOf(clave) >= 0;
     var unaSerie = grupo === dims[0];
     if (vista.heatmap && esMagnitud && unaSerie) {
       llamar(viz, 'color', colorPorValor(plot, campoY));
       llamar(viz, 'legend', false);
     } else {
-      llamar(viz, 'color', colorPorGrupo(plot, grupo));
+      llamar(viz, 'color', colorPorGrupo(plot, grupo, oscuro ? PALETA_OSCURA : PALETA));
     }
-    if (opts.legendStyle === 'icons') { llamar(viz, 'legendConfig', { label: false }); }
     if (opts.reducirMovimiento) { llamar(viz, 'duration', 0); }
 
     /* 3) Configuración por tipo. */
@@ -308,9 +358,15 @@
     }
 
     if (cartesiano) {
-      llamar(viz, 'xConfig', { title: etiqueta(dims[0]) });
-      llamar(viz, 'yConfig', { title: etiqueta(campoY === '_value' ? '_value' : campoY) });
+      /* Los ejes se tiñen explícitamente. D3plus los pinta en tonos
+         pensados para fondo claro, y sobre el fondo oscuro del objeto 3D
+         las etiquetas quedarían ilegibles. */
+      llamar(viz, 'xConfig', configEje( etiqueta(dims[0]), tinta ));
+      llamar(viz, 'yConfig', configEje( etiqueta(campoY === '_value' ? '_value' : campoY), tinta ));
     }
+    var cfgLeyenda = { shapeConfig: { labelConfig: { fontColor: tinta.leyenda } } };
+    if ('icons' === opts.legendStyle) { cfgLeyenda.label = false; }
+    llamar(viz, 'legendConfig', cfgLeyenda);
     llamar(viz, 'tooltipConfig', {
       title: function (d) {
         var v = cartesiano ? (d[grupo] != null ? d[grupo] : d[dimX]) : d[dims[0]];

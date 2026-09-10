@@ -29,12 +29,38 @@
       attribution: '&copy; Colaboradores de OpenStreetMap &copy; CARTO',
       maxZoom: 20,
       subdomains: 'abcd'
+    },
+    // Capa oscura: es la que acompaña al tablero, cuya identidad visual
+    // es la del objeto 3D ([urkunina_3d]).
+    oscuro: {
+      url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      attribution: '&copy; Colaboradores de OpenStreetMap &copy; CARTO',
+      maxZoom: 20,
+      subdomains: 'abcd'
     }
   };
 
-  var SIN_DATO = '#EDF1F5';
-  var BORDE = '#9AA7B2';
-  var BORDE_PRIORIZADO = '#10A13B';
+  /* Tinta de los polígonos según el tema. Sobre la capa oscura, un gris
+     claro para «sin dato» resultaría más llamativo que los municipios que
+     sí tienen valor, justo al revés de lo que debe comunicar. */
+  var TEMAS = {
+    claro: {
+      sinDato: '#EDF1F5',
+      borde: '#9AA7B2',
+      priorizado: '#10A13B',
+      resalte: '#003366'
+    },
+    oscuro: {
+      sinDato: 'rgba(233,237,241,.16)',
+      borde: 'rgba(255,255,255,.22)',
+      // Verde apagado, no el institucional a plena intensidad: 55 de los
+      // 64 municipios están priorizados, así que sobre fondo oscuro un
+      // filete brillante en casi todos deja de distinguir nada y solo
+      // añade ruido. Basta con que se note la diferencia.
+      priorizado: 'rgba(63,210,110,.45)',
+      resalte: '#FFD500'
+    }
+  };
 
   /**
    * Crea un mapa coroplético.
@@ -64,6 +90,7 @@
     mapa.on('focus click', function () { mapa.scrollWheelZoom.enable(); });
     mapa.on('blur mouseout', function () { mapa.scrollWheelZoom.disable(); });
 
+    var tema = TEMAS[opts.tema] || TEMAS.claro;
     var base = TESELAS[opts.teselas] || TESELAS.osm;
     L.tileLayer(base.url, {
       attribution: base.attribution,
@@ -86,7 +113,7 @@
 
     function colorDe(divipola) {
       var v = estado.valores[divipola];
-      if (!v || !estado.meta) { return SIN_DATO; }
+      if (!v || !estado.meta) { return tema.sinDato; }
       var rango = (estado.max - estado.min) || 1;
       return C.rampa(estado.meta.escala, (v.valor - estado.min) / rango);
     }
@@ -97,14 +124,14 @@
       return {
         fillColor: colorDe(p.divipola),
         fillOpacity: tieneDato ? 0.85 : 0.45,
-        color: p.priorizado ? BORDE_PRIORIZADO : BORDE,
-        weight: p.priorizado ? 1.1 : 0.6,
+        color: p.priorizado ? tema.priorizado : tema.borde,
+        weight: p.priorizado ? 0.9 : 0.6,
         opacity: 0.9
       };
     }
 
     function estiloResaltado() {
-      return { weight: 2.6, color: '#003366', fillOpacity: 0.95 };
+      return { weight: 2.6, color: tema.resalte, fillOpacity: 0.95 };
     }
 
     /* ---------------- Interacción ---------------- */
@@ -228,7 +255,7 @@
         var sin = document.createElement('div');
         sin.className = 'uhp-mapa__sindato';
         var caja = document.createElement('i');
-        caja.style.background = SIN_DATO;
+        caja.style.background = tema.sinDato;
         sin.appendChild(caja);
         sin.appendChild(document.createTextNode('Sin dato publicado'));
         div.appendChild(sin);
@@ -341,6 +368,7 @@
         lon: caja.getAttribute('data-lon'),
         zoom: caja.getAttribute('data-zoom'),
         teselas: caja.getAttribute('data-teselas') || 'osm',
+        tema: caja.getAttribute('data-tema') || 'claro',
         indicador: caja.getAttribute('data-indicador') || 'lpm'
       });
 

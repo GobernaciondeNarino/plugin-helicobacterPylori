@@ -30,7 +30,7 @@
   function iniciar(raiz) {
     var st = {
       indicador: raiz.getAttribute('data-indicador') || 'lpm',
-      teselas: raiz.getAttribute('data-teselas') || 'osm',
+      teselas: raiz.getAttribute('data-teselas') || 'oscuro',
       lat: raiz.getAttribute('data-lat'),
       lon: raiz.getAttribute('data-lon'),
       zoom: raiz.getAttribute('data-zoom'),
@@ -136,8 +136,9 @@
     var selBase = C.el('select', 'uhp-db__select');
     selBase.id = uid('base');
     [
+      ['oscuro', 'Tono oscuro (identidad del tablero)'],
       ['osm', 'OpenStreetMap estándar'],
-      ['claro', 'Tono claro (mejor contraste)'],
+      ['claro', 'Tono claro'],
       ['humanitario', 'Humanitarian OSM']
     ].forEach(function (par) {
       var o = C.el('option', '', par[1]);
@@ -266,11 +267,27 @@
     nodos.mapa.appendChild(lienzo);
     nodos.mapa.appendChild(C.skeleton('Cargando el mapa de Nariño…'));
 
-    var ctrl = window.UHPMapa && window.UHPMapa.crear(lienzo, {
+    // Los dos motivos posibles se distinguen: el mensaje que decía siempre
+    // «Leaflet no está disponible» apuntaba al culpable equivocado cuando
+    // lo que faltaba era el módulo de mapa del propio plugin.
+    if (!window.UHPMapa) {
+      C.quitarSkeleton(nodos.mapa);
+      C.error(nodos.mapa, 'No se pudo iniciar el mapa: falta el módulo uhp-mapa.js del plugin.');
+      return;
+    }
+    if (typeof window.L === 'undefined') {
+      C.quitarSkeleton(nodos.mapa);
+      C.error(nodos.mapa, 'No se pudo iniciar el mapa: la librería Leaflet no está disponible.');
+      return;
+    }
+
+    var ctrl = window.UHPMapa.crear(lienzo, {
       lat: st.lat,
       lon: st.lon,
       zoom: st.zoom,
       teselas: st.teselas,
+      // El tablero viste la identidad del objeto 3D: fondo oscuro.
+      tema: 'oscuro',
       indicador: st.indicador,
       alSeleccionar: function (divipola, nombre, valor) {
         pintarFicha(nodos, st, divipola, nombre, valor);
@@ -279,7 +296,9 @@
 
     if (!ctrl) {
       C.quitarSkeleton(nodos.mapa);
-      C.error(nodos.mapa, 'No se pudo iniciar el mapa: la librería Leaflet no está disponible.');
+      C.error(nodos.mapa, 'No se pudo construir el mapa.', function () {
+        montarMapa(nodos, st);
+      });
       return;
     }
 
@@ -316,6 +335,7 @@
 
         window.UHPRenderer.render(nodos.grafico, p, {
           legendPos: 'bottom',
+          tema: 'oscuro',
           reducirMovimiento: reducirMovimiento
         });
 

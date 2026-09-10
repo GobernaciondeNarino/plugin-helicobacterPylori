@@ -246,6 +246,33 @@ que produce filas, que sus filas traen todas las dimensiones y medidas que
 declara, que su tipo por defecto es compatible y que sus dos textos llegan a
 los 375 caracteres.
 
+### 4.6 Identidad visual del tablero
+
+El tablero viste la paleta del objeto 3D: fondo `#0C1116`, paneles
+translúcidos con desenfoque y borde blanco al 9 %, verde `#10A13B` y amarillo
+`#FFD500` de la Gobernación, tinta clara `#E7EDF1`. Quien pasa de la escena al
+tablero debe percibir una sola pieza, no dos productos distintos.
+
+Tres consecuencias que no son solo de color:
+
+- **La capa base por defecto es la oscura** (CARTO dark, sobre datos de
+  OpenStreetMap). Las demás siguen disponibles en el selector y en Componentes.
+- **Los gráficos se tiñen para fondo oscuro.** D3plus pinta los ejes en tonos
+  pensados para fondo claro; el renderer acepta `tema: 'oscuro'` y fija la
+  tinta de títulos, etiquetas, rejilla y leyenda. La paleta categórica también
+  cambia: el verde institucional y el azul de encabezados no llegan al
+  contraste mínimo sobre `#0C1116`, así que el tema oscuro usa versiones
+  aclaradas. Todos los pares tinta/fondo se verificaron por cálculo y superan
+  4,5:1 en texto y 3:1 en elemento gráfico.
+- **El filete de «municipio priorizado» se atenúa.** 55 de los 64 municipios lo
+  son: a plena intensidad sobre fondo oscuro el mapa se convertía en una malla
+  verde que ya no distinguía nada.
+
+Los tokens del tablero se declaran con prefijo propio (`--uhp-db-*`) en vez de
+reutilizar los `--uhp3d-*`, porque el objeto 3D puede no estar en la página.
+Una prueba de navegador compara ambos conjuntos y avisa si la paleta de la
+escena cambia y el tablero se queda atrás.
+
 ---
 
 ## 5. El módulo de datos
@@ -398,6 +425,33 @@ El entorno de pruebas espeja Three.js, D3plus y Leaflet en local
 (`tests/vendor`, no versionado) para no depender de la red, incluida la ruta
 absoluta que los complementos de Three.js importan internamente.
 
+### 8.3 Las páginas de prueba no listan sus recursos
+
+`tests/generar-paginas.php` **no enumera** los CSS ni los JS de cada página:
+los resuelve del mismo grafo de dependencias que resolvería WordPress, a partir
+de lo que cada shortcode encoló de verdad. Los sustitutos de
+`tests/stubs-wordpress.php` implementan `wp_register_*`, `wp_enqueue_*` y la
+resolución recursiva de `deps`.
+
+No es un refinamiento. La primera versión listaba los scripts a mano y por eso
+no detectó **dos fallos de dependencias que sí ocurrían en producción**:
+
+1. El tablero llamaba a `UHPMapa` sin declarar `uhp-mapa` como dependencia. En
+   el sitio real el mapa no se dibujaba, y el mensaje culpaba a Leaflet, que sí
+   estaba cargado.
+2. `uhp-renderer` usaba `UHPcore` declarando solo `d3plus`, de modo que
+   WordPress lo imprimía antes que el núcleo. Las vistas de mapa de calor —las
+   que piden la rampa de color— fallaban al dibujarse.
+
+Ambos son el mismo error: usar un módulo sin declararlo. La página de prueba
+los ocultaba porque cargaba de más. Ahora carga exactamente lo mismo que
+WordPress, y una dependencia declarada que nadie registró detiene la generación
+con un error explícito en vez de omitir el recurso en silencio.
+
+De ahí también que los shortcodes encolen solo su handle principal y dejen que
+las dependencias declaradas arrastren el resto: enumerar cada pieza a mano en
+el shortcode fue justo lo que dejó fuera `uhp-mapa`.
+
 ---
 
 ## 9. Seguridad
@@ -442,6 +496,10 @@ medias:
 - **Los respaldos se protegen con `.htaccess`.** En Nginx esa protección no
   aplica, pero los respaldos son copias de datos que la API ya sirve
   públicamente, de modo que no exponen nada nuevo.
+- **El tablero no ofrece variante clara.** Su identidad es la del objeto 3D, y
+  eso implica fondo oscuro. La capa base del mapa sí se puede cambiar, pero el
+  cromo del tablero no: hacerlo bien exigiría una segunda paleta completa con
+  sus contrastes verificados, y hoy nadie la ha pedido.
 - **Plotly.js está registrado pero ningún componente lo usa todavía.** Se dejó
   listo porque el enunciado lo contempla; el motor actual cubre con D3plus todo
   lo que el conjunto de datos necesita. Si se añade un componente que lo

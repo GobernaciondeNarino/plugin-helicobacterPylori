@@ -113,13 +113,16 @@ final class UHP_Assets {
 		wp_register_style( self::P . 'base', $css . 'uhp.css', array(), UHP_VERSION );
 		wp_register_style( self::P . 'grafico', $css . 'uhp-grafico.css', array( self::P . 'base' ), UHP_VERSION );
 		wp_register_style( self::P . '3d', $css . 'uhp-3d.css', array(), UHP_VERSION );
+		wp_register_style( self::P . 'mapa', $css . 'uhp-mapa.css', array( self::P . 'base', self::css( 'leaflet' ) ), UHP_VERSION );
+		// El tablero reutiliza el mapa y el motor de gráficos, así que
+		// depende de sus dos hojas: la leyenda y el tooltip del mapa viven
+		// en uhp-mapa.css y sin ella saldrían sin estilo.
 		wp_register_style(
 			self::P . 'dashboard',
 			$css . 'uhp-dashboard.css',
-			array( self::P . 'base', self::P . 'grafico', self::css( 'leaflet' ) ),
+			array( self::P . 'base', self::P . 'grafico', self::P . 'mapa' ),
 			UHP_VERSION
 		);
-		wp_register_style( self::P . 'mapa', $css . 'uhp-mapa.css', array( self::P . 'base', self::css( 'leaflet' ) ), UHP_VERSION );
 
 		// Núcleo JS compartido por todos los componentes del front.
 		wp_register_script( self::P . 'core', $js . 'uhp-core.js', array(), UHP_VERSION, true );
@@ -129,13 +132,28 @@ final class UHP_Assets {
 			'before'
 		);
 
-		wp_register_script( self::P . 'renderer', $js . 'uhp-renderer.js', array( self::handle( 'd3plus' ) ), UHP_VERSION, true );
+		// El renderer usa UHPcore (formato de cifras y rampa de color), así
+		// que depende del núcleo además de D3plus. Sin declararlo, WordPress
+		// lo imprimía ANTES que el núcleo y `window.UHPcore` no existía
+		// todavía: las vistas de mapa de calor, que son las que piden la
+		// rampa, fallaban al dibujarse.
+		wp_register_script(
+			self::P . 'renderer',
+			$js . 'uhp-renderer.js',
+			array( self::handle( 'd3plus' ), self::P . 'core' ),
+			UHP_VERSION,
+			true
+		);
 		wp_register_script( self::P . 'grafico', $js . 'uhp-grafico.js', array( self::P . 'renderer', self::P . 'core' ), UHP_VERSION, true );
 		wp_register_script( self::P . 'mapa', $js . 'uhp-mapa.js', array( self::handle( 'leaflet' ), self::P . 'core' ), UHP_VERSION, true );
+		// El tablero NO habla con Leaflet directamente: construye su mapa a
+		// través de UHPMapa, que vive en uhp-mapa.js. Declararlo aquí como
+		// dependencia es lo que garantiza que encolar el tablero arrastre
+		// también el módulo de mapa y, con él, Leaflet.
 		wp_register_script(
 			self::P . 'dashboard',
 			$js . 'uhp-dashboard.js',
-			array( self::P . 'core', self::P . 'renderer', self::handle( 'leaflet' ) ),
+			array( self::P . 'core', self::P . 'renderer', self::P . 'mapa' ),
 			UHP_VERSION,
 			true
 		);
