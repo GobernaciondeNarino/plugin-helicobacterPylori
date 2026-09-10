@@ -1,0 +1,19 @@
+# Dependencias y artefactos de las pruebas: se regeneran con `npm run preparar`.
+node_modules/
+tests/vendor/
+tests/fixtures/
+tests/paginas/
+test-results/
+playwright-report/
+
+# Copias de seguridad de los archivos de datos: son de cada instalación.
+data/respaldos/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Skills de terceros instaladas para el trabajo de diseño (9,4 MB de datos
+# de tipografías e iconos). Se reinstalan con el comando de .claude/README.md;
+# no forman parte del plugin ni se distribuyen con él.
+.claude/skills/

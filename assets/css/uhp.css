@@ -1,0 +1,215 @@
+/* =====================================================================
+   Base común de los componentes de URKUNINA 5000.
+
+   Todo cuelga de `.uhp`: ni una sola regla sale del contenedor del
+   shortcode, de modo que el plugin no puede alterar el tema ni pisar los
+   estilos de otro plugin del sitio. Las variables --uhp-* las inyecta
+   UHP_Estilos desde el módulo de Apariencia.
+
+   Identidad: MIV Gobernación de Nariño. Accesibilidad: Anexo 1 de la
+   Resolución 1519 de 2020 (WCAG 2.1 AA).
+   ===================================================================== */
+
+.uhp {
+  /* Respaldos: si el CSS en línea de Apariencia no llegara a imprimirse,
+     el componente sigue teniendo la identidad correcta. */
+  --uhp-verde: #10A13B;
+  --uhp-verde-osc: #0B7A2C;
+  --uhp-amarillo: #FFD500;
+  --uhp-azul: #003366;
+  --uhp-azul-claro: #2E6FA8;
+  --uhp-tinta: #0F172A;
+  --uhp-suave: #5B6773;
+  --uhp-linea: #E2E8F0;
+  --uhp-superficie: #F8FAFC;
+  --uhp-fondo: #FFFFFF;
+  --uhp-fuente: 'Hind Madurai', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --uhp-fuente-etq: 'Nunito Sans', system-ui, sans-serif;
+  --uhp-radio: 14px;
+  --uhp-ancho-max: 100%;
+
+  box-sizing: border-box;
+  max-width: var(--uhp-ancho-max);
+  color: var(--uhp-tinta);
+  font-family: var(--uhp-fuente);
+  line-height: 1.55;
+}
+
+.uhp *,
+.uhp *::before,
+.uhp *::after { box-sizing: border-box; }
+
+/* Foco visible y consistente en todo el plugin. Nunca se elimina: es
+   requisito de accesibilidad y la única guía de quien navega con teclado. */
+.uhp :focus-visible {
+  outline: 3px solid var(--uhp-amarillo);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* ---------- Esqueleto de carga ---------- */
+.uhp-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 22px;
+  color: var(--uhp-suave);
+  font-size: .92rem;
+}
+.uhp-skeleton__giro {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border: 2px solid var(--uhp-linea);
+  border-top-color: var(--uhp-verde);
+  border-radius: 50%;
+  animation: uhp-girar .9s linear infinite;
+}
+@keyframes uhp-girar { to { transform: rotate(360deg); } }
+
+/* ---------- Error con reintento ---------- */
+.uhp-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 18px 20px;
+  background: #FFF8F7;
+  border: 1px solid #F3C9C5;
+  border-left: 4px solid #C0392B;
+  border-radius: 6px;
+}
+.uhp-error__txt { margin: 0; font-size: .93rem; color: #7B241C; }
+.uhp-error__btn {
+  padding: 6px 14px;
+  font: inherit;
+  font-size: .88rem;
+  color: #fff;
+  background: var(--uhp-azul);
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.uhp-error__btn:hover { background: #00284F; }
+
+/* ---------- Tarjetas de cifras ([urkunina_kpi]) ---------- */
+.uhp-kpi {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+.uhp-kpi__tarjeta {
+  padding: 18px 18px 16px;
+  background: var(--uhp-fondo);
+  border: 1px solid var(--uhp-linea);
+  border-top: 3px solid var(--uhp-verde);
+  border-radius: var(--uhp-radio);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 6px 18px rgba(15, 23, 42, .05);
+}
+.uhp-kpi__tarjeta:nth-child(even) { border-top-color: var(--uhp-azul); }
+.uhp-kpi__valor {
+  display: block;
+  font-family: var(--uhp-fuente-etq);
+  font-weight: 700;
+  font-size: clamp(1.7rem, 3.6vw, 2.3rem);
+  line-height: 1.05;
+  color: var(--uhp-azul);
+  font-variant-numeric: tabular-nums;
+}
+.uhp-kpi__etiqueta {
+  display: block;
+  margin-top: 6px;
+  font-weight: 600;
+  font-size: .95rem;
+  color: var(--uhp-tinta);
+}
+.uhp-kpi__nota {
+  display: block;
+  margin-top: 4px;
+  font-size: .82rem;
+  color: var(--uhp-suave);
+  line-height: 1.4;
+}
+
+/* ---------- Ficha de datos ([urkunina_ficha]) ---------- */
+.uhp-ficha {
+  margin: 18px 0;
+  padding: 20px 22px;
+  background: var(--uhp-superficie);
+  border: 1px solid var(--uhp-linea);
+  border-left: 4px solid var(--uhp-verde);
+  border-radius: var(--uhp-radio);
+}
+.uhp-ficha__titulo {
+  margin: 0 0 4px;
+  font-size: 1.08rem;
+  font-weight: 600;
+  color: var(--uhp-azul);
+}
+.uhp-ficha__sub { margin: 0 0 14px; font-size: .88rem; color: var(--uhp-suave); }
+.uhp-ficha__dl {
+  display: grid;
+  grid-template-columns: minmax(140px, auto) 1fr;
+  gap: 6px 18px;
+  margin: 0;
+  font-size: .93rem;
+}
+.uhp-ficha__dl dt { font-weight: 600; color: var(--uhp-suave); }
+.uhp-ficha__dl dd { margin: 0; color: var(--uhp-tinta); }
+
+/* ---------- Tabla ([urkunina_tabla]) ---------- */
+.uhp-tabla-caja {
+  margin: 18px 0;
+  overflow-x: auto;
+  border: 1px solid var(--uhp-linea);
+  border-radius: var(--uhp-radio);
+}
+.uhp-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .92rem;
+}
+.uhp-tabla th,
+.uhp-tabla td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--uhp-linea);
+}
+.uhp-tabla thead th {
+  position: sticky;
+  top: 0;
+  background: var(--uhp-superficie);
+  font-weight: 600;
+  color: var(--uhp-azul);
+  white-space: nowrap;
+}
+.uhp-tabla tbody tr:nth-child(even) { background: rgba(248, 250, 252, .6); }
+.uhp-tabla tbody tr:last-child td { border-bottom: 0; }
+.uhp-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- Pie de fuentes ---------- */
+.uhp-fuentes {
+  margin: 10px 0 0;
+  font-size: .78rem;
+  color: var(--uhp-suave);
+  line-height: 1.45;
+}
+
+/* ---------- Solo para lectores de pantalla ---------- */
+.uhp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .uhp-skeleton__giro { animation: none; }
+  .uhp * { transition-duration: .01ms !important; }
+}

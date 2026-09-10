@@ -1,0 +1,253 @@
+/* =====================================================================
+   [urkunina_grafico] — tarjeta de gráfico D3plus con barra de herramientas.
+
+   A diferencia de los componentes minimalistas, esta pieza ES una tarjeta
+   autocontenida (figure) con su propio chrome, retematizable con los
+   tokens --uhp-g-*.
+   ===================================================================== */
+
+.uhp-g {
+  --uhp-g-bg: var(--uhp-fondo, #ffffff);
+  --uhp-g-superficie: var(--uhp-superficie, #f8fafc);
+  --uhp-g-borde: var(--uhp-linea, #e2e8f0);
+  --uhp-g-tinta: var(--uhp-tinta, #0f172a);
+  --uhp-g-suave: var(--uhp-suave, #5b6773);
+  --uhp-g-acento: var(--uhp-verde, #10A13B);
+  --uhp-g-acento-2: var(--uhp-azul, #003366);
+
+  margin: 18px 0;
+  background: var(--uhp-g-bg);
+  color: var(--uhp-g-tinta);
+  border: 1px solid var(--uhp-g-borde);
+  border-radius: var(--uhp-radio, 14px);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 6px 18px rgba(15, 23, 42, .06);
+  overflow: hidden;
+}
+
+/* Tema oscuro: solo redefine variables. */
+.uhp-g--oscuro {
+  --uhp-g-bg: #0f172a;
+  --uhp-g-superficie: #1e293b;
+  --uhp-g-borde: #334155;
+  --uhp-g-tinta: #f8fafc;
+  --uhp-g-suave: #a9b7c1;
+}
+
+/* ---------- Título ---------- */
+.uhp-g__titulo {
+  margin: 0;
+  padding: 13px 18px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--uhp-g-tinta);
+  background: linear-gradient(180deg, var(--uhp-g-superficie), var(--uhp-g-bg));
+  border-bottom: 1px solid var(--uhp-g-borde);
+}
+.uhp-g__titulo::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 9px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--uhp-g-acento);
+  box-shadow: 0 0 0 3px rgba(16, 161, 59, .18);
+}
+
+/* ---------- Barra de herramientas ---------- */
+.uhp-g__barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--uhp-g-superficie);
+  border-bottom: 1px solid var(--uhp-g-borde);
+}
+.uhp-g__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* 32px de alto más el padding del contenedor mantienen el objetivo
+     táctil por encima del mínimo recomendado sin engordar la barra. */
+  min-height: 32px;
+  padding: 5px 11px;
+  font: inherit;
+  font-size: .82rem;
+  color: var(--uhp-g-acento-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .15s;
+}
+.uhp-g__btn:hover {
+  background: var(--uhp-g-bg);
+  border-color: var(--uhp-g-borde);
+  transform: translateY(-1px);
+}
+.uhp-g__btn.is-ok {
+  color: #0B5C24;
+  background: #E8F6ED;
+  border-color: #A5DCBA;
+}
+
+.uhp-g__cambiar { display: inline-flex; align-items: center; gap: 6px; }
+.uhp-g__cambiar-etq {
+  font-size: .78rem;
+  color: var(--uhp-g-suave);
+  font-family: var(--uhp-fuente-etq, inherit);
+}
+.uhp-g__select {
+  min-height: 32px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: .82rem;
+  color: var(--uhp-g-tinta);
+  background: var(--uhp-g-bg);
+  border: 1px solid var(--uhp-g-borde);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* ---------- Lienzo ---------- */
+.uhp-g__lienzo {
+  position: relative;
+  width: 100%;
+  height: var(--uhp-g-alto, 420px);
+  min-height: 260px;
+  padding: 8px;
+}
+.uhp-g__lienzo svg { display: block; width: 100%; height: 100%; }
+.uhp-g.is-cargando .uhp-g__lienzo { opacity: .55; }
+
+.uhp-g__vacio {
+  padding: 40px 20px;
+  margin: 0;
+  text-align: center;
+  font-size: .92rem;
+  color: var(--uhp-g-suave);
+}
+
+/* ---------- Textos ---------- */
+.uhp-g__analisis-caja {
+  padding: 4px 18px 16px;
+  border-top: 1px solid var(--uhp-g-borde);
+}
+.uhp-g__desc,
+.uhp-g__analisis {
+  margin: 12px 0 0;
+  font-size: .92rem;
+  line-height: 1.6;
+  color: var(--uhp-g-tinta);
+  max-width: 74ch;
+}
+.uhp-g__num {
+  margin: 10px 0 0;
+  padding: 9px 13px;
+  font-family: var(--uhp-fuente-etq, inherit);
+  font-size: .87rem;
+  color: var(--uhp-g-acento-2);
+  background: rgba(0, 51, 102, .05);
+  border-left: 3px solid var(--uhp-g-acento-2);
+  border-radius: 0 6px 6px 0;
+  font-variant-numeric: tabular-nums;
+}
+.uhp-g__fuente {
+  margin: 0;
+  padding: 10px 18px 14px;
+  font-size: .78rem;
+  color: var(--uhp-g-suave);
+  border-top: 1px solid var(--uhp-g-borde);
+}
+.uhp-g__fuente:empty { display: none; }
+
+/* ---------- Leyenda en modo solo iconos ---------- */
+.uhp-g[data-legend-style="icons"] .d3plus-Legend .d3plus-textBox { display: none !important; }
+
+/* ---------- Modales ---------- */
+.uhp-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, .55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.uhp-modal__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 100%);
+  max-height: 85vh;
+  background: #fff;
+  color: #0f172a;
+  font-family: var(--uhp-fuente, system-ui, sans-serif);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .35);
+  overflow: hidden;
+}
+.uhp-modal__cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+.uhp-modal__titulo { font-size: 1rem; color: #003366; }
+.uhp-modal__x {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  color: #5b6773;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.uhp-modal__x:hover { background: #fff; border-color: #e2e8f0; }
+.uhp-modal__cuerpo { padding: 18px; overflow-y: auto; }
+
+.uhp-modal__dl {
+  display: grid;
+  grid-template-columns: minmax(130px, auto) 1fr;
+  gap: 7px 18px;
+  margin: 0 0 6px;
+  font-size: .9rem;
+}
+.uhp-modal__dl dt { font-weight: 600; color: #5b6773; }
+.uhp-modal__dl dd { margin: 0; }
+.uhp-modal__h { margin: 18px 0 6px; font-size: .92rem; color: #003366; }
+.uhp-modal__p { margin: 0; font-size: .9rem; line-height: 1.6; }
+.uhp-modal__fuente { margin: 14px 0 0; font-size: .78rem; color: #5b6773; }
+
+.uhp-modal__tabla-caja { overflow: auto; max-height: 55vh; border: 1px solid #e2e8f0; border-radius: 8px; }
+.uhp-modal__tabla { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.uhp-modal__tabla th,
+.uhp-modal__tabla td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #eef2f6; }
+.uhp-modal__tabla thead th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  font-weight: 600;
+  color: #003366;
+  white-space: nowrap;
+}
+.uhp-modal__tabla tbody tr:nth-child(even) { background: #fbfcfd; }
+.uhp-modal__tabla .uhp-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 640px) {
+  .uhp-g__barra { justify-content: flex-start; }
+  .uhp-g__lienzo { height: var(--uhp-g-alto-movil, 340px); }
+  .uhp-modal__panel { max-height: 92vh; }
+}

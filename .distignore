@@ -1,0 +1,15 @@
+# Lo que NO se empaqueta en el ZIP del plugin.
+.git
+.gitignore
+.distignore
+.claude
+node_modules
+package.json
+package-lock.json
+playwright.config.js
+tests
+test-results
+playwright-report
+Investigacion
+documentacion
+content

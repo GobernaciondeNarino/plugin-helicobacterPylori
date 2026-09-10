@@ -1,0 +1,425 @@
+/* =====================================================================
+   [urkunina_3d] — recreación 3D de Helicobacter pylori.
+
+   Adaptación del original content/helicobacter-pylori-3d.html, que era una
+   página completa, a un componente embebible en cualquier entrada o página
+   de WordPress. Los tres cambios estructurales frente al original son:
+
+   1. TODO cuelga de `.uhp3d`. El original usaba selectores de elemento
+      (`header`, `body`) e identificadores globales (`#lectura`, `#riel`),
+      que en WordPress pisarían el tema y otros plugins. Aquí no hay ni un
+      solo selector que salga del contenedor.
+   2. `position:fixed` pasa a `position:absolute`. En el original las capas
+      se anclaban al viewport; aquí se anclan al contenedor del shortcode,
+      que puede estar en mitad de una página con más contenido.
+   3. Las alturas en `100vh` pasan a `100%` del contenedor, cuya altura la
+      fija el atributo `alto` del shortcode (`--uhp3d-alto`).
+
+   Identidad visual: MIV Gobernación de Nariño (verde #10A13B, amarillo
+   #FFD500). Contraste verificado contra el Anexo 1 de la Resolución 1519
+   de 2020 (WCAG 2.1 AA).
+   ===================================================================== */
+
+.uhp3d {
+  --uhp3d-verde: #10A13B;
+  --uhp3d-verde-claro: #3FD26E;
+  --uhp3d-amarillo: #FFD500;
+
+  --uhp3d-fondo: #0C1116;
+  --uhp3d-fondo-hondo: #060A0D;
+  --uhp3d-panel: rgba(9, 15, 20, .82);
+  --uhp3d-panel-borde: rgba(255, 255, 255, .09);
+
+  --uhp3d-alarma: #E2453C;
+
+  --uhp3d-texto: #E7EDF1;
+  --uhp3d-texto-medio: #A9B7C1;
+  --uhp3d-texto-tenue: #8FA0AC;
+
+  --uhp3d-r-s: 4px;
+  --uhp3d-r-m: 10px;
+  --uhp3d-paso: clamp(14px, 1.6vw, 22px);
+
+  position: relative;
+  display: block;
+  width: 100%;
+  height: var(--uhp3d-alto, 100vh);
+  min-height: 420px;
+  margin: 0;
+  overflow: hidden;
+  background: var(--uhp3d-fondo);
+  color: var(--uhp3d-texto);
+  font-family: 'Hind Madurai', system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  /* Aísla el repintado de la escena del resto de la página. */
+  contain: layout paint style;
+}
+
+/* El contenedor recibe el foco para atender el teclado sin robárselo a la
+   página: las flechas solo mueven la línea de tiempo cuando el usuario ha
+   entrado en la escena. */
+.uhp3d:focus-visible {
+  outline: 3px solid var(--uhp3d-amarillo);
+  outline-offset: -3px;
+}
+
+.uhp3d * { box-sizing: border-box; }
+
+/* ---------- ESCENA 3D ---------- */
+.uhp3d__escena {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(120% 90% at 50% 8%, #16222B 0%, #0C1116 45%, #05080B 100%);
+}
+.uhp3d__lienzo { display: block; width: 100%; height: 100%; }
+
+.uhp3d__vineta {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(115% 85% at 50% 45%, transparent 42%, rgba(3, 6, 9, .55) 78%, rgba(2, 4, 6, .9) 100%),
+    linear-gradient(180deg, rgba(4, 8, 11, .75) 0%, transparent 22%, transparent 64%, rgba(3, 6, 9, .9) 100%);
+  mix-blend-mode: multiply;
+}
+.uhp3d__grano {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: .16;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/></filter><rect width='180' height='180' filter='url(%23n)' opacity='.55'/></svg>");
+}
+
+/* ---------- CABECERA ---------- */
+.uhp3d__cabecera {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px var(--uhp3d-paso) 14px;
+  background: linear-gradient(180deg, rgba(6, 10, 13, .94) 0%, rgba(6, 10, 13, .62) 62%, transparent 100%);
+}
+.uhp3d__cabecera::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--uhp3d-verde) 0%, var(--uhp3d-verde) 42%, var(--uhp3d-amarillo) 42%, var(--uhp3d-amarillo) 62%, rgba(255, 213, 0, 0) 100%);
+}
+.uhp3d__marca { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.uhp3d__escudo {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 3px;
+  background: linear-gradient(160deg, var(--uhp3d-verde) 0%, #0B7A2C 55%, var(--uhp3d-amarillo) 55%, #E5BF00 100%);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .14), 0 3px 12px rgba(0, 0, 0, .45);
+}
+.uhp3d__escudo img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 3px; }
+.uhp3d__marca-txt { min-width: 0; }
+.uhp3d__marca-txt b { display: block; font-weight: 600; font-size: 15px; letter-spacing: .1px; line-height: 1.15; }
+.uhp3d__marca-txt span {
+  display: block;
+  font-size: 12.5px;
+  color: var(--uhp3d-texto-tenue);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.uhp3d__titulo-obra { margin-left: auto; text-align: right; padding-left: 16px; }
+.uhp3d__titulo-obra b { display: block; font-size: 15px; font-weight: 600; font-style: italic; letter-spacing: .2px; }
+.uhp3d__titulo-obra span { display: block; font-size: 12.5px; color: var(--uhp3d-texto-tenue); }
+
+/* ---------- COLUMNA DE LECTURA ---------- */
+.uhp3d__lectura {
+  position: absolute;
+  z-index: 5;
+  left: var(--uhp3d-paso);
+  top: 86px;
+  width: min(430px, 38%);
+  max-height: calc(100% - 250px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 20px 22px;
+  background: var(--uhp3d-panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--uhp3d-panel-borde);
+  border-left: 3px solid var(--uhp3d-verde);
+  border-radius: var(--uhp3d-r-s) var(--uhp3d-r-m) var(--uhp3d-r-m) var(--uhp3d-r-s);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .5);
+}
+.uhp3d__lectura::-webkit-scrollbar { width: 6px; }
+.uhp3d__lectura::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .16); border-radius: 3px; }
+
+.uhp3d__reloj {
+  display: inline-block;
+  font-family: 'Nunito Sans', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: #0B1A0F;
+  background: var(--uhp3d-amarillo);
+  padding: 2px 9px;
+  border-radius: 2px;
+  margin-bottom: 11px;
+}
+.uhp3d__lectura h2 {
+  margin: 0 0 6px;
+  padding: 0;
+  font-size: clamp(23px, 2.5vw, 30px);
+  font-weight: 600;
+  line-height: 1.14;
+  letter-spacing: -.4px;
+  color: var(--uhp3d-texto);
+  border: 0;
+}
+.uhp3d__entradilla { margin: 0 0 13px; font-size: 16.5px; color: var(--uhp3d-verde-claro); font-weight: 500; line-height: 1.4; }
+.uhp3d__parrafo { margin: 0 0 13px; font-size: 15.4px; color: var(--uhp3d-texto-medio); max-width: 62ch; }
+.uhp3d__parrafo b { color: var(--uhp3d-texto); font-weight: 600; }
+
+.uhp3d__cifras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 15px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, .09);
+}
+.uhp3d__cifra {
+  flex: 1 1 118px;
+  padding: 8px 10px;
+  border-radius: var(--uhp3d-r-s);
+  background: rgba(16, 161, 59, .10);
+  border-left: 2px solid var(--uhp3d-verde);
+}
+.uhp3d__cifra b {
+  display: block;
+  font-family: 'Nunito Sans', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 19px;
+  color: #fff;
+  line-height: 1.1;
+}
+.uhp3d__cifra span { display: block; font-size: 12.5px; color: var(--uhp3d-texto-tenue); line-height: 1.3; margin-top: 2px; }
+.uhp3d__cifra--alerta { background: rgba(226, 69, 60, .12); border-left-color: var(--uhp3d-alarma); }
+
+.uhp3d__fuente { margin: 13px 0 0; font-size: 12px; color: var(--uhp3d-texto-tenue); line-height: 1.4; }
+
+/* ---------- INSTRUMENTACIÓN ---------- */
+.uhp3d__instrumentos {
+  position: absolute;
+  z-index: 5;
+  right: var(--uhp3d-paso);
+  top: 86px;
+  width: 236px;
+  padding: 14px 15px 12px;
+  background: var(--uhp3d-panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--uhp3d-panel-borde);
+  border-radius: var(--uhp3d-r-m);
+  font-family: 'Nunito Sans', system-ui, sans-serif;
+}
+.uhp3d__instrumentos h3 {
+  margin: 0 0 10px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--uhp3d-texto);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+}
+.uhp3d__instrumentos h3::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--uhp3d-verde);
+  box-shadow: 0 0 9px var(--uhp3d-verde);
+}
+.uhp3d__dato {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+  padding: 3.5px 0;
+  border-bottom: 1px dotted rgba(255, 255, 255, .08);
+}
+.uhp3d__dato:last-of-type { border-bottom: 0; }
+.uhp3d__dato span { color: var(--uhp3d-texto-tenue); }
+.uhp3d__dato b { font-weight: 700; color: var(--uhp3d-texto); font-variant-numeric: tabular-nums; }
+.uhp3d__dato b em { font-style: normal; color: var(--uhp3d-texto-tenue); font-weight: 400; font-size: 11.5px; }
+
+.uhp3d__escala { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, .09); }
+.uhp3d__escala-barra {
+  height: 3px;
+  background: var(--uhp3d-amarillo);
+  border-radius: 2px;
+  transition: width .25s ease;
+  box-shadow: 0 0 8px rgba(255, 213, 0, .5);
+}
+.uhp3d__escala-txt { font-size: 11.5px; color: var(--uhp3d-texto-tenue); margin-top: 5px; }
+
+/* ---------- RIEL DE SECUENCIA ---------- */
+.uhp3d__riel {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 14px var(--uhp3d-paso) calc(14px + env(safe-area-inset-bottom));
+  background: linear-gradient(0deg, rgba(5, 9, 12, .96) 0%, rgba(5, 9, 12, .86) 58%, transparent 100%);
+}
+.uhp3d__progreso { height: 2px; background: rgba(255, 255, 255, .12); border-radius: 2px; overflow: hidden; margin-bottom: 12px; }
+.uhp3d__progreso i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--uhp3d-verde), var(--uhp3d-amarillo));
+  transition: width .18s linear;
+}
+.uhp3d__riel-fila { display: flex; align-items: center; gap: 12px; }
+.uhp3d__mandos { display: flex; gap: 6px; flex: none; }
+.uhp3d__mando {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  margin: 0;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--uhp3d-panel-borde);
+  border-radius: 50%;
+  color: var(--uhp3d-texto);
+  font-size: 14px;
+  transition: background .15s, border-color .15s;
+}
+.uhp3d__mando:hover { background: rgba(16, 161, 59, .24); border-color: var(--uhp3d-verde); }
+.uhp3d__mando:focus-visible { outline: 2px solid var(--uhp3d-amarillo); outline-offset: 2px; }
+.uhp3d__mando svg { width: 14px; height: 14px; fill: currentColor; }
+
+.uhp3d__pasos { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 4px; flex: 1; }
+.uhp3d__pasos::-webkit-scrollbar { display: none; }
+.uhp3d__paso {
+  flex: none;
+  cursor: pointer;
+  text-align: left;
+  margin: 0;
+  padding: 7px 12px 8px;
+  min-width: 132px;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid transparent;
+  border-top: 2px solid rgba(255, 255, 255, .16);
+  border-radius: 0 0 var(--uhp3d-r-s) var(--uhp3d-r-s);
+  color: var(--uhp3d-texto-tenue);
+  font-family: inherit;
+  transition: background .18s, color .18s, border-color .18s;
+}
+.uhp3d__paso:hover { background: rgba(255, 255, 255, .09); color: var(--uhp3d-texto-medio); }
+.uhp3d__paso:focus-visible { outline: 2px solid var(--uhp3d-amarillo); outline-offset: 2px; }
+.uhp3d__paso i {
+  display: block;
+  font-family: 'Nunito Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: .8;
+}
+.uhp3d__paso b { display: block; font-size: 13.5px; font-weight: 500; line-height: 1.25; margin-top: 1px; }
+.uhp3d__paso[aria-current="true"] { background: rgba(16, 161, 59, .20); border-top-color: var(--uhp3d-amarillo); color: #fff; }
+.uhp3d__paso[aria-current="true"] i { color: var(--uhp3d-amarillo); opacity: 1; }
+
+/* ---------- CARGA / AVISOS ---------- */
+.uhp3d__carga {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 16px;
+  background: var(--uhp3d-fondo-hondo);
+  transition: opacity .7s ease;
+  text-align: center;
+  padding: 24px;
+}
+.uhp3d__carga.is-oculto { opacity: 0; pointer-events: none; }
+.uhp3d__helice {
+  width: 52px;
+  height: 52px;
+  border: 2px solid rgba(255, 255, 255, .12);
+  border-top-color: var(--uhp3d-verde);
+  border-right-color: var(--uhp3d-amarillo);
+  border-radius: 50%;
+  animation: uhp3d-girar 1.05s linear infinite;
+}
+@keyframes uhp3d-girar { to { transform: rotate(360deg); } }
+.uhp3d__carga p { margin: 0; font-size: 14.5px; color: var(--uhp3d-texto-tenue); }
+.uhp3d__carga b { font-size: 17px; font-weight: 600; color: var(--uhp3d-texto); }
+.uhp3d__fallo { display: none; max-width: 440px; font-size: 15px; color: var(--uhp3d-texto-medio); }
+.uhp3d__fallo.is-visible { display: block; }
+
+.uhp3d__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- MODIFICADORES ---------- */
+.uhp3d--sin-cabecera .uhp3d__cabecera { display: none; }
+.uhp3d--sin-cabecera .uhp3d__lectura,
+.uhp3d--sin-cabecera .uhp3d__instrumentos { top: var(--uhp3d-paso); }
+.uhp3d--sin-instrumentos .uhp3d__instrumentos { display: none; }
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 1080px) {
+  .uhp3d__instrumentos { display: none; }
+  .uhp3d__lectura { width: min(400px, 52%); }
+}
+@media (max-width: 760px) {
+  .uhp3d { font-size: 15px; }
+  .uhp3d__cabecera { padding: 10px 14px 12px; }
+  .uhp3d__titulo-obra { display: none; }
+  .uhp3d__lectura {
+    left: 0;
+    right: 0;
+    width: auto;
+    top: auto;
+    bottom: 118px;
+    max-height: 42%;
+    border-radius: var(--uhp3d-r-m) var(--uhp3d-r-m) 0 0;
+    border-left: 1px solid var(--uhp3d-panel-borde);
+    border-top: 3px solid var(--uhp3d-verde);
+    padding: 16px 16px 18px;
+  }
+  .uhp3d__lectura h2 { font-size: 21px; }
+  .uhp3d__entradilla { font-size: 15px; }
+  .uhp3d__parrafo { font-size: 14.6px; }
+  .uhp3d__paso { min-width: 112px; }
+  .uhp3d__mando { width: 34px; height: 34px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .uhp3d__helice { animation: none; }
+  .uhp3d * { transition-duration: .01ms !important; }
+}

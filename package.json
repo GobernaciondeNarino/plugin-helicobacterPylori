@@ -1,0 +1,17 @@
+{
+  "name": "urkunina-5000",
+  "version": "1.0.0",
+  "description": "Herramientas de verificación del plugin de WordPress URKUNINA 5000 — Helicobacter pylori y cáncer gástrico en Nariño.",
+  "private": true,
+  "license": "GPL-2.0-or-later",
+  "scripts": {
+    "test": "npm run test:datos && npm run test:navegador",
+    "test:datos": "php tests/test-datos.php",
+    "test:navegador": "npm run preparar && playwright test",
+    "preparar": "php tests/generar-fixtures.php && php tests/generar-paginas.php && node tests/descargar-vendor.js",
+    "servidor": "node tests/servidor.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

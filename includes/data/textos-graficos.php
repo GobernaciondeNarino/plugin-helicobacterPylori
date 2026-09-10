@@ -1,0 +1,170 @@
+<?php
+/**
+ * Textos descriptivos de las vistas del motor de gráficos.
+ *
+ * Cada vista lleva dos textos que NO dependen de las cifras y por tanto se
+ * escriben a mano una sola vez:
+ *
+ *  - `descripcion`: qué muestra el gráfico, en qué unidades y cómo leer sus
+ *    ejes. Está dirigida a cualquier ciudadano, sin jerga clínica.
+ *  - `analisis`: qué significa lo que se ve — el contexto epidemiológico o de
+ *    política pública que convierte el dato en información útil.
+ *
+ * Las cifras concretas (máximos, promedios, brechas) las redacta
+ * UHP_Analisis a partir de los JSON, de modo que se actualizan solas.
+ *
+ * @package Urkunina5000
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+return array(
+
+	/* ------------------------------------------------------------------ */
+	/* Contexto epidemiológico                                            */
+	/* ------------------------------------------------------------------ */
+
+	'zonas_riesgo'          => array(
+		'descripcion' => 'Esta vista muestra cuántos casos nuevos de cáncer gástrico aparecen cada año por cada 100.000 habitantes en las tres zonas en que el proyecto dividió el departamento. La zona roja cubre el norte y el suroccidente; la zona amarilla comprende Pasto y los municipios circunvecinos delimitados por el río Guáitara; la zona verde corresponde a la costa Pacífica. El eje horizontal identifica la zona y el eje vertical la incidencia. A mayor altura de la barra, mayor número de casos nuevos por año en esa población.',
+		'analisis'    => 'La distancia entre las tres barras es el punto de partida de todo el proyecto y se conoce como «enigma nariñense» o «enigma colombiano»: territorios vecinos, con una prevalencia de infección por Helicobacter pylori alta y parecida, presentan incidencias de cáncer gástrico radicalmente distintas. La zona roja figura entre las de mayor incidencia registradas en el mundo, mientras la costa Pacífica mantiene cifras bajas pese a estar igualmente infectada. Eso indica que la bacteria es necesaria pero no suficiente: la altura, la dieta, el agua, la genética de la población y las cepas circulantes intervienen en el desenlace. Leer esta vista es entender por qué el proyecto tamizó por territorio y no solo por persona.',
+	),
+
+	'comparacion_nacional'  => array(
+		'descripcion' => 'Aquí se sitúan las cifras de Nariño junto a las del país. Se comparan cuatro ámbitos: la tasa nacional en hombres, la tasa nacional en mujeres, la tasa departamental de Nariño para ambos sexos y la incidencia de la zona roja. Todas se expresan en casos por cada 100.000 habitantes, aunque su tipo de cálculo difiere y aparece en el detalle de cada barra: las nacionales están ajustadas por edad y las zonales corresponden a incidencia observada. El eje vertical mide la tasa y el horizontal identifica el ámbito.',
+		'analisis'    => 'El cáncer de estómago es el segundo tumor más incidente en hombres en Colombia y el segundo en mortalidad después del de próstata, según el Instituto Nacional de Cancerología. Sobre esa base ya alta, Nariño se separa con claridad: la tasa departamental multiplica varias veces la nacional masculina, y la zona roja la multiplica todavía más. La comparación conviene leerla con cuidado, porque las tasas nacionales están ajustadas por edad y las zonales no, de modo que la brecha real es algo menor que la aritmética directa. Aun con esa salvedad, el orden de magnitud justifica que el departamento sea considerado un territorio prioritario para la prevención primaria y explica el interés del nivel nacional en los resultados del proyecto.',
+	),
+
+	'contraste_municipal'   => array(
+		'descripcion' => 'Esta vista compara la mortalidad por cáncer gástrico de dos municipios que el proyecto estudió en profundidad: Cumbal, de población predominantemente amerindia-mestiza y ubicado en zona de alto riesgo, y Barbacoas, de población mayoritariamente afrodescendiente y situado en zona de bajo riesgo. La medida es el número de muertes por cada 100.000 habitantes. Cada barra corresponde a un municipio y su altura indica cuántas personas mueren al año por esta causa en cada 100.000 residentes.',
+		'analisis'    => 'Este par de municipios es el caso de estudio que mejor resume el enigma. Barbacoas registra una de las prevalencias de infección por Helicobacter pylori más altas de todo el tamizaje y, sin embargo, su mortalidad por cáncer gástrico es varias veces menor que la de Cumbal. La comparación se publicó en un artículo derivado del proyecto sobre microbiota gástrica, que identificó diferencias en las comunidades bacterianas del estómago de ambas poblaciones. La lectura de política pública es directa: una estrategia de prevención que se limitara a erradicar la bacteria trataría igual a dos poblaciones con riesgos muy distintos. El territorio y la ancestría deben entrar en la ecuación de priorización.',
+	),
+
+	/* ------------------------------------------------------------------ */
+	/* Resultados del tamizaje                                            */
+	/* ------------------------------------------------------------------ */
+
+	'tamizaje_hp'           => array(
+		'descripcion' => 'Esta vista reparte a las 5.000 personas tamizadas entre quienes resultaron infectadas por Helicobacter pylori y quienes no. El diagnóstico se obtuvo por endoscopia digestiva alta con toma de biopsias y estudio histopatológico, que es el método de referencia y no una prueba indirecta. Cada porción representa un grupo y su tamaño es proporcional al número de personas. Al pasar el cursor sobre una porción se muestran las personas y el porcentaje exacto que representa sobre el total.',
+		'analisis'    => 'Dos de cada tres participantes convivían con la bacteria sin saberlo, en una población adulta de entre 30 y 70 años que acudió de forma voluntaria y en su mayoría sin síntomas. Es una prevalencia muy superior a la de los países de renta alta y coherente con lo descrito para poblaciones andinas con acceso limitado a agua potable y condiciones de hacinamiento. La cifra tiene dos consecuencias prácticas. La primera es de escala: un programa de erradicación dirigido a toda la población positiva implicaría tratar a la mayoría de los adultos del área andina del departamento. La segunda es de enfoque: dado que la infección está casi generalizada pero el cáncer no, la variable que permite priorizar no es la presencia de la bacteria sino la lesión precursora que se documenta en la vista siguiente.',
+	),
+
+	'tamizaje_lpm'          => array(
+		'descripcion' => 'Esta vista muestra cuántas de las 5.000 personas tamizadas presentaban una lesión precursora de malignidad en la mucosa del estómago y cuántas no. Se trata de alteraciones del tejido —atrofia, metaplasia intestinal y displasia— que preceden al cáncer gástrico y que solo se detectan con biopsia y estudio del tejido al microscopio. Cada porción representa un grupo, dimensionada según el número de personas, con su porcentaje sobre el total disponible en el detalle.',
+		'analisis'    => 'Poco más de un tercio de los participantes presentaba ya una lesión precursora, todos ellos personas voluntarias y en su mayoría sin síntoma alguno. Esta es la cifra operativamente más importante del tamizaje: identifica al subgrupo que se beneficia de seguimiento endoscópico y de erradicación prioritaria, y ofrece un criterio de priorización mucho más selectivo que la mera positividad a la bacteria. En el modelo de la cascada de Correa, estas lesiones son los peldaños intermedios entre la gastritis crónica y el carcinoma; detenerlas es exactamente lo que persigue la prevención primaria. Que una de cada tres personas asintomáticas ya estuviera en ese punto explica por qué el proyecto sostiene que el cáncer gástrico en Nariño se diagnostica tarde no por falta de lesiones detectables, sino por falta de tamizaje.',
+	),
+
+	'tamizaje_comparado'    => array(
+		'descripcion' => 'Esta vista pone uno junto al otro los dos hallazgos del tamizaje: la infección por Helicobacter pylori y la lesión precursora de malignidad. Para cada indicador se muestran las personas positivas y las negativas sobre el mismo total de 5.000 participantes, de modo que las alturas sean directamente comparables. El eje horizontal identifica el indicador y el vertical cuenta personas; la leyenda distingue el resultado positivo del negativo.',
+		'analisis'    => 'La comparación hace visible de un vistazo la relación entre las dos capas del problema. La infección está mucho más extendida que la lesión, lo que confirma que la bacteria por sí sola no explica el desenlace: la gran mayoría de las personas infectadas no había desarrollado todavía una lesión precursora. Al mismo tiempo, el volumen de lesiones es demasiado alto para considerarlo un hallazgo marginal. Leídas juntas, ambas barras sostienen la estrategia que el proyecto propone: erradicar la bacteria como medida poblacional de prevención primaria y, en paralelo, reservar el seguimiento endoscópico para quienes ya presentan lesión. Es también el argumento del análisis de costo-efectividad incluido entre los productos de la ficha MGA.',
+	),
+
+	/* ------------------------------------------------------------------ */
+	/* Prevalencia territorial                                            */
+	/* ------------------------------------------------------------------ */
+
+	'prev_lpm_municipios'   => array(
+		'descripcion' => 'Esta vista ordena los diez municipios con mayor prevalencia de lesión precursora de malignidad entre los participantes evaluados en cada uno. La medida es el porcentaje de personas con lesión sobre el total tamizado en ese municipio, no sobre su población total. El color de cada barra refuerza la magnitud: cuanto más cálido, mayor prevalencia. Los documentos fuente solo publican los diez primeros, de modo que los 45 municipios restantes no aparecen aquí aunque también fueron intervenidos.',
+		'analisis'    => 'Los municipios que encabezan el listado se concentran en el norte del departamento y en la vertiente andina, coincidiendo a grandes rasgos con la zona roja de alta incidencia. En los primeros puestos, cerca de la mitad de las personas evaluadas presentaba ya una lesión precursora, una proporción que sitúa a esas poblaciones muy por encima del promedio departamental. Para la Secretaría de Salud esto se traduce en un criterio de focalización concreto: son los territorios donde el seguimiento endoscópico y las jornadas de erradicación tienen mayor rendimiento por persona atendida. Conviene recordar que el denominador es el número de participantes de cada municipio y no su censo, por lo que las cifras describen a la población tamizada y no deben extrapolarse sin cautela.',
+	),
+
+	'prev_hp_municipios'    => array(
+		'descripcion' => 'Esta vista ordena los diez municipios con mayor prevalencia de infección por Helicobacter pylori entre las personas evaluadas en cada uno. La medida es el porcentaje de participantes con infección confirmada por biopsia sobre el total tamizado en ese municipio. La intensidad del color acompaña la magnitud de la barra. Como en la vista anterior, los documentos fuente publican solo los diez primeros puestos del listado.',
+		'analisis'    => 'Comparar este listado con el de lesión precursora es la lectura más reveladora del conjunto de datos: solo dos municipios, Consacá y San Bernardo, aparecen en ambos. Encabeza este ranking Barbacoas, que sin embargo pertenece a la zona verde de baja incidencia y registra una mortalidad muy inferior a la de los municipios andinos. Esa disociación entre dónde hay más bacteria y dónde hay más lesión es precisamente el enigma que el proyecto documenta con datos propios. Su consecuencia práctica es que la prevalencia de infección, por sí sola, no sirve para priorizar territorios: hacerlo llevaría a concentrar el esfuerzo en la costa Pacífica, que es donde menos casos de cáncer gástrico se producen.',
+	),
+
+	'prev_subregion'        => array(
+		'descripcion' => 'Esta vista compara, subregión por subregión, la prevalencia de lesión precursora de malignidad frente a la de infección por Helicobacter pylori. Cada subregión aparece con dos barras, una por indicador, ambas expresadas como porcentaje de las personas evaluadas en ese territorio. La leyenda permite aislar un indicador con un clic. Los informes documentan once de las subregiones del departamento; las restantes no fueron reportadas y por tanto no figuran.',
+		'analisis'    => 'La distancia entre las dos barras de cada subregión es el dato interesante, más que su altura absoluta. En Telembí la infección alcanza el nivel más alto del departamento mientras la lesión se mantiene en la parte baja de la escala; en Río Mayo ocurre lo contrario, con la mayor prevalencia de lesión pese a una infección apenas intermedia. Piedemonte Costero registra los valores más bajos en ambos indicadores. Esa falta de paralelismo entre las dos series es la evidencia territorial del enigma nariñense y sugiere que los cofactores —dieta, altitud, calidad del agua, ancestría y cepa bacteriana— pesan tanto como la infección misma. Para la planeación departamental, la subregión resulta una unidad de intervención más manejable que el municipio.',
+	),
+
+	'prev_subregion_lpm'    => array(
+		'descripcion' => 'Esta vista presenta la prevalencia de lesión precursora de malignidad en cada una de las once subregiones documentadas, expresada como porcentaje de las personas evaluadas en ese territorio. Las barras se colorean según su magnitud para facilitar la comparación visual, y el orden permite identificar de inmediato los extremos de la escala departamental. Al situar el cursor sobre una barra se muestra el valor exacto de esa subregión.',
+		'analisis'    => 'El rango entre la subregión con mayor prevalencia y la de menor supera los veinte puntos porcentuales, una brecha considerable dentro de un mismo departamento y que no se explica por diferencias en el protocolo de tamizaje, idéntico en los 55 municipios. Río Mayo y La Sabana, en el norte andino, encabezan la escala; Piedemonte Costero cierra por abajo. Esta distribución refuerza el gradiente altitudinal que atraviesa todo el proyecto: la vertiente andina concentra la lesión y el litoral la evita, pese a compartir un país, un sistema de salud y una bacteria. Es la vista más útil para dimensionar cuántas personas requerirían seguimiento endoscópico en cada territorio si el modelo se escalara.',
+	),
+
+	'prev_subregion_hp'     => array(
+		'descripcion' => 'Esta vista presenta la prevalencia de infección por Helicobacter pylori en cada una de las once subregiones documentadas, como porcentaje de las personas evaluadas en ese territorio. La escala de color acompaña la magnitud de cada barra. La infección se confirmó por biopsia y estudio histopatológico durante la endoscopia, de modo que las cifras no dependen de la sensibilidad de una prueba indirecta como la serología o la prueba de aliento.',
+		'analisis'    => 'A diferencia de la lesión precursora, la infección se distribuye de forma bastante homogénea: todas las subregiones superan la mitad de la población evaluada y las diferencias entre ellas son mucho más estrechas. Telembí alcanza el valor más alto y Piedemonte Costero el más bajo, pero incluso ese mínimo describe a una población mayoritariamente infectada. Esa homogeneidad es en sí misma un hallazgo: significa que la exposición a la bacteria es prácticamente universal en el departamento y que, por tanto, no puede ser el factor que discrimina qué territorios desarrollan cáncer. La búsqueda de la explicación se desplaza así a la tipificación de las cepas circulantes, que el propio proyecto identifica como el primer reto de su siguiente fase.',
+	),
+
+	/* ------------------------------------------------------------------ */
+	/* Perfil de la población                                             */
+	/* ------------------------------------------------------------------ */
+
+	'perfil_genero'         => array(
+		'descripcion' => 'Esta vista muestra cómo se reparten por género las personas que participaron en el tamizaje. El cálculo se hace sobre los 4.994 participantes con dato de género registrado, ligeramente por debajo del total de 5.000 porque seis registros no lo consignan. Cada porción indica el número de personas y su porcentaje sobre ese total. La participación fue voluntaria, previa socialización en cada municipio con alcaldías, E.S.E. y personal médico.',
+		'analisis'    => 'Casi dos tercios de los participantes son mujeres, un desequilibrio que conviene tener presente al interpretar el resto de los resultados. No refleja la composición de la población adulta de Nariño ni la del riesgo: a escala nacional, el cáncer gástrico es más incidente en hombres que en mujeres. Lo que refleja es un patrón conocido de los programas de tamizaje voluntario, en los que las mujeres acuden con más frecuencia a los servicios de salud. Para la siguiente fase esto plantea una tarea concreta de convocatoria diferenciada hacia los hombres, que son quienes más riesgo acumulan y menos se acercaron. También obliga a la prudencia al comparar las prevalencias de este estudio con las de registros poblacionales.',
+	),
+
+	'perfil_etnia'          => array(
+		'descripcion' => 'Esta vista muestra el autorreconocimiento étnico de los participantes, expresado como porcentaje del total tamizado. Las categorías son mestizo, indígena, afrodescendiente y una cuarta que agrupa otras respuestas y los registros sin dato. La información proviene de la encuesta sociodemográfica aplicada en el momento del tamizaje, de modo que corresponde a lo que cada persona declaró sobre sí misma y no a una clasificación externa.',
+		'analisis'    => 'La composición está dominada por la población mestiza, con una presencia indígena cercana a la décima parte y una participación afrodescendiente reducida. Esa distribución sigue de cerca la del área andina del departamento, que es donde se concentró el proyecto, y explica en parte por qué la población afrodescendiente del litoral aparece poco representada pese a que los municipios de la costa sí fueron intervenidos. La variable importa clínicamente y no solo estadísticamente: los estudios derivados del proyecto documentan una mortalidad mucho mayor en municipios de tradición amerindia como Cumbal que en municipios afrodescendientes como Barbacoas, con niveles de infección comparables. La ancestría es, por tanto, uno de los cofactores candidatos a explicar el enigma.',
+	),
+
+	'perfil_educacion'      => array(
+		'descripcion' => 'Esta vista ordena a los participantes según el último nivel educativo que alcanzaron, en porcentaje sobre el total tamizado. Las categorías van desde quienes no cursaron ningún nivel formal hasta quienes completaron estudios profesionales, pasando por primaria, secundaria y formación técnica o tecnológica. Los datos provienen de la encuesta sociodemográfica aplicada durante la jornada de tamizaje en cada municipio.',
+		'analisis'    => 'Más de la mitad de los participantes tiene como máximo nivel la primaria y solo alrededor de una séptima parte alcanzó formación técnica, tecnológica o profesional. Este perfil condiciona directamente cómo debe comunicarse cualquier resultado del proyecto: los materiales de prevención, el consentimiento informado y las instrucciones del tratamiento triconjugado tienen que estar redactados para ser comprendidos sin escolaridad avanzada. Es una de las razones por las que la ficha MGA incluyó una cartilla de educación nutricional entre sus productos, y también por la que las orientaciones de diseño para la siguiente fase piden interfaces simples y contenidos culturalmente pertinentes. Un dato correcto que no se entiende no previene nada.',
+	),
+
+	'perfil_regimen'        => array(
+		'descripcion' => 'Esta vista muestra cómo se distribuyen los participantes entre el régimen subsidiado y el contributivo del Sistema General de Seguridad Social en Salud, en porcentaje sobre el total tamizado. El régimen de afiliación determina la ruta por la que una persona accede a consulta, diagnóstico y tratamiento, y por tanto la entidad responsable de continuar la atención de quienes resultaron positivos en el tamizaje.',
+		'analisis'    => 'La gran mayoría de los participantes pertenece al régimen subsidiado, lo que sitúa la continuidad de la atención principalmente en la red pública departamental: las 55 E.S.E. municipales y el Hospital Universitario Departamental de Nariño. Esa concentración es a la vez una oportunidad y un riesgo. La oportunidad es que el departamento tiene capacidad real de articular el seguimiento a través de una red que ya conoce y coordina. El riesgo es la capacidad instalada: si una parte considerable de las personas con lesión precursora requiere endoscopia de control periódica, la demanda recae sobre servicios con disponibilidad limitada de endoscopia y patología. Dimensionar esa carga es condición previa para cualquier propuesta de escalamiento del modelo.',
+	),
+
+	'perfil_nutricional'    => array(
+		'descripcion' => 'Esta vista clasifica a los participantes según su índice de masa corporal en cuatro categorías: delgadez, peso normal, sobrepeso y obesidad, esta última agrupando los tipos I, II y III. Los valores se expresan como porcentaje del total tamizado. La valoración nutricional se realizó en la misma jornada del tamizaje y fue el insumo del componente de educación nutricional incluido entre los productos comprometidos del proyecto.',
+		'analisis'    => 'Siete de cada diez participantes presentan exceso de peso, sumando sobrepeso y obesidad, mientras la delgadez es prácticamente inexistente. El dato desmiente la imagen de una población rural con déficit nutricional y describe en cambio un patrón de transición alimentaria: acceso suficiente a calorías con dieta de baja calidad. Importa para el cáncer gástrico por dos vías. La primera es que el exceso de peso se asocia a reflujo y a cáncer de la unión gastroesofágica. La segunda es que el mismo patrón alimentario que produce exceso de peso —alto en sal, conservas y ahumados, bajo en frutas y verduras frescas— figura entre los cofactores clásicos de la cascada de Correa. La intervención nutricional no era, por tanto, un añadido del proyecto sino parte del mecanismo que intenta interrumpir.',
+	),
+
+	'perfil_socioeconomico' => array(
+		'descripcion' => 'Esta vista reúne los indicadores socioeconómicos recogidos en la encuesta: los tramos de ingreso familiar mensual, la proporción en estratos 0 y 1, la condición de hacinamiento y el acceso a agua potable. Cada barra es independiente de las demás y se expresa como porcentaje de los participantes que cumplen esa condición, de modo que las barras no suman cien: no son partes de un mismo total sino indicadores separados.',
+		'analisis'    => 'El retrato es el de una población de bajos ingresos y estrato muy bajo, con una décima parte viviendo en condiciones de hacinamiento. Ambos factores son determinantes reconocidos de la transmisión de Helicobacter pylori, que ocurre sobre todo en la infancia y por vía intrafamiliar: cuantas más personas comparten espacio y menor es la calidad del agua, mayor es la probabilidad de contagio temprano. El acceso a agua potable, alto pero no universal, deja fuera a una parte no despreciable de los participantes. Esto tiene una implicación de política que trasciende al sector salud: erradicar la bacteria sin mejorar las condiciones de vivienda y agua produce reinfección. La prevención sostenible del cáncer gástrico en Nariño es también una agenda de saneamiento básico.',
+	),
+
+	/* ------------------------------------------------------------------ */
+	/* Biobanco                                                           */
+	/* ------------------------------------------------------------------ */
+
+	'biobanco_tipos'        => array(
+		'descripcion' => 'Esta vista descompone el biobanco del proyecto según el tipo de material biológico conservado: biopsias, suero, plasma, buffy coat, saliva, materia fecal, orina y hemascreen. El área o la altura de cada elemento es proporcional al número de muestras de ese tipo. Se trata de la primera reserva de material biológico de una población de alto riesgo de cáncer gástrico constituida en el departamento, con los 5.000 participantes del tamizaje como base.',
+		'analisis'    => 'La composición no es casual: refleja qué preguntas podrá responder el biobanco en el futuro. Las biopsias, una por participante, permiten revisar el diagnóstico histopatológico y aplicar técnicas que aún no existían cuando se tomaron, como el modelo de aprendizaje profundo para cuantificar metaplasia publicado en 2026. El suero y el plasma abren la vía a estudios de biomarcadores; el buffy coat, a estudios genéticos de la población; la materia fecal, al análisis de microbiota que ya produjo la comparación entre Barbacoas y Cumbal. Conviene señalar una discrepancia documentada en el manifiesto del conjunto: la suma por tipo, la descripción textual de «más de 25.000 muestras» y la meta de la ficha MGA no coinciden entre sí, y su conciliación con la Fundación CIEDYN, custodia del biobanco, sigue pendiente.',
+	),
+
+	/* ------------------------------------------------------------------ */
+	/* Casos de cáncer detectados                                         */
+	/* ------------------------------------------------------------------ */
+
+	'cancer_municipios'     => array(
+		'descripcion' => 'Esta vista muestra en qué municipios se detectaron los casos de cáncer gástrico hallados durante el tamizaje. Cada barra cuenta los casos confirmados en ese municipio mediante endoscopia digestiva alta practicada con fines preventivos. Son cifras absolutas y muy pequeñas, de modo que la comparación entre municipios debe leerse con cautela: un caso de diferencia no señala un patrón, sino la distribución concreta de un número reducido de hallazgos.',
+		'analisis'    => 'Todos estos casos se encontraron en personas voluntarias que estaban asintomáticas en el momento del examen, y ese es el hallazgo relevante, no su reparto geográfico. Sin el tamizaje, cada una de ellas habría llegado al sistema de salud meses o años después, con síntomas y probablemente en un estadio avanzado, que es la razón por la que el cáncer gástrico tiene en Colombia una mortalidad tan próxima a su incidencia. La detección temprana cambió el pronóstico de la mayoría de ellas. El número también dimensiona el rendimiento del tamizaje endoscópico poblacional en una zona de alto riesgo, un insumo necesario para el análisis de costo-efectividad que el proyecto comprometió y para cualquier discusión sobre extender el modelo.',
+	),
+
+	'cancer_desenlace'      => array(
+		'descripcion' => 'Esta vista muestra la situación de los casos de cáncer gástrico detectados, a la fecha del último informe disponible. Se distinguen quienes iniciaron atención por su entidad promotora de salud y quienes fallecieron. Las porciones son proporcionales al número de personas en cada situación. Los documentos fuente no incluyen datos individuales de los pacientes, de modo que no es posible desagregar por edad, estadio del tumor ni tiempo transcurrido hasta el inicio del tratamiento.',
+		'analisis'    => 'La mayoría de las personas detectadas accedió a tratamiento oportuno gracias al hallazgo temprano, y ese resultado es el argumento más directo a favor del tamizaje preventivo en zonas de alto riesgo. Los fallecimientos registrados recuerdan, sin embargo, que la detección no garantiza por sí sola un desenlace favorable: entre el hallazgo y el tratamiento efectivo median la remisión, la autorización, la disponibilidad de servicios oncológicos y el estadio en que se encontraba el tumor al detectarse. Que una parte de los casos haya fallecido pese a haber sido detectada en una jornada preventiva señala que la ruta de atención posterior al tamizaje es tan determinante como el tamizaje mismo, y que debe diseñarse explícitamente en cualquier escalamiento del modelo.',
+	),
+
+	/* ------------------------------------------------------------------ */
+	/* Proyecto y gestión                                                 */
+	/* ------------------------------------------------------------------ */
+
+	'financiacion'          => array(
+		'descripcion' => 'Esta vista descompone el presupuesto total del proyecto según su origen: los recursos del Fondo de Ciencia, Tecnología e Innovación del Sistema General de Regalías y la cofinanciación aportada por las entidades cooperantes. Los valores están expresados en pesos colombianos corrientes y el tamaño de cada porción es proporcional al monto. El proyecto fue aprobado por el OCAD del Fondo mediante el Acuerdo No. 57 del 9 de junio de 2017 y quedó registrado en el SUIFP con el BPIN 2015000100064.',
+		'analisis'    => 'La estructura muestra un proyecto financiado principalmente con regalías de ciencia y tecnología, complementadas por un aporte significativo de las entidades cooperantes, buena parte de él en especie: horas de personal médico, uso de infraestructura clínica y capacidad de laboratorio. Esa cofinanciación explica que el proyecto haya podido sostener trabajo de campo en 55 municipios durante varios años, algo difícil de costear solo con el presupuesto asignado. Para la lectura ciudadana conviene tener presente que la ejecución financiera alcanzó el cien por ciento y que el proyecto se encuentra en etapa de cierre, de modo que estas cifras describen una inversión ya realizada y no un presupuesto disponible.',
+	),
+
+	'metas_mga'             => array(
+		'descripcion' => 'Esta vista muestra el porcentaje de avance de cada uno de los 23 productos comprometidos en la ficha de la Metodología General Ajustada del proyecto. Los productos se distribuyen entre tres objetivos específicos, la creación del biobanco y el componente de gerencia e interventoría. Cada barra indica cuánto se ejecutó frente a lo comprometido; el detalle de cada una muestra además la meta original y la cantidad efectivamente ejecutada.',
+		'analisis'    => 'La totalidad de los productos alcanzó o superó su meta, lo que sostiene la ejecución física del cien por ciento reportada al cierre. Destaca el producto de publicaciones en revistas indexadas, cuyo avance triplica lo comprometido: la meta eran dos publicaciones y se ejecutaron seis. Un avance superior al cien por ciento no siempre indica sobrecumplimiento genuino y a veces revela una meta formulada por debajo de lo previsible, pero en este caso responde a la producción científica real derivada del proyecto. Conviene contrastar esta vista con el manifiesto del conjunto, que documenta una discrepancia entre la meta de almacenamiento de 45.000 muestras registrada aquí como cumplida y la suma efectiva por tipo del inventario del biobanco.',
+	),
+
+	'publicaciones_anio'    => array(
+		'descripcion' => 'Esta vista distribuye por año los documentos derivados del proyecto: artículos en revistas indexadas, una carta al editor, un boletín institucional y una guía de práctica clínica nacional. El eje horizontal recorre los años y el vertical cuenta las publicaciones de cada uno. La serie incluye años sin publicaciones, que se muestran igualmente para que la lectura del ritmo de producción no quede distorsionada por la ausencia de puntos intermedios.',
+		'analisis'    => 'La serie dibuja tres momentos claramente distintos. Un primer grupo, al arrancar el proyecto, presenta la iniciativa a la comunidad científica y define el marco de las tres zonas de riesgo. Sigue un tramo de varios años con muy poca producción, que coincide con el trabajo de campo en los 55 municipios y con la pandemia: era el periodo de recolección, no de análisis. El repunte reciente corresponde a la explotación del material acumulado, con trabajos sobre microbiota gástrica, un modelo ecológico multifactorial y un modelo de aprendizaje profundo para cuantificar metaplasia. Ese patrón indica que el valor científico del proyecto está desplegándose ahora, cuando la ejecución presupuestal ya se cerró, y refuerza el argumento a favor de conservar el biobanco y los datos como activos de largo plazo.',
+	),
+
+	'actores_tipo'          => array(
+		'descripcion' => 'Esta vista agrupa por naturaleza institucional a las entidades que participaron en el proyecto: entidades territoriales, prestadores de salud pública, centros de investigación, gremios médicos y universidades nacionales e internacionales. El tamaño de cada bloque corresponde al número de entidades de ese tipo. La clasificación proviene del mapeo de actores del informe preliminar, que documenta además el rol de cada entidad y su relevancia para la futura plataforma de datos.',
+		'analisis'    => 'La composición describe una alianza con tres capas que conviene distinguir. La territorial —Gobernación, Instituto Departamental de Salud y Hospital Universitario Departamental— aporta la capacidad de llegar a los 55 municipios y es la que sostiene la continuidad de la atención. La académica, con universidades locales, nacionales e internacionales, aporta la capacidad analítica: el modelo de aprendizaje profundo se desarrolló con la Universidad Nacional de Colombia y los trabajos de microbiota y modelo multifactorial se firman con UNSW Sydney. La tercera capa, la del Instituto Nacional de Cancerología, es la que permitiría proyectar el modelo al nivel nacional. Para la plataforma de datos, la pieza crítica es la Fundación CIEDYN: es la custodia del biobanco y de las bases históricas de 2018 a 2023, y sin su concurso ningún repositorio departamental sería completo.',
+	),
+);
