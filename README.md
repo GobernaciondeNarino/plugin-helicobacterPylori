@@ -16,7 +16,8 @@ conoce al volcán Galeras.
 ## Qué hace
 
 Convierte el conjunto de datos del proyecto —catorce archivos JSON más la
-geometría municipal— en componentes publicables desde el editor de WordPress:
+cartografía municipal y subregional— en componentes publicables desde el editor
+de WordPress:
 
 | Componente | Shortcode |
 |---|---|
@@ -24,6 +25,7 @@ geometría municipal— en componentes publicables desde el editor de WordPress:
 | Recreación 3D de *Helicobacter pylori* con línea de tiempo | `[urkunina_3d]` |
 | Gráfico de cualquiera de las 24 vistas del catálogo | `[urkunina_grafico view="…"]` |
 | Mapa coroplético de los 64 municipios sobre OpenStreetMap | `[urkunina_mapa]` |
+| Geomapa de D3plus de una vista territorial, por municipio o por subregión | `[urkunina_geomapa view="…" teselas="si\|no"]` |
 | Tarjetas con las cifras clave del proyecto | `[urkunina_kpi]` |
 | Tabla accesible de los datos de una vista | `[urkunina_tabla view="…"]` |
 | Ficha de identificación y ejecución del proyecto | `[urkunina_ficha]` |
@@ -66,6 +68,12 @@ panel: **URKUNINA 5000 → Shortcodes**.
 **Requisitos:** WordPress 5.8 o superior, PHP 7.4 o superior, extensiones `json`
 y `mbstring`. Para la escena 3D, un navegador con WebGL 2.
 
+Hay dos maneras de llevar los datos al territorio y no compiten:
+`[urkunina_mapa]` es un **visor** sobre Leaflet —se navega, se consulta municipio
+a municipio, se cambia de indicador—; `[urkunina_geomapa]` es un **gráfico** de
+D3plus, del mismo motor que el resto de vistas, que dibuja una plancha del
+departamento con o sin cartografía de fondo según convenga a la página.
+
 Publicar el tablero requiere una plantilla de página de ancho completo y sin
 barra lateral: el contenedor ocupa el 100 % del ancho y toda la altura de la
 ventana. Viste la misma paleta que el objeto 3D —fondo oscuro, verde y amarillo
@@ -80,7 +88,7 @@ institucionales— para que ambos se lean como una sola pieza.
 | **Panel** | Estado general, cifras del proyecto y qué conviene revisar hoy. |
 | **Datos** | Consultar, validar, editar, subir y restaurar cada archivo del conjunto. |
 | **Gráficos** | Catálogo de vistas con su descripción, su análisis y su shortcode. |
-| **Shortcodes** | Los nueve componentes con sus atributos y ejemplos. |
+| **Shortcodes** | Los dieciséis componentes con sus atributos y ejemplos. |
 | **Componentes** | Valores por defecto del tablero y del objeto 3D. |
 | **Apariencia** | Identidad visual: paleta institucional y tipografía. |
 | **Diagnóstico** | Entorno, convivencia con otros plugins y medidas de seguridad. |

@@ -80,19 +80,21 @@ urkunina-5000/
 │   ├── data/
 │   │   ├── class-uhp-datos.php       lectura, validación, respaldo, integridad
 │   │   ├── class-uhp-municipios.php  cruce con la geometría del DANE
+│   │   ├── class-uhp-subregiones.php cruce y composición de las 13 subregiones
+│   │   ├── class-uhp-topojson.php    GeoJSON → TopoJSON para D3plus Geomap
 │   │   ├── class-uhp-views.php       registro de vistas del motor de gráficos
 │   │   └── textos-graficos.php       descripción y análisis de cada vista
 │   ├── analysis/
 │   │   └── class-uhp-analisis.php    redacción automática del análisis
 │   ├── shortcodes/
-│   │   └── class-uhp-shortcodes.php  los nueve componentes
+│   │   └── class-uhp-shortcodes.php  los dieciséis componentes
 │   └── admin/
 │       ├── class-uhp-admin.php       menú, siete módulos con pestañas
 │       └── class-uhp-admin-datos.php módulo de actualización de los JSON
 ├── assets/
-│   ├── css/   uhp.css · uhp-grafico.css · uhp-mapa.css
+│   ├── css/   uhp.css · uhp-grafico.css · uhp-mapa.css · uhp-geomapa.css
 │   │          uhp-dashboard.css · uhp-3d.css · uhp-admin.css
-│   └── js/    uhp-core.js · uhp-renderer.js · uhp-grafico.js
+│   └── js/    uhp-core.js · uhp-renderer.js · uhp-grafico.js · uhp-geomapa.js
 │              uhp-mapa.js · uhp-dashboard.js · uhp-3d.js · uhp-admin.js
 ├── data/                           el conjunto de datos del proyecto
 ├── tests/                          verificación (sección 8)
@@ -103,7 +105,7 @@ urkunina-5000/
 
 ## 3. El conjunto de datos
 
-Quince archivos en `data/`: catorce JSON del proyecto y la geometría municipal.
+Dieciséis archivos en `data/`: catorce JSON del proyecto y dos de cartografía.
 
 | Clave | Archivo | Contenido |
 |---|---|---|
@@ -122,6 +124,7 @@ Quince archivos en `data/`: catorce JSON del proyecto y la geometría municipal.
 | `metas` | `12_metas_mga.json` | Los 23 productos de la ficha MGA |
 | `retos` | `13_retos_siguiente_fase.json` | Retos para la siguiente fase |
 | `geojson` | `narino_municipios.geojson` | Geometría de los 64 municipios (DANE) |
+| `geojson_subregiones` | `dep-sub-mun.geojson` | Tres capas: departamento, 13 subregiones y los 64 municipios con la subregión de cada uno |
 
 ### 3.1 Convenciones del conjunto
 
@@ -139,6 +142,12 @@ biobanco suma 31.190 muestras por tipo, los documentos hablan de «más de
 cifras están en los datos y su conciliación con la Fundación CIEDYN, custodia
 del biobanco, sigue pendiente.
 
+Los dos archivos de cartografía tienen su propio tope de tamaño
+(`UHP_Security::MAX_GEO_BYTES`, 8 MiB) en vez de compartir el de los archivos de
+cifras (2 MiB): el de subregiones ocupa 3 MiB solo en vértices, y aflojar el
+límite de todos para que quepa uno abriría la puerta a agotar la memoria del
+sitio con un JSON enorme.
+
 ### 3.3 El cruce con la geometría
 
 El GeoJSON del DANE nombra los municipios en mayúsculas y sin sufijos
@@ -148,6 +157,14 @@ formato de lectura y con el nombre popular entre paréntesis
 descarta el paréntesis, elimina los diacríticos y pasa a mayúsculas. Con esa
 sola regla **los 55 municipios priorizados cruzan sin necesidad de una tabla de
 alias**, y hay una prueba que lo verifica en cada ejecución.
+
+Con las subregiones ocurre lo mismo y se resuelve igual, en
+`UHP_Subregiones::normalizar()`: los informes escriben «Piedemonte Costero»
+donde la cartografía dice «Pie de Monte Costero», y «La Sabana» donde dice
+«Sabana». Quitando tildes, signos, espacios y el artículo inicial, **las once
+subregiones con dato cruzan con las trece del departamento**; las dos restantes
+—Pacífico Sur y Sanquianga— quedan como «sin dato», que es lo que corresponde
+porque los informes no las documentan.
 
 ---
 
@@ -267,7 +284,95 @@ El texto accesible del gráfico no se pierde: el lienzo conserva
 descripción y sus cifras, de modo que un lector de pantalla sigue recibiendo la
 lectura completa aunque el texto visible se haya maquetado en otro sitio.
 
-### 4.6 Añadir una vista
+### 4.6 El geomapa: llevar una vista al territorio
+
+`[urkunina_geomapa]` dibuja una vista sobre el mapa del departamento con
+**D3plus Geomap**. No sustituye a `[urkunina_mapa]`: aquél es un visor sobre
+Leaflet, pensado para navegar y consultar; éste es un gráfico más del módulo,
+del mismo motor y con la misma lectura que las demás vistas.
+
+**Dos niveles.** Una vista territorial declara en su entrada del registro a qué
+nivel pertenece, qué campo de sus filas nombra el territorio y qué medida se
+colorea:
+
+```php
+'prev_subregion_lpm' => array(
+    // …
+    'geo' => array(
+        'nivel'  => 'subregion',   // o 'municipio'
+        'campo'  => 'subregion',
+        'medida' => 'prevalencia',
+    ),
+),
+```
+
+El nivel arrastra consigo la topología (`/topojson?nivel=…`), la clave con que
+se cruzan los valores (DIVIPOLA o código de subregión) y hasta cómo se nombran
+las cosas en el tooltip. **No es un atributo del shortcode a propósito**: una
+vista subregional dibujada sobre municipios no cruzaría con nada.
+
+**La capa base se enciende y se apaga** con `teselas="si|no"`. Sin ella queda
+una plancha limpia, que es lo que pide la identidad de la entidad para una ficha
+o un impreso; con ella se sitúan mejor los municipios sobre el relieve. Cuando
+está encendida, la atribución del proveedor la imprime D3plus a partir de la
+propia URL de la capa: es condición de la licencia de OpenStreetMap y de CARTO,
+y por eso no se escribe a mano —hacerlo solo produciría la misma línea dos
+veces, y con el proveedor equivocado si alguien cambiara de capa.
+
+#### 4.6.1 TopoJSON, y por qué se construye en el servidor
+
+D3plus Geomap **no consume GeoJSON**: llama a `topojson.feature()` sobre la
+topología. `UHP_Topojson` construye esa topología a partir de los archivos que
+ya trae el plugin, sin dependencias externas.
+
+La topología es «degenerada» —cada anillo es su propio arco, sin fronteras
+compartidas—, lo que es TopoJSON válido y ahorra implementar la detección de
+arcos comunes. El ahorro de peso viene de la **cuantización**: las coordenadas
+pasan a enteros sobre una rejilla de 10⁵ pasos y se codifican por diferencias.
+El GeoJSON municipal de 354 KB queda en 71 KB con un error máximo de área del
+0,025 %.
+
+Tres decisiones que conviene no deshacer:
+
+- **El sentido de giro es el contrario al del RFC 7946.** D3 recorta los
+  polígonos sobre la esfera y decide cuál es el interior por el sentido del
+  anillo, con el criterio inverso al del RFC: exterior **horario**, huecos
+  antihorario. Un anillo al revés no se ve mal, se ve como *el mundo entero
+  menos el municipio*, y basta uno para que el departamento se reduzca a un
+  punto porque el encuadre se calcula sobre esa extensión. Es el convenio con
+  el que vienen los TopoJSON de world-atlas. Hay dos pruebas que lo vigilan:
+  una en la capa de datos y otra en el navegador.
+- **La geometría subregional no se toma de la capa `subregion` del archivo**,
+  aunque esté ahí: viene de un disuelto sobre cartografía de alta resolución y
+  pesa casi un megabyte. Se reconstruye disolviendo la capa municipal del mismo
+  archivo, que ya está generalizada, y el resultado son 35 KB con exactamente
+  el mismo contorno exterior.
+- **El disuelto es por cancelación de aristas.** En una partición limpia del
+  plano —y la cartografía municipal del DANE lo es— la frontera entre dos
+  municipios vecinos es la misma secuencia de vértices recorrida en sentidos
+  opuestos. Contando cada arista dirigida y descartando las que tienen su
+  opuesta quedan solo las del contorno; luego se encadenan hasta cerrar cada
+  anillo. Es exacto, no aproxima nada y no necesita aritmética de polígonos. A
+  cambio depende de que los vértices compartidos sean idénticos: si dejaran de
+  serlo, no cancelaría ninguna arista y se verían los municipios sueltos —se
+  ve, no se rompe—, y la suite lo detecta.
+
+#### 4.6.2 Sin dato no es cero
+
+Los municipios que la vista no nombra se pintan con el relleno de «sin dato», no
+con el extremo bajo de la rampa. La distinción es fácil de perder: el relleno
+del gráfico va **dentro** de `shapeConfig.Path`, porque Geomap ya trae el suyo y
+la configuración de la forma pisa a la general; un `fill` de primer nivel se
+ignora en silencio y el mapa entero sale del color de «sin dato». Y el accesor
+recibe la fila de datos cuando el territorio tiene cifra y el *feature* crudo
+cuando no la tiene, de modo que hay que distinguir los dos casos o un territorio
+sin dato caería en el mínimo de la escala y se leería como una cifra real.
+
+Importa más de lo que parece en este proyecto: los informes solo publican los
+diez municipios con mayor prevalencia, y de las trece subregiones documentan
+once. Pintar el resto como si valieran el mínimo sería inventar datos.
+
+### 4.7 Añadir una vista
 
 Tres pasos, sin JavaScript nuevo:
 
@@ -282,7 +387,7 @@ que produce filas, que sus filas traen todas las dimensiones y medidas que
 declara, que su tipo por defecto es compatible y que sus dos textos llegan a
 los 375 caracteres.
 
-### 4.7 Identidad visual del tablero
+### 4.8 Identidad visual del tablero
 
 El tablero viste la paleta del objeto 3D: fondo `#0C1116`, paneles
 translúcidos con desenfoque y borde blanco al 9 %, verde `#10A13B` y amarillo
@@ -425,11 +530,13 @@ npm run test:datos   # capa de datos, sin WordPress
 npm test             # lo anterior más las pruebas de navegador
 ```
 
-### 8.1 Capa de datos — 263 comprobaciones
+### 8.1 Capa de datos — 311 comprobaciones
 
 `tests/test-datos.php` ejecuta las clases del plugin fuera de WordPress, con
 sustitutos mínimos de sus funciones (`tests/stubs-wordpress.php`). Comprueba
-que los quince archivos se leen y cumplen su contrato, que el saneador de CSS
+que los dieciséis archivos se leen y cumplen su contrato, que la topología que
+consume D3plus se construye bien —anillos cerrados, sentido de giro correcto,
+error de cuantización por debajo del 0,03 % y subregiones disueltas—, que el saneador de CSS
 neutraliza lo peligroso **y conserva intacto lo legítimo**, que los 55
 municipios cruzan con la geometría, que las 24 vistas producen filas con la
 forma que declaran, que sus textos llegan a los 375 caracteres, y que las
@@ -437,7 +544,7 @@ cifras cuadran entre sí: los positivos y negativos suman 5.000, la distribució
 municipal de casos suma el total declarado, las muestras por tipo suman el
 inventario y las fuentes de financiación suman el presupuesto.
 
-### 8.2 Navegador — 26 pruebas
+### 8.2 Navegador — 36 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a
@@ -450,8 +557,12 @@ que sus controles avanzan y pausan, que embebida no se apropia del teclado; que
 las ocho vistas de la página de gráficos se dibujan y que el color va por serie
 y no por punto; que la tarjeta del gráfico **no emite ningún texto** y que los
 textos de la vista, que son shortcodes aparte, llegan en el HTML con el
-JavaScript desactivado y se maquetan en su propia columna; que el mapa pinta los
-64 municipios sobre OpenStreetMap con su
+JavaScript desactivado y se maquetan en su propia columna; que el geomapa pinta
+los 64 municipios o las 13 subregiones según el nivel de la vista, que colorea
+solo los que traen cifra, que ninguna geometría se invierte —la prueba del
+sentido de giro—, que las subregiones llegan disueltas, que la capa base se
+enciende y se apaga desde el shortcode con su atribución, y que cada topología
+se descarga una sola vez por página; que el mapa pinta los 64 municipios sobre OpenStreetMap con su
 leyenda y su atribución, que cambiar de indicador no vuelve a descargar la
 geometría y que los polígonos son accesibles con teclado; que el tablero ocupa
 el 100 % de ancho y 100vh de alto, que sus filtros responden, que al pulsar un
@@ -503,7 +614,7 @@ Resumen; el informe completo está en
   a través de `UHP_Security::escribir_atomico()`.
 - **Autorización.** Las seis acciones de escritura exigen `manage_options` y
   nonce. Las páginas del panel comprueban la capacidad antes de pintar nada.
-- **API pública de solo lectura.** Las ocho rutas sirven datos agregados ya
+- **API pública de solo lectura.** Las diez rutas sirven datos agregados ya
   divulgados institucionalmente. No se exige nonce a propósito: con caché de
   página, un nonce caducado devolvería 403 a visitantes legítimos. La
   protección es el límite de peticiones por IP y la ausencia total de

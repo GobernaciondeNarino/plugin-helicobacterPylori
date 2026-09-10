@@ -173,6 +173,15 @@ final class UHP_Datos {
 				'grupo'       => 'territorio',
 				'geo'         => true,
 			),
+			'geojson_subregiones' => array(
+				'archivo'     => 'dep-sub-mun.geojson',
+				'titulo'      => 'Geometría por subregiones (GeoJSON)',
+				'descripcion' => 'Tres capas en un solo archivo: el departamento, sus 13 subregiones con la geometría ya disuelta y los 64 municipios con la subregión a la que pertenece cada uno. Es lo que permite llevar al mapa las vistas subregionales. Origen DANE + agrupación subregional de la Gobernación.',
+				'claves'      => array( 'type', 'features' ),
+				'lista'       => 'features',
+				'grupo'       => 'territorio',
+				'geo'         => true,
+			),
 		);
 
 		return $r;
@@ -185,6 +194,23 @@ final class UHP_Datos {
 	 */
 	public static function archivos_validos() {
 		return wp_list_pluck( self::registro(), 'archivo' );
+	}
+
+	/**
+	 * Tamaño máximo admitido para un archivo del conjunto.
+	 *
+	 * La cartografía tiene su propio tope: pesa órdenes de magnitud más que
+	 * un archivo de cifras y compartir límite obligaría a aflojar el de
+	 * todos, que es justo lo que no conviene.
+	 *
+	 * @param string $clave Clave del registro.
+	 * @return int Bytes.
+	 */
+	public static function tope_bytes( $clave ) {
+		$r = self::registro();
+		return ( ! empty( $r[ $clave ]['geo'] ) )
+			? UHP_Security::MAX_GEO_BYTES
+			: UHP_Security::MAX_JSON_BYTES;
 	}
 
 	/**
@@ -373,11 +399,12 @@ final class UHP_Datos {
 			return $res;
 		}
 
-		if ( strlen( $crudo ) > UHP_Security::MAX_JSON_BYTES ) {
+		$tope = self::tope_bytes( $clave );
+		if ( strlen( $crudo ) > $tope ) {
 			$res['errores'][] = sprintf(
 				'El archivo pesa %s y el máximo admitido es %s.',
 				size_format( strlen( $crudo ) ),
-				size_format( UHP_Security::MAX_JSON_BYTES )
+				size_format( $tope )
 			);
 			return $res;
 		}

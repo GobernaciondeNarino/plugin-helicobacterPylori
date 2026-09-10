@@ -20,6 +20,8 @@ use GobernacionNarino\Urkunina\UHP_Municipios;
 use GobernacionNarino\Urkunina\UHP_Views;
 use GobernacionNarino\Urkunina\UHP_Rest;
 use GobernacionNarino\Urkunina\UHP_Security;
+use GobernacionNarino\Urkunina\UHP_Topojson;
+use GobernacionNarino\Urkunina\UHP_Subregiones;
 
 $pruebas = 0;
 $fallos  = array();
@@ -48,8 +50,15 @@ echo "\n1. Archivos del conjunto\n";
 
 $registro = UHP_Datos::registro();
 comprobar(
-	15 === count( $registro ),
-	sprintf( 'El registro declara los 14 archivos JSON y la geometría (%d entradas)', count( $registro ) )
+	16 === count( $registro ),
+	sprintf( 'El registro declara los 14 archivos JSON y las dos capas de geometría (%d entradas)', count( $registro ) )
+);
+
+// La cartografía tiene su propio tope de tamaño: si volviera a compartirlo
+// con los archivos de cifras, el de subregiones dejaría de validar.
+comprobar(
+	UHP_Datos::tope_bytes( 'geojson_subregiones' ) > UHP_Datos::tope_bytes( 'tamizaje' ),
+	'La geometría admite un tamaño mayor que un archivo de cifras'
 );
 
 foreach ( $registro as $clave => $meta ) {
@@ -169,6 +178,294 @@ comprobar(
 comprobar(
 	'departamento' === UHP_Security::sanitizar_divipola( 'Municipio Inventado' ),
 	'Un municipio inexistente cae a «departamento»'
+);
+
+/* ---------------------------------------------------------------- */
+echo "\n5b. Topología para D3plus Geomap\n";
+
+$topo = UHP_Topojson::municipios( true );
+
+comprobar( 'Topology' === $topo['type'], 'La conversión produce un objeto Topology' );
+comprobar(
+	isset( $topo['objects'][ UHP_Topojson::OBJETO ]['geometries'] ),
+	sprintf( 'La topología expone el objeto «%s»', UHP_Topojson::OBJETO )
+);
+
+$geometrias = $topo['objects'][ UHP_Topojson::OBJETO ]['geometries'];
+comprobar( 64 === count( $geometrias ), 'La topología trae los 64 municipios' );
+
+$ids = wp_list_pluck( $geometrias, 'id' );
+comprobar(
+	count( $ids ) === count( array_unique( $ids ) ),
+	'Cada municipio aparece una sola vez'
+);
+comprobar(
+	0 === count( array_diff( $ids, array_keys( UHP_Municipios::indice() ) ) ),
+	'Todos los identificadores son DIVIPOLA conocidos'
+);
+
+comprobar(
+	isset( $topo['transform']['scale'], $topo['transform']['translate'] ),
+	'La topología va cuantizada, con su transformación'
+);
+
+// La extensión tiene que ser la de Nariño: si la conversión se comiera un
+// signo o mezclara los ejes, la caja se iría del departamento.
+list( $bx0, $by0, $bx1, $by1 ) = $topo['bbox'];
+comprobar(
+	$bx0 > -80 && $bx1 < -76 && $by0 > 0 && $by1 < 3,
+	sprintf( 'La caja envolvente cae sobre Nariño (%.2f, %.2f) — (%.2f, %.2f)', $bx0, $by0, $bx1, $by1 )
+);
+
+/* Sentido de giro: exterior HORARIO, que es lo que espera D3 y lo contrario
+   de lo que dice el RFC 7946 de GeoJSON. Un anillo al revés se dibuja como
+   el mundo entero menos el municipio. Se comprueba decodificando la
+   topología igual que hace topojson-client. */
+$area_anillo = static function ( array $anillo ) {
+	$a = 0.0;
+	$n = count( $anillo );
+	for ( $i = 0, $j = $n - 1; $i < $n; $j = $i, $i++ ) {
+		$a += ( $anillo[ $j ][0] * $anillo[ $i ][1] ) - ( $anillo[ $i ][0] * $anillo[ $j ][1] );
+	}
+	return $a / 2;
+};
+
+$decodificar = static function ( $indice ) use ( $topo ) {
+	$sx = $topo['transform']['scale'][0];
+	$sy = $topo['transform']['scale'][1];
+	$tx = $topo['transform']['translate'][0];
+	$ty = $topo['transform']['translate'][1];
+	$x  = 0;
+	$y  = 0;
+	$out = array();
+	foreach ( $topo['arcs'][ $indice ] as $d ) {
+		$x    += $d[0];
+		$y    += $d[1];
+		$out[] = array( $x * $sx + $tx, $y * $sy + $ty );
+	}
+	return $out;
+};
+
+$invertidos = 0;
+$abiertos   = 0;
+foreach ( $geometrias as $g ) {
+	$poligonos = ( 'Polygon' === $g['type'] ) ? array( $g['arcs'] ) : $g['arcs'];
+	foreach ( $poligonos as $k => $poligono ) {
+		foreach ( $poligono as $i => $anillo ) {
+			$puntos = $decodificar( $anillo[0] );
+			if ( 0 === $i && $area_anillo( $puntos ) > 0 ) {
+				$invertidos++;   // exterior antihorario: al revés para D3.
+			}
+			$primero = $puntos[0];
+			$ultimo  = $puntos[ count( $puntos ) - 1 ];
+			if ( abs( $primero[0] - $ultimo[0] ) > 1e-6 || abs( $primero[1] - $ultimo[1] ) > 1e-6 ) {
+				$abiertos++;
+			}
+		}
+	}
+}
+comprobar( 0 === $invertidos, 'Todos los anillos exteriores giran en el sentido que espera D3' );
+comprobar( 0 === $abiertos, 'Todos los anillos quedan cerrados tras cuantizar' );
+
+// El error de cuantización tiene que ser inapreciable: se compara el área
+// de cada municipio con la del GeoJSON original.
+$geo_original = UHP_Datos::leer( 'geojson' );
+$area_de      = static function ( $geometria ) use ( $area_anillo ) {
+	$poligonos = ( 'Polygon' === $geometria['type'] )
+		? array( $geometria['coordinates'] )
+		: $geometria['coordinates'];
+	$total = 0.0;
+	foreach ( $poligonos as $poligono ) {
+		foreach ( $poligono as $i => $anillo ) {
+			$a      = abs( $area_anillo( $anillo ) );
+			$total += ( 0 === $i ) ? $a : -$a;
+		}
+	}
+	return $total;
+};
+
+$originales = array();
+foreach ( (array) $geo_original['features'] as $f ) {
+	if ( ! empty( $f['properties']['MPIO_CDPMP'] ) ) {
+		$originales[ (string) $f['properties']['MPIO_CDPMP'] ] = $area_de( $f['geometry'] );
+	}
+}
+
+$peor = 0.0;
+foreach ( $geometrias as $g ) {
+	$poligonos = ( 'Polygon' === $g['type'] ) ? array( $g['arcs'] ) : $g['arcs'];
+	$area      = 0.0;
+	foreach ( $poligonos as $poligono ) {
+		foreach ( $poligono as $i => $anillo ) {
+			$a     = abs( $area_anillo( $decodificar( $anillo[0] ) ) );
+			$area += ( 0 === $i ) ? $a : -$a;
+		}
+	}
+	$ref = isset( $originales[ $g['id'] ] ) ? $originales[ $g['id'] ] : 0;
+	if ( $ref > 0 ) {
+		$peor = max( $peor, abs( $area - $ref ) / $ref );
+	}
+}
+comprobar(
+	$peor < 0.005,
+	sprintf( 'La cuantización no deforma los municipios (peor error: %.4f %%)', $peor * 100 )
+);
+
+/* ---------------------------------------------------------------- */
+echo "\n5bis. Subregiones y su disuelto\n";
+
+$subs = UHP_Subregiones::indice();
+comprobar( 13 === count( $subs ), 'El departamento se divide en 13 subregiones' );
+
+$total_municipios = 0;
+foreach ( $subs as $sr ) {
+	$total_municipios += count( $sr['municipios'] );
+}
+comprobar(
+	64 === $total_municipios,
+	sprintf( 'Las subregiones reparten los 64 municipios (suman %d)', $total_municipios )
+);
+
+$por_municipio = UHP_Subregiones::por_municipio();
+comprobar( 64 === count( $por_municipio ), 'Cada municipio declara su subregión' );
+comprobar(
+	'Centro' === $por_municipio['52001']['nombre'],
+	'Pasto pertenece a la subregión Centro'
+);
+
+// El cruce por nombre es el punto frágil: los informes escriben
+// «Piedemonte Costero» y «La Sabana» donde la cartografía dice otra cosa.
+comprobar(
+	'pie_de_monte_costero' === UHP_Subregiones::codigo_de( 'Piedemonte Costero' ),
+	'El cruce resuelve «Piedemonte Costero»'
+);
+comprobar(
+	'sabana' === UHP_Subregiones::codigo_de( 'La Sabana' ),
+	'El cruce descarta el artículo inicial de «La Sabana»'
+);
+comprobar(
+	'rio_mayo' === UHP_Subregiones::codigo_de( 'Río Mayo' ),
+	'El cruce resuelve un nombre con tilde'
+);
+comprobar(
+	'' === UHP_Subregiones::codigo_de( 'Subregión Inventada' ),
+	'Una subregión inexistente no cruza'
+);
+
+$sin_cruce = array();
+foreach ( (array) UHP_Datos::valor( 'prev_subregional', 'subregiones', array() ) as $fila ) {
+	if ( '' === UHP_Subregiones::codigo_de( $fila['subregion'] ) ) {
+		$sin_cruce[] = $fila['subregion'];
+	}
+}
+comprobar(
+	0 === count( $sin_cruce ),
+	sprintf(
+		'Las 11 subregiones con dato cruzan con la geometría%s',
+		$sin_cruce ? ' — sin cruce: ' . implode( ', ', $sin_cruce ) : ''
+	)
+);
+
+$topo_sub = UHP_Topojson::subregiones( true );
+$geo_sub  = $topo_sub['objects'][ UHP_Topojson::OBJETO_SUB ]['geometries'];
+comprobar( 13 === count( $geo_sub ), 'La topología subregional trae las 13 subregiones' );
+
+/* El disuelto es lo que hace publicable esta capa: la geometría subregional
+   del archivo pesa cerca de un megabyte y la reconstruida no llega a
+   cuarenta kilobytes. Si la unión por cancelación de aristas dejara de
+   funcionar, cada subregión traería un polígono por municipio. */
+$peso_sub = strlen( wp_json_encode( $topo_sub ) );
+comprobar(
+	$peso_sub < 120 * 1024,
+	sprintf( 'La topología subregional cabe en una página (%s)', size_format( $peso_sub ) )
+);
+
+$municipios_por_sub = array();
+foreach ( $subs as $codigo => $sr ) {
+	$municipios_por_sub[ $codigo ] = count( $sr['municipios'] );
+}
+$sin_disolver = array();
+foreach ( $geo_sub as $g ) {
+	$poligonos = ( 'Polygon' === $g['type'] ) ? 1 : count( $g['arcs'] );
+	$esperados = isset( $municipios_por_sub[ $g['id'] ] ) ? $municipios_por_sub[ $g['id'] ] : 0;
+	// Pacífico Sur suma sus islas, de modo que dos o tres polígonos son
+	// legítimos; tantos como municipios significa que no se disolvió.
+	if ( $esperados > 2 && $poligonos >= $esperados ) {
+		$sin_disolver[] = $g['id'];
+	}
+}
+comprobar(
+	0 === count( $sin_disolver ),
+	sprintf(
+		'Los municipios se disuelven en el contorno de su subregión%s',
+		$sin_disolver ? ' — sin disolver: ' . implode( ', ', $sin_disolver ) : ''
+	)
+);
+
+comprobar(
+	'subregiones' === UHP_Topojson::objeto( 'subregion' )
+		&& 'municipios' === UHP_Topojson::objeto( 'municipio' ),
+	'Cada nivel nombra su propio objeto de topología'
+);
+
+/* ---------------------------------------------------------------- */
+echo "\n5c. Vistas que pueden llevarse al mapa\n";
+
+$territoriales = UHP_Views::territoriales();
+comprobar( count( $territoriales ) >= 4, sprintf( '%d vistas nombran municipios', count( $territoriales ) ) );
+
+foreach ( $territoriales as $t ) {
+	$valores = UHP_Rest::valores_vista( $t['id'] );
+	comprobar(
+		count( $valores ) > 0,
+		sprintf( 'La vista «%s» resuelve %d territorios de nivel %s', $t['id'], count( $valores ), $t['nivel'] )
+	);
+	$conocidos = ( 'subregion' === $t['nivel'] )
+		? array_keys( UHP_Subregiones::indice() )
+		: array_keys( UHP_Municipios::indice() );
+	$fuera     = array_diff( array_keys( $valores ), $conocidos );
+	comprobar(
+		0 === count( $fuera ),
+		sprintf( 'La vista «%s» solo usa códigos de %s conocidos', $t['id'], $t['nivel'] )
+	);
+}
+
+comprobar(
+	! UHP_Views::es_territorial( 'perfil_etnia' ),
+	'Una vista sin territorio no se declara territorial'
+);
+comprobar(
+	'subregion' === UHP_Views::nivel( 'prev_subregion_lpm' )
+		&& 'municipio' === UHP_Views::nivel( 'prev_lpm_municipios' ),
+	'Cada vista territorial declara su nivel'
+);
+
+$carga_sub = UHP_Rest::carga_geomapa( 'prev_subregion_lpm' );
+comprobar(
+	'subregion' === $carga_sub['nivel'] && 'subregiones' === $carga_sub['objeto'],
+	'Una vista subregional pide la topología de subregiones'
+);
+comprobar(
+	11 === count( $carga_sub['valores'] ),
+	sprintf( 'La vista subregional colorea %d de las 13 subregiones', count( $carga_sub['valores'] ) )
+);
+comprobar(
+	'Pie de Monte Costero' === $carga_sub['valores']['pie_de_monte_costero']['nombre'],
+	'El mapa usa el nombre cartográfico de la subregión, no el del informe'
+);
+
+$carga = UHP_Rest::carga_geomapa( 'prev_lpm_municipios' );
+comprobar( 'vista' === $carga['origen'], 'La carga del geomapa distingue el origen «vista»' );
+comprobar( ! empty( $carga['meta']['escala'] ), 'La carga del geomapa trae su rampa de color' );
+comprobar(
+	UHP_Topojson::OBJETO === $carga['objeto'],
+	'La carga del geomapa nombra el objeto de la topología'
+);
+
+$carga_ind = UHP_Rest::carga_geomapa( '', 'inventado' );
+comprobar(
+	'lpm' === $carga_ind['clave'],
+	'Un indicador inexistente cae al indicador por defecto'
 );
 
 /* ---------------------------------------------------------------- */

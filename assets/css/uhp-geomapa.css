@@ -1,0 +1,149 @@
+/* =====================================================================
+   [urkunina_geomapa] — mapa coroplético dibujado con D3plus Geomap.
+
+   Comparte el chrome de tarjeta con [urkunina_grafico] porque es un
+   gráfico más del módulo, no un visor de mapas: mismo borde, mismo
+   radio, misma sombra y los mismos tokens --uhp-*. Lo que cambia es lo
+   propio del territorio: la leyenda de rampa y la atribución de las
+   teselas.
+   ===================================================================== */
+
+.uhp-geo {
+  --uhp-geo-bg: var(--uhp-fondo, #ffffff);
+  --uhp-geo-superficie: var(--uhp-superficie, #f8fafc);
+  --uhp-geo-borde: var(--uhp-linea, #e2e8f0);
+  --uhp-geo-tinta: var(--uhp-tinta, #0f172a);
+  --uhp-geo-suave: var(--uhp-suave, #5b6773);
+  --uhp-geo-acento: var(--uhp-verde, #10A13B);
+  --uhp-geo-acento-2: var(--uhp-azul, #003366);
+
+  position: relative;
+  margin: 18px 0;
+  background: var(--uhp-geo-bg);
+  color: var(--uhp-geo-tinta);
+  border: 1px solid var(--uhp-geo-borde);
+  border-radius: var(--uhp-radio, 14px);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 6px 18px rgba(15, 23, 42, .06);
+  overflow: hidden;
+}
+
+/* Tema oscuro: la paleta del objeto 3D, igual que el tablero. */
+.uhp-geo--oscuro {
+  --uhp-geo-bg: #0C1116;
+  --uhp-geo-superficie: #131A21;
+  --uhp-geo-borde: rgba(255, 255, 255, .10);
+  --uhp-geo-tinta: #E7EDF1;
+  --uhp-geo-suave: #A9B7C1;
+  --uhp-geo-acento: #3FD26E;
+  --uhp-geo-acento-2: #FFD500;
+}
+
+/* ---------- Título ---------- */
+.uhp-geo__titulo {
+  margin: 0;
+  padding: 13px 18px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--uhp-geo-tinta);
+  background: linear-gradient(180deg, var(--uhp-geo-superficie), var(--uhp-geo-bg));
+  border-bottom: 1px solid var(--uhp-geo-borde);
+}
+.uhp-geo__titulo::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 9px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--uhp-geo-acento);
+  box-shadow: 0 0 0 3px rgba(16, 161, 59, .18);
+}
+
+/* ---------- Lienzo ---------- */
+.uhp-geo__lienzo {
+  position: relative;
+  width: 100%;
+  height: var(--uhp-geo-alto, 520px);
+  min-height: 280px;
+}
+.uhp-geo__lienzo svg { display: block; width: 100%; height: 100%; }
+
+/* Las teselas llegan como <image> dentro del SVG; suavizarlas evita el
+   dentado al escalar en pantallas de alta densidad. */
+.uhp-geo__lienzo image.d3plus-geomap-tile { image-rendering: auto; }
+
+/* ---------- Leyenda ---------- */
+.uhp-geo__leyenda {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 2;
+  min-width: 160px;
+  padding: 9px 11px;
+  font-size: .76rem;
+  color: var(--uhp-geo-tinta);
+  background: var(--uhp-geo-bg);
+  border: 1px solid var(--uhp-geo-borde);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .12);
+}
+.uhp-geo__leyenda:empty { display: none; }
+.uhp-geo__leyenda strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: .8rem;
+  color: var(--uhp-geo-acento-2);
+}
+.uhp-geo__escala { display: flex; height: 11px; border-radius: 3px; overflow: hidden; }
+.uhp-geo__escala i { flex: 1; }
+.uhp-geo__rango {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: .72rem;
+  color: var(--uhp-geo-suave);
+  font-variant-numeric: tabular-nums;
+}
+.uhp-geo__sindato {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid var(--uhp-geo-borde);
+  font-size: .72rem;
+  color: var(--uhp-geo-suave);
+}
+.uhp-geo__sindato i {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 1px solid var(--uhp-geo-borde);
+  border-radius: 2px;
+}
+
+/* ---------- Atribución de las teselas ----------
+   La escribe D3plus dentro del lienzo, derivada de la URL de la capa, y
+   es obligatoria por la licencia de OpenStreetMap y de CARTO: aquí solo
+   se le da el redondeo y el tamaño de la tarjeta. Los colores los fija el
+   JavaScript según el tema, porque D3plus los aplica en línea. */
+.uhp-geo__lienzo .d3plus-attribution {
+  border-radius: 6px 0 0 0;
+  margin: 0 !important;
+  font-size: .68rem;
+}
+.uhp-geo__lienzo .d3plus-attribution a { color: inherit; text-decoration: underline; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 640px) {
+  .uhp-geo__lienzo { height: var(--uhp-geo-alto-movil, 380px); }
+  .uhp-geo__leyenda {
+    left: 10px;
+    bottom: 10px;
+    min-width: 0;
+    padding: 7px 9px;
+    font-size: .72rem;
+  }
+}

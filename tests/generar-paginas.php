@@ -282,6 +282,55 @@ $paginas['maqueta'] = construir(
 	}
 );
 
+$paginas['geomapa'] = construir(
+	'geomapa',
+	'Geomapas de D3plus',
+	function ( $sc ) {
+		// Los dos modos que pide el enunciado: con capa base y sin ella.
+		return '<div class="pagina">' .
+			'<div data-caso="sin-teselas">' .
+			$sc->sc_geomapa(
+				array(
+					'view'    => 'prev_lpm_municipios',
+					'alto'    => '420px',
+					'teselas' => 'no',
+				)
+			) .
+			'</div>' .
+			'<div data-caso="con-teselas">' .
+			$sc->sc_geomapa(
+				array(
+					'indicador' => 'intervencion',
+					'alto'      => '420px',
+					'teselas'   => 'si',
+				)
+			) .
+			'</div>' .
+			'<div data-caso="oscuro">' .
+			$sc->sc_geomapa(
+				array(
+					'view'    => 'cancer_municipios',
+					'alto'    => '360px',
+					'tema'    => 'oscuro',
+					'leyenda' => 'no',
+				)
+			) .
+			'</div>' .
+			'<div data-caso="subregiones">' .
+			$sc->sc_geomapa(
+				array(
+					'view' => 'prev_subregion_lpm',
+					'alto' => '420px',
+				)
+			) .
+			'</div>' .
+			// Una vista sin territorio con geometría: avisa, no falla.
+			'<div data-caso="no-territorial">' .
+			$sc->sc_geomapa( array( 'view' => 'perfil_etnia' ) ) .
+			'</div></div>';
+	}
+);
+
 $paginas['mapa'] = construir(
 	'mapa',
 	'Mapa',

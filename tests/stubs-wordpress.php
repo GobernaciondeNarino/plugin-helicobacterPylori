@@ -205,6 +205,8 @@ function uhp_cargar_clases_de_datos() {
 	require_once $base . 'class-uhp-activator.php';
 	require_once $base . 'data/class-uhp-datos.php';
 	require_once $base . 'data/class-uhp-municipios.php';
+	require_once $base . 'data/class-uhp-subregiones.php';
+	require_once $base . 'data/class-uhp-topojson.php';
 	require_once $base . 'analysis/class-uhp-analisis.php';
 	require_once $base . 'data/class-uhp-views.php';
 	require_once $base . 'class-uhp-rest.php';

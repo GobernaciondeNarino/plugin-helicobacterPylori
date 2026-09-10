@@ -63,6 +63,26 @@ function fixtureDe(ruta, query) {
     return path.join(FIXTURES, 'mapa.json');
   }
 
+  /* /topojson?nivel=X  →  topojson--X.json */
+  if (base === '/topojson') {
+    const nivel = (query.nivel || '').replace(/[^a-z0-9_-]/gi, '');
+    const porNivel = path.join(FIXTURES, `topojson--${nivel}.json`);
+    if (nivel && fs.existsSync(porNivel)) { return porNivel; }
+    return path.join(FIXTURES, 'topojson.json');
+  }
+
+  /* /geomapa?view=X  →  geomapa--vista-X.json
+     /geomapa?indicador=X  →  geomapa--ind-X.json */
+  if (base === '/geomapa') {
+    const vista = (query.view || '').replace(/[^a-z0-9_-]/gi, '');
+    const porVista = path.join(FIXTURES, `geomapa--vista-${vista}.json`);
+    if (vista && fs.existsSync(porVista)) { return porVista; }
+    const ind = (query.indicador || '').replace(/[^a-z0-9_-]/gi, '');
+    const porInd = path.join(FIXTURES, `geomapa--ind-${ind}.json`);
+    if (ind && fs.existsSync(porInd)) { return porInd; }
+    return path.join(FIXTURES, 'geomapa.json');
+  }
+
   const nombre = base.replace(/^\//, '').replace(/\/$/, '') || 'index';
   return path.join(FIXTURES, `${nombre.replace(/\//g, '--')}.json`);
 }

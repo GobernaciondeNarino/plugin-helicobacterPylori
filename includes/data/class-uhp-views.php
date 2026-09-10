@@ -143,6 +143,11 @@ final class UHP_Views {
 				'measures'    => array( 'mortalidad' ),
 				'default'     => 'bar',
 				'heatmap'     => true,
+				'geo'         => array(
+					'nivel'  => 'municipio',
+					'campo'  => 'municipio',
+					'medida' => 'mortalidad',
+				),
 				'grupo'       => 'Epidemiología',
 				'fuente'      => 'Artículo derivado del proyecto — microbiota gástrica',
 			),
@@ -188,6 +193,11 @@ final class UHP_Views {
 				'measures'    => array( 'prevalencia' ),
 				'default'     => 'bar',
 				'heatmap'     => true,
+				'geo'         => array(
+					'nivel'  => 'municipio',
+					'campo'  => 'municipio',
+					'medida' => 'prevalencia',
+				),
 				'grupo'       => 'Prevalencia',
 				'fuente'      => 'Informe preliminar URKUNINA 5000',
 			),
@@ -199,6 +209,11 @@ final class UHP_Views {
 				'measures'    => array( 'prevalencia' ),
 				'default'     => 'bar',
 				'heatmap'     => true,
+				'geo'         => array(
+					'nivel'  => 'municipio',
+					'campo'  => 'municipio',
+					'medida' => 'prevalencia',
+				),
 				'grupo'       => 'Prevalencia',
 				'fuente'      => 'Informe preliminar URKUNINA 5000',
 			),
@@ -220,6 +235,11 @@ final class UHP_Views {
 				'measures'    => array( 'prevalencia' ),
 				'default'     => 'bar',
 				'heatmap'     => true,
+				'geo'         => array(
+					'nivel'  => 'subregion',
+					'campo'  => 'subregion',
+					'medida' => 'prevalencia',
+				),
 				'grupo'       => 'Prevalencia',
 				'fuente'      => 'Informe preliminar URKUNINA 5000',
 			),
@@ -231,6 +251,11 @@ final class UHP_Views {
 				'measures'    => array( 'prevalencia' ),
 				'default'     => 'bar',
 				'heatmap'     => true,
+				'geo'         => array(
+					'nivel'  => 'subregion',
+					'campo'  => 'subregion',
+					'medida' => 'prevalencia',
+				),
 				'grupo'       => 'Prevalencia',
 				'fuente'      => 'Informe preliminar URKUNINA 5000',
 			),
@@ -318,6 +343,11 @@ final class UHP_Views {
 				'measures'    => array( 'casos' ),
 				'default'     => 'bar',
 				'heatmap'     => true,
+				'geo'         => array(
+					'nivel'  => 'municipio',
+					'campo'  => 'municipio',
+					'medida' => 'casos',
+				),
 				'grupo'       => 'Casos detectados',
 				'fuente'      => 'Seguimiento clínico del proyecto',
 			),
@@ -399,9 +429,58 @@ final class UHP_Views {
 				'grupo'       => $m['grupo'],
 				'default'     => $m['default'],
 				'compatible'  => self::compatibles( $m['category'] ),
+				'geo'         => isset( $m['geo'] ) ? $m['geo'] : null,
 			);
 		}
 		return $salida;
+	}
+
+	/**
+	 * Vistas que pueden llevarse a un mapa municipal.
+	 *
+	 * Son las que nombran un territorio con geometría: municipios o
+	 * subregiones. Cada una declara en `geo` a qué nivel pertenece, qué
+	 * campo de sus filas nombra el territorio y qué medida se colorea.
+	 *
+	 * @return array<int,array{id:string,name:string,grupo:string,nivel:string,medida:string}>
+	 */
+	public static function territoriales() {
+		$salida = array();
+		foreach ( self::registro() as $id => $m ) {
+			if ( empty( $m['geo'] ) ) {
+				continue;
+			}
+			$salida[] = array(
+				'id'     => $id,
+				'name'   => $m['name'],
+				'grupo'  => $m['grupo'],
+				'nivel'  => $m['geo']['nivel'],
+				'medida' => $m['geo']['medida'],
+			);
+		}
+		return $salida;
+	}
+
+	/**
+	 * ¿Se puede dibujar la vista sobre el mapa?
+	 *
+	 * @param string $id Identificador.
+	 * @return bool
+	 */
+	public static function es_territorial( $id ) {
+		$m = self::meta( $id );
+		return ! empty( $m['geo'] );
+	}
+
+	/**
+	 * Nivel territorial de una vista: 'municipio' o 'subregion'.
+	 *
+	 * @param string $id Identificador.
+	 * @return string Cadena vacía si la vista no es territorial.
+	 */
+	public static function nivel( $id ) {
+		$m = self::meta( $id );
+		return empty( $m['geo']['nivel'] ) ? '' : $m['geo']['nivel'];
 	}
 
 	/**
