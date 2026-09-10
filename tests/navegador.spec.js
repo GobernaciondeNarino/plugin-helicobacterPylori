@@ -773,6 +773,109 @@ test.describe('Tablero', () => {
     expect(tintas.length).toBeGreaterThan(0);
   });
 
+  test('el tema claro viste todo el tablero, no solo el fondo', async ({ page }) => {
+    const errores = vigilar(page);
+    await page.goto(BASE + '/paginas/tablero-claro.html');
+
+    const db = page.locator('[data-uhp-dashboard]');
+    await expect(db).toHaveClass(/uhp-db--claro/);
+    await expect(db).toHaveAttribute('data-tema', 'claro');
+
+    await expect(page.locator('.uhp-db__kpi')).toHaveCount(6, { timeout: 20000 });
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path')).toHaveCount(64, { timeout: 25000 });
+
+    // Ni una superficie oscura debe quedar dentro del tablero claro: eso
+    // es lo que delataría un color literal olvidado en la hoja.
+    const oscuras = await page.evaluate(() => {
+      function lum(c) {
+        const m = String(c).match(/[\d.]+/g);
+        if (!m || m.length < 3) { return null; }
+        if (m.length > 3 && Number(m[3]) < 0.5) { return null; }   // casi transparente
+        return (0.2126 * Number(m[0]) + 0.7152 * Number(m[1]) + 0.0722 * Number(m[2])) / 255;
+      }
+      const malas = [];
+      document.querySelectorAll('.uhp-db, .uhp-db *').forEach((n) => {
+        // Lo que trae color de DATO queda fuera: las teselas y los
+        // polígonos del mapa, y las muestras de la rampa de la leyenda,
+        // cuyo extremo alto es rojo oscuro por definición. Aquí se
+        // vigilan las superficies de la interfaz, no la escala.
+        if (n.closest('.leaflet-pane')) { return; }
+        if (n.closest('.uhp-mapa__escala, .uhp-geo__escala')) { return; }
+        if (n.closest('.uhp-db__zona-pt') || n.classList.contains('uhp-db__zona-pt')) { return; }
+        const l = lum(getComputedStyle(n).backgroundColor);
+        if (l !== null && l < 0.3) {
+          malas.push((n.className.baseVal || n.className || n.tagName) + ' :: ' +
+            getComputedStyle(n).backgroundColor);
+        }
+      });
+      return Array.from(new Set(malas));
+    });
+    expect(oscuras, 'superficie oscura dentro del tablero claro').toEqual([]);
+
+    expect(errores).toEqual([]);
+  });
+
+  test('el tema decide también la capa base y la tinta de los gráficos', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero-claro.html');
+    await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path')).toHaveCount(64, { timeout: 25000 });
+
+    // La capa base sigue al tema: un tablero claro con teselas oscuras es
+    // el descuido más fácil al cambiar solo el tema, y aquí se vigila.
+    await expect(page.locator('[data-uhp-dashboard]')).toHaveAttribute('data-teselas', 'claro');
+
+    await expect(page.locator('[data-uhp-zona="grafico"] svg text')).not.toHaveCount(0, { timeout: 20000 });
+    const tintas = await page.evaluate(() => {
+      const set = new Set();
+      document.querySelectorAll('[data-uhp-zona="grafico"] svg text').forEach((t) => {
+        set.add(t.getAttribute('fill') || getComputedStyle(t).fill);
+      });
+      return Array.from(set);
+    });
+    // Las del tema claro del renderer; ninguna de las del oscuro.
+    const claras = ['#5B6773', '#003366', '#0F172A'];
+    tintas.forEach((t) => {
+      expect(claras, 'tinta inesperada en el gráfico del tablero claro: ' + t).toContain(t);
+    });
+    expect(tintas.length).toBeGreaterThan(0);
+  });
+
+  test('la ficha y la leyenda del mapa se tiñen con el tema', async ({ page }) => {
+    // La leyenda, la ficha y el tooltip los pinta el módulo de mapa, no el
+    // del tablero: son justo las piezas que se quedaban claras dentro del
+    // tablero oscuro antes de tokenizar la hoja.
+    for (const [pagina, oscuro] of [['tablero', true], ['tablero-claro', false]]) {
+      await page.goto(BASE + '/paginas/' + pagina + '.html');
+      await expect(page.locator('.uhp-db__mapa .leaflet-overlay-pane path'))
+        .toHaveCount(64, { timeout: 25000 });
+
+      await page.locator('.leaflet-overlay-pane path').nth(20).click({ force: true });
+      await expect(page.locator('[data-uhp-zona="ficha"]')).toHaveClass(/is-activa/, { timeout: 10000 });
+
+      const claro = await page.evaluate(() => {
+        function lum(c) {
+          const m = String(c).match(/[\d.]+/g);
+          if (!m) { return 0; }
+          return (0.2126 * Number(m[0]) + 0.7152 * Number(m[1]) + 0.0722 * Number(m[2])) / 255;
+        }
+        return {
+          fichaTinta: lum(getComputedStyle(document.querySelector('.uhp-db__ficha-t')).color),
+          leyendaTinta: lum(getComputedStyle(document.querySelector('.uhp-mapa__leyenda strong')).color),
+          atribTinta: lum(getComputedStyle(document.querySelector('.leaflet-control-attribution')).color)
+        };
+      });
+
+      // Sobre fondo oscuro las tintas son claras y al revés. Comprobar el
+      // sentido basta y no ata la prueba a un hex concreto.
+      Object.entries(claro).forEach(([donde, l]) => {
+        if (oscuro) {
+          expect(l, donde + ' debería ser tinta clara en el tablero oscuro').toBeGreaterThan(0.45);
+        } else {
+          expect(l, donde + ' debería ser tinta oscura en el tablero claro').toBeLessThan(0.45);
+        }
+      });
+    }
+  });
+
   test('en móvil las zonas se apilan sin desbordar', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 780 });
     await page.goto(BASE + '/paginas/tablero.html');

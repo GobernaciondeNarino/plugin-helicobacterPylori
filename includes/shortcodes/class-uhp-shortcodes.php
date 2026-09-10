@@ -218,7 +218,8 @@ final class UHP_Shortcodes {
 				'titulo'    => isset( $cfg['titulo'] ) ? $cfg['titulo'] : 'URKUNINA 5000',
 				'alto'      => '100vh',
 				'indicador' => isset( $cfg['indicador'] ) ? $cfg['indicador'] : 'lpm',
-				'teselas'   => isset( $cfg['teselas'] ) ? $cfg['teselas'] : 'osm',
+				'tema'      => isset( $cfg['tema'] ) ? $cfg['tema'] : 'oscuro',
+				'teselas'   => isset( $cfg['teselas'] ) ? $cfg['teselas'] : '',
 				'lat'       => isset( $cfg['mapa_lat'] ) ? $cfg['mapa_lat'] : 1.30,
 				'lon'       => isset( $cfg['mapa_lon'] ) ? $cfg['mapa_lon'] : -77.60,
 				'zoom'      => isset( $cfg['mapa_zoom'] ) ? $cfg['mapa_zoom'] : 8,
@@ -246,14 +247,28 @@ final class UHP_Shortcodes {
 
 		$id = $this->id( 'uhpdb' );
 
+		// El tema decide el aspecto de TODO el tablero: sus superficies, el
+		// mapa y la tinta de los gráficos. Un valor desconocido cae al
+		// oscuro, que es la identidad del proyecto.
+		$tema = ( 'claro' === UHP_Security::clave( $atts['tema'] ) ) ? 'claro' : 'oscuro';
+
+		// La capa base sigue al tema salvo que se pida una concreta: un
+		// tablero claro con teselas oscuras se lee fatal, y es el descuido
+		// más fácil de cometer al cambiar solo el tema.
+		$teselas = UHP_Security::clave( $atts['teselas'] );
+		if ( '' === $teselas || 'auto' === $teselas ) {
+			$teselas = ( 'claro' === $tema ) ? 'claro' : 'oscuro';
+		}
+
 		ob_start();
 		?>
 		<div id="<?php echo esc_attr( $id ); ?>"
-			class="uhp uhp-db"
+			class="uhp uhp-db uhp-db--<?php echo esc_attr( $tema ); ?>"
 			style="<?php echo esc_attr( '--uhp-alto:' . UHP_Estilos::sanitizar_css( $atts['alto'] ) . ';' . UHP_Estilos::inline( $atts ) ); ?>"
 			data-uhp-dashboard
+			data-tema="<?php echo esc_attr( $tema ); ?>"
 			data-indicador="<?php echo esc_attr( UHP_Security::clave( $atts['indicador'] ) ); ?>"
-			data-teselas="<?php echo esc_attr( UHP_Security::clave( $atts['teselas'] ) ); ?>"
+			data-teselas="<?php echo esc_attr( $teselas ); ?>"
 			data-lat="<?php echo esc_attr( $lat ); ?>"
 			data-lon="<?php echo esc_attr( $lon ); ?>"
 			data-zoom="<?php echo esc_attr( (int) $atts['zoom'] ); ?>"

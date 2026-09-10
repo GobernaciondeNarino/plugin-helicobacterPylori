@@ -190,6 +190,7 @@ final class UHP_Admin {
 		$indicadores = array_keys( UHP_Rest::indicadores_mapa() );
 		$indicador   = isset( $entrada['indicador'] ) ? UHP_Security::clave( $entrada['indicador'] ) : $def['indicador'];
 		$teselas     = isset( $entrada['teselas'] ) ? UHP_Security::clave( $entrada['teselas'] ) : $def['teselas'];
+		$tema        = isset( $entrada['tema'] ) ? UHP_Security::clave( $entrada['tema'] ) : $def['tema'];
 
 		$lat = isset( $entrada['mapa_lat'] ) ? (float) $entrada['mapa_lat'] : $def['mapa_lat'];
 		$lon = isset( $entrada['mapa_lon'] ) ? (float) $entrada['mapa_lon'] : $def['mapa_lon'];
@@ -201,7 +202,8 @@ final class UHP_Admin {
 		return array(
 			'titulo'      => sanitize_text_field( isset( $entrada['titulo'] ) ? $entrada['titulo'] : $def['titulo'] ),
 			'indicador'   => in_array( $indicador, $indicadores, true ) ? $indicador : $def['indicador'],
-			'teselas'     => in_array( $teselas, array( 'oscuro', 'osm', 'claro', 'humanitario' ), true ) ? $teselas : $def['teselas'],
+			'tema'        => in_array( $tema, array( 'oscuro', 'claro' ), true ) ? $tema : $def['tema'],
+			'teselas'     => in_array( $teselas, array( 'auto', 'oscuro', 'osm', 'claro', 'humanitario' ), true ) ? $teselas : $def['teselas'],
 			'mapa_lat'    => $lat,
 			'mapa_lon'    => $lon,
 			'mapa_zoom'   => min( 14, max( 5, isset( $entrada['mapa_zoom'] ) ? (int) $entrada['mapa_zoom'] : $def['mapa_zoom'] ) ),
@@ -955,18 +957,20 @@ final class UHP_Admin {
 				'descripcion' => __( 'Todo el proyecto en una sola pantalla: cintillo de cifras, panel de controles y filtros, mapa de OpenStreetMap al centro y panel de gráficos con su análisis. Ocupa el 100 % del ancho y toda la altura de la ventana.', 'urkunina-5000' ),
 				'ejemplos'    => array(
 					'[urkunina_dashboard]',
-					'[urkunina_dashboard indicador="hpylori" teselas="claro" zoom="9"]',
+					'[urkunina_dashboard tema="claro"]',
+					'[urkunina_dashboard indicador="hpylori" zoom="9"]',
 					'[urkunina_dashboard alto="calc(100vh - 80px)"]',
 				),
 				'atributos'   => array(
 					'titulo'    => __( 'Título mostrado en la cabecera del tablero.', 'urkunina-5000' ),
+					'tema'      => __( 'oscuro (por defecto) o claro. Viste todo el tablero: paneles, controles, fichas, mapa y la tinta de los gráficos.', 'urkunina-5000' ),
 					'alto'      => __( 'Altura del contenedor. Por defecto 100vh; use calc() si su tema tiene una barra fija.', 'urkunina-5000' ),
 					'indicador' => __( 'Indicador inicial del mapa: lpm, hpylori, cancer o intervencion.', 'urkunina-5000' ),
-					'teselas'   => __( 'Capa base: osm, claro o humanitario.', 'urkunina-5000' ),
+					'teselas'   => __( 'Capa base: auto (sigue al tema, recomendado), oscuro, claro, osm o humanitario.', 'urkunina-5000' ),
 					'lat, lon'  => __( 'Centro inicial del mapa. Debe caer dentro de Nariño.', 'urkunina-5000' ),
 					'zoom'      => __( 'Nivel de acercamiento inicial, entre 5 y 14.', 'urkunina-5000' ),
 				),
-				'nota'        => __( 'Publíquelo en una página con plantilla de ancho completo y sin barra lateral para que el contenedor aproveche la pantalla.', 'urkunina-5000' ),
+				'nota'        => __( 'Publíquelo en una página con plantilla de ancho completo y sin barra lateral para que el contenedor aproveche la pantalla. El tema por defecto sale de URKUNINA 5000 → Componentes; el atributo lo cambia página a página.', 'urkunina-5000' ),
 			),
 			array(
 				'tag'         => 'urkunina_3d',
@@ -1263,9 +1267,21 @@ final class UHP_Admin {
 						</p>
 
 						<p>
+							<label class="uhpa-label" for="uhp-db-tema"><?php esc_html_e( 'Tema del tablero', 'urkunina-5000' ); ?></label>
+							<select id="uhp-db-tema" class="uhpa-select" name="uhp_dashboard[tema]">
+								<option value="oscuro" <?php selected( 'oscuro', $cfg['tema'] ); ?>><?php esc_html_e( 'Oscuro — identidad del objeto 3D (recomendado)', 'urkunina-5000' ); ?></option>
+								<option value="claro" <?php selected( 'claro', $cfg['tema'] ); ?>><?php esc_html_e( 'Claro — para páginas de fondo blanco y para imprimir', 'urkunina-5000' ); ?></option>
+							</select>
+						</p>
+						<p class="uhpa-ayuda">
+							<?php esc_html_e( 'Viste todo el tablero: paneles, controles, mapa, fichas y la tinta de los gráficos. Cada página puede llevar el suyo con [urkunina_dashboard tema="claro"].', 'urkunina-5000' ); ?>
+						</p>
+
+						<p>
 							<label class="uhpa-label" for="uhp-db-tes"><?php esc_html_e( 'Capa base', 'urkunina-5000' ); ?></label>
 							<select id="uhp-db-tes" class="uhpa-select" name="uhp_dashboard[teselas]">
-								<option value="oscuro" <?php selected( 'oscuro', $cfg['teselas'] ); ?>><?php esc_html_e( 'Tono oscuro — identidad del objeto 3D (recomendado)', 'urkunina-5000' ); ?></option>
+								<option value="auto" <?php selected( 'auto', $cfg['teselas'] ); ?>><?php esc_html_e( 'La del tema (recomendado)', 'urkunina-5000' ); ?></option>
+								<option value="oscuro" <?php selected( 'oscuro', $cfg['teselas'] ); ?>><?php esc_html_e( 'Tono oscuro', 'urkunina-5000' ); ?></option>
 								<option value="osm" <?php selected( 'osm', $cfg['teselas'] ); ?>><?php esc_html_e( 'OpenStreetMap estándar', 'urkunina-5000' ); ?></option>
 								<option value="claro" <?php selected( 'claro', $cfg['teselas'] ); ?>><?php esc_html_e( 'Tono claro', 'urkunina-5000' ); ?></option>
 								<option value="humanitario" <?php selected( 'humanitario', $cfg['teselas'] ); ?>><?php esc_html_e( 'Humanitarian OSM', 'urkunina-5000' ); ?></option>
