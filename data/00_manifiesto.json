@@ -1,0 +1,149 @@
+{
+  "_meta": {
+    "conjunto": "Manifiesto del conjunto de datos URKUNINA 5000",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "entidad": "Gobernación de Nariño — Secretaría TIC, Innovación y Gobierno Abierto",
+    "fecha_generacion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "licencia_sugerida": "Datos abiertos institucionales — verificar con el custodio antes de publicar"
+  },
+  "documentos_fuente": [
+    {
+      "archivo": "Informe_Preliminar_URKUNINA_5000.pdf",
+      "tipo": "PDF",
+      "titulo": "Informe preliminar de mapeo de actores y avance"
+    },
+    {
+      "archivo": "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx",
+      "tipo": "PPTX",
+      "titulo": "URKUNINA 5000 — Presentación Informe Final"
+    }
+  ],
+  "archivos": [
+    {
+      "archivo": "01_proyecto.json",
+      "contenido": "Identificación, financiación y estado de ejecución del proyecto",
+      "bytes": 2531,
+      "sha256_16": "6cf17f61a3e2895a"
+    },
+    {
+      "archivo": "02_contexto_epidemiologico.json",
+      "contenido": "Incidencia de cáncer gástrico por zona de riesgo y comparación nacional",
+      "bytes": 3323,
+      "sha256_16": "b2781666ac284478"
+    },
+    {
+      "archivo": "03_municipios_cobertura.json",
+      "contenido": "Municipios priorizados del área andina de Nariño intervenidos por el proyecto",
+      "bytes": 5691,
+      "sha256_16": "41411f11926d67da"
+    },
+    {
+      "archivo": "04_prevalencia_municipal.json",
+      "contenido": "Municipios con mayor prevalencia de lesión precursora de malignidad (LPM) e infección por H. pylori",
+      "bytes": 3064,
+      "sha256_16": "20b1c2f81e521181"
+    },
+    {
+      "archivo": "05_prevalencia_subregional.json",
+      "contenido": "Prevalencia de LPM e infección por H. pylori por subregión de Nariño",
+      "bytes": 2188,
+      "sha256_16": "768e8b9f70fa0f20"
+    },
+    {
+      "archivo": "06_biobanco_muestras.json",
+      "contenido": "Muestras biológicas recolectadas y almacenadas en el biobanco",
+      "bytes": 1586,
+      "sha256_16": "2050cd4adedb5cb6"
+    },
+    {
+      "archivo": "07_perfil_sociodemografico.json",
+      "contenido": "Perfil sociodemográfico y socioeconómico de los participantes",
+      "bytes": 3608,
+      "sha256_16": "acae065e8d0a05d8"
+    },
+    {
+      "archivo": "08_resultados_tamizaje.json",
+      "contenido": "Resultados del tamizaje: infección por H. pylori y lesión precursora de malignidad",
+      "bytes": 933,
+      "sha256_16": "3030083540d1b479"
+    },
+    {
+      "archivo": "09_casos_cancer_detectados.json",
+      "contenido": "Casos de cáncer gástrico detectados mediante tamizaje endoscópico preventivo",
+      "bytes": 1757,
+      "sha256_16": "ecf290c1c5db22cd"
+    },
+    {
+      "archivo": "10_actores_institucionales.json",
+      "contenido": "Mapeo de actores institucionales del proyecto",
+      "bytes": 4007,
+      "sha256_16": "223952657b6c3387"
+    },
+    {
+      "archivo": "11_produccion_cientifica.json",
+      "contenido": "Producción científica derivada del proyecto",
+      "bytes": 3130,
+      "sha256_16": "17eb161a9e09b082"
+    },
+    {
+      "archivo": "12_metas_mga.json",
+      "contenido": "Productos de la ficha MGA y su nivel de ejecución",
+      "bytes": 4717,
+      "sha256_16": "8e8bfe739d580831"
+    },
+    {
+      "archivo": "13_retos_siguiente_fase.json",
+      "contenido": "Retos técnicos identificados para la siguiente fase del proyecto",
+      "bytes": 2435,
+      "sha256_16": "9399e6b930fa7646"
+    }
+  ],
+  "convenciones": {
+    "decimales": "Punto decimal. Los documentos fuente usan coma.",
+    "porcentajes": "Expresados como número (67.4 = 67,4%), sin el símbolo.",
+    "nulos": "null cuando el dato no está documentado en las fuentes.",
+    "moneda": "COP, valores enteros sin separadores.",
+    "bloque__meta": "Todos los archivos incluyen un bloque _meta con procedencia, unidad y notas."
+  },
+  "datos_no_incluidos": [
+    "Microdatos individuales de los 5.000 participantes (no están en los documentos fuente).",
+    "Resultados de laboratorio o histopatología por participante.",
+    "Identidad de los pacientes con cáncer detectado.",
+    "Prevalencia de LPM y H. pylori de los 45 municipios fuera de los dos top 10.",
+    "Subregiones de Nariño no reportadas en el informe (se documentan 11)."
+  ],
+  "discrepancias_detectadas": [
+    {
+      "tema": "Fecha de inicio del trabajo de campo",
+      "informe_pdf": "1 de noviembre de 2018",
+      "presentacion_pptx": "Jornadas de campo entre octubre de 2019 y abril de 2023",
+      "tratamiento": "Se conserva 2018-11-01 como inicio de ejecución del proyecto; la fecha de 2019 parece referirse al inicio de las jornadas de campo."
+    },
+    {
+      "tema": "Incidencia de la zona amarilla",
+      "informe_pdf": "40 por 100.000 (ficha MGA)",
+      "otra_fuente": "46 por 100.000 (artículo científico derivado)",
+      "tratamiento": "Se registra 40 como valor principal y 46 como valor_alternativo_publicacion."
+    },
+    {
+      "tema": "Total de muestras del biobanco",
+      "suma_por_tipo": 31190,
+      "texto_documentos": "más de 25.000 muestras",
+      "meta_mga": 45000,
+      "tratamiento": "Se registran las tres cifras; requiere validación con el custodio del biobanco (Fundación CIEDYN)."
+    },
+    {
+      "tema": "Número de publicaciones",
+      "informe_pdf": "Meta de 2 indexadas, 6 ejecutadas; la tabla lista 7 documentos",
+      "tratamiento": "Se listan los 7 documentos y se conserva 6 como publicaciones indexadas ejecutadas."
+    },
+    {
+      "tema": "Rol de UNSW Sydney",
+      "informe_pdf": "Coautoría en publicaciones recientes (microbiota, modelo multifactorial)",
+      "presentacion_pptx": "Analítica avanzada y datos de secuenciación",
+      "tratamiento": "Se combinan ambas descripciones."
+    }
+  ]
+}

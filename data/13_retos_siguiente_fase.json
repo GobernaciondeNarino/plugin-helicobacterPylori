@@ -1,0 +1,59 @@
+{
+  "_meta": {
+    "conjunto": "Retos técnicos identificados para la siguiente fase del proyecto",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf",
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+    ],
+    "fecha_extraccion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "n": 5
+  },
+  "retos": [
+    {
+      "id": 1,
+      "reto": "Tipificación de H. pylori",
+      "descripcion": "Caracterizar las cepas de la bacteria presentes en la población de Nariño"
+    },
+    {
+      "id": 2,
+      "reto": "Modelo costo-efectivo de prevención",
+      "descripcion": "Traducir los hallazgos del proyecto en un modelo replicable de prevención del cáncer gástrico"
+    },
+    {
+      "id": 3,
+      "reto": "Política pública",
+      "descripcion": "Contribuir con evidencia a la formulación de política pública departamental y nacional para la prevención y control del cáncer gástrico"
+    },
+    {
+      "id": 4,
+      "reto": "Conversatorio de socialización",
+      "descripcion": "Espacio a liderar por la Secretaría TIC, Innovación y Gobierno Abierto para socializar los resultados finales con los actores institucionales y la comunidad",
+      "responsable": "Secretaría TIC, Innovación y Gobierno Abierto"
+    },
+    {
+      "id": 5,
+      "reto": "Repositorio digital",
+      "descripcion": "Creación de un repositorio digital de los resultados, muestras y datos del proyecto, propio de la Gobernación de Nariño"
+    }
+  ],
+  "consideraciones_siguiente_fase": {
+    "base_disponible": [
+      "Cobertura territorial completa de los 55 municipios priorizados",
+      "5.000 participantes con biopsias",
+      "Biobanco con más de 25.000 muestras biológicas conservadas",
+      "Red de alianzas académicas y de salud activa",
+      "Línea de producción científica continua"
+    ],
+    "orientaciones_de_diseño": [
+      "Interfaces simples y accesibles para población con baja escolaridad formal",
+      "Estrategias de socialización pensadas para menor conectividad rural",
+      "Contenidos culturalmente pertinentes para cada comunidad",
+      "Articulación con el Instituto Nacional de Cancerología para proyección nacional",
+      "Alianzas internacionales (UNSW Sydney, Vanderbilt University) para analítica avanzada e IA"
+    ]
+  }
+}

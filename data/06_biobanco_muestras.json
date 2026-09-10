@@ -1,0 +1,60 @@
+{
+  "_meta": {
+    "conjunto": "Muestras biológicas recolectadas y almacenadas en el biobanco",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf",
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+    ],
+    "fecha_extraccion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "unidad": "número de muestras",
+    "n": 5000,
+    "notas": [
+      "La suma de los tipos documentados es 31190 muestras.",
+      "Los documentos describen el biobanco como 'más de 25.000 muestras'.",
+      "La ficha MGA registra una meta de 45.000 muestras almacenadas, cumplida al 100%; esa cifra no coincide con la suma por tipo aquí documentada."
+    ]
+  },
+  "descripcion": "Primera reserva de material biológico de la población de alto riesgo de Nariño",
+  "participantes_base": 5000,
+  "total_muestras_documentadas_por_tipo": 31190,
+  "meta_mga_almacenamiento": 45000,
+  "muestras": [
+    {
+      "tipo": "Biopsias",
+      "cantidad": 5000,
+      "observacion": "Una por participante"
+    },
+    {
+      "tipo": "Suero",
+      "cantidad": 9700
+    },
+    {
+      "tipo": "Plasma",
+      "cantidad": 9700
+    },
+    {
+      "tipo": "Buffy coat",
+      "cantidad": 4850
+    },
+    {
+      "tipo": "Saliva",
+      "cantidad": 485
+    },
+    {
+      "tipo": "Materia fecal",
+      "cantidad": 485
+    },
+    {
+      "tipo": "Orina",
+      "cantidad": 485
+    },
+    {
+      "tipo": "Hemascreen (materia fecal)",
+      "cantidad": 485
+    }
+  ]
+}

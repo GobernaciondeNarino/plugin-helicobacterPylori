@@ -1,0 +1,187 @@
+{
+  "_meta": {
+    "conjunto": "Productos de la ficha MGA y su nivel de ejecución",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf",
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+    ],
+    "fecha_extraccion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "n": 23,
+    "notas": [
+      "Los 23 productos se distribuyen en tres objetivos específicos, la creación del biobanco y el componente de gerencia e interventoría."
+    ]
+  },
+  "resumen": {
+    "productos_total": 23,
+    "productos_al_100_por_ciento": 23,
+    "ejecucion_fisica_porcentaje": 100.0,
+    "ejecucion_financiera_porcentaje": 100.0
+  },
+  "productos": [
+    {
+      "id": 1,
+      "producto": "Socialización a gerentes E.S.E. (Instituto Departamental de Salud)",
+      "meta": 55,
+      "ejecutado": 55,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 2,
+      "producto": "Socialización a alcaldes (Gobernación de Nariño)",
+      "meta": 55,
+      "ejecutado": 55,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 3,
+      "producto": "Socialización a médicos representantes de cada E.S.E.",
+      "meta": 55,
+      "ejecutado": 55,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 4,
+      "producto": "Divulgación y publicidad",
+      "meta": 55,
+      "ejecutado": 55,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 5,
+      "producto": "Toma de muestra de sangre y separación de componentes (Biobanco)",
+      "meta": 5000,
+      "ejecutado": 5000,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 6,
+      "producto": "Endoscopia de vías digestivas altas",
+      "meta": 5000,
+      "ejecutado": 5000,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 7,
+      "producto": "Diagnóstico histopatológico inicial",
+      "meta": 5000,
+      "ejecutado": 5000,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 8,
+      "producto": "Control de calidad de los estudios histopatológicos",
+      "meta": 5000,
+      "ejecutado": 5000,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 9,
+      "producto": "Intervención terapéutica, seguimiento y control",
+      "meta": 5000,
+      "ejecutado": 5000,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 10,
+      "producto": "Administración del tratamiento triconjugado secuencial",
+      "meta": 5000,
+      "ejecutado": 5000,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 11,
+      "producto": "Educación nutricional",
+      "meta": 5000,
+      "ejecutado": 5000,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 12,
+      "producto": "Formación y capacitación de alto nivel",
+      "meta": 1,
+      "ejecutado": 1,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 13,
+      "producto": "Publicación de cartilla de educación nutricional / prevención primaria",
+      "meta": 1,
+      "ejecutado": 1,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 14,
+      "producto": "Elaboración de documento técnico",
+      "meta": 1,
+      "ejecutado": 1,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 15,
+      "producto": "Publicación en revistas indexadas",
+      "meta": 2,
+      "ejecutado": 6,
+      "avance_porcentaje": 300.0
+    },
+    {
+      "id": 16,
+      "producto": "Evaluación y análisis de resultados",
+      "meta": 5000,
+      "ejecutado": 5000,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 17,
+      "producto": "Almacenamiento de muestras biológicas",
+      "meta": 45000,
+      "ejecutado": 45000,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 18,
+      "producto": "Prueba de aliento (UBT) de confirmación de tratamiento",
+      "meta": 2000,
+      "ejecutado": 2000,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 19,
+      "producto": "Endoscopia de control",
+      "meta": 2000,
+      "ejecutado": 2000,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 20,
+      "producto": "Resultados de histopatología de control",
+      "meta": 2000,
+      "ejecutado": 2000,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 21,
+      "producto": "Análisis de costo-efectividad del proyecto",
+      "meta": 1,
+      "ejecutado": 1,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 22,
+      "producto": "Administración del proyecto (gerencia)",
+      "meta": 60,
+      "ejecutado": 60,
+      "avance_porcentaje": 100.0
+    },
+    {
+      "id": 23,
+      "producto": "Interventoría, seguimiento y control del proyecto",
+      "meta": 60,
+      "ejecutado": 60,
+      "avance_porcentaje": 100.0
+    }
+  ]
+}

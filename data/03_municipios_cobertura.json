@@ -1,0 +1,300 @@
+{
+  "_meta": {
+    "conjunto": "Municipios priorizados del área andina de Nariño intervenidos por el proyecto",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf",
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+    ],
+    "fecha_extraccion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "n": 55,
+    "notas": [
+      "El orden corresponde al de los documentos fuente (orden de intervención en campo, no alfabético)."
+    ]
+  },
+  "resumen": {
+    "municipios_priorizados": 55,
+    "municipios_intervenidos": 55,
+    "cobertura_porcentaje": 100.0
+  },
+  "municipios": [
+    {
+      "orden": 1,
+      "municipio": "Mallama",
+      "intervenido": true
+    },
+    {
+      "orden": 2,
+      "municipio": "Gualmatán",
+      "intervenido": true
+    },
+    {
+      "orden": 3,
+      "municipio": "Pupiales",
+      "intervenido": true
+    },
+    {
+      "orden": 4,
+      "municipio": "Pasto",
+      "intervenido": true
+    },
+    {
+      "orden": 5,
+      "municipio": "Yacuanquer",
+      "intervenido": true
+    },
+    {
+      "orden": 6,
+      "municipio": "Puerres",
+      "intervenido": true
+    },
+    {
+      "orden": 7,
+      "municipio": "Ricaurte",
+      "intervenido": true
+    },
+    {
+      "orden": 8,
+      "municipio": "Ancuya",
+      "intervenido": true
+    },
+    {
+      "orden": 9,
+      "municipio": "La Florida",
+      "intervenido": true
+    },
+    {
+      "orden": 10,
+      "municipio": "Ospina",
+      "intervenido": true
+    },
+    {
+      "orden": 11,
+      "municipio": "Tangua",
+      "intervenido": true
+    },
+    {
+      "orden": 12,
+      "municipio": "Guachucal",
+      "intervenido": true
+    },
+    {
+      "orden": 13,
+      "municipio": "San Pablo",
+      "intervenido": true
+    },
+    {
+      "orden": 14,
+      "municipio": "El Peñol",
+      "intervenido": true
+    },
+    {
+      "orden": 15,
+      "municipio": "Barbacoas",
+      "intervenido": true
+    },
+    {
+      "orden": 16,
+      "municipio": "Arboleda",
+      "intervenido": true
+    },
+    {
+      "orden": 17,
+      "municipio": "El Tambo",
+      "intervenido": true
+    },
+    {
+      "orden": 18,
+      "municipio": "Potosí",
+      "intervenido": true
+    },
+    {
+      "orden": 19,
+      "municipio": "Imués",
+      "intervenido": true
+    },
+    {
+      "orden": 20,
+      "municipio": "Samaniego",
+      "intervenido": true
+    },
+    {
+      "orden": 21,
+      "municipio": "Los Andes (Sotomayor)",
+      "intervenido": true
+    },
+    {
+      "orden": 22,
+      "municipio": "La Unión",
+      "intervenido": true
+    },
+    {
+      "orden": 23,
+      "municipio": "El Rosario",
+      "intervenido": true
+    },
+    {
+      "orden": 24,
+      "municipio": "Iles",
+      "intervenido": true
+    },
+    {
+      "orden": 25,
+      "municipio": "Linares",
+      "intervenido": true
+    },
+    {
+      "orden": 26,
+      "municipio": "Chachagüí",
+      "intervenido": true
+    },
+    {
+      "orden": 27,
+      "municipio": "Funes",
+      "intervenido": true
+    },
+    {
+      "orden": 28,
+      "municipio": "Albán",
+      "intervenido": true
+    },
+    {
+      "orden": 29,
+      "municipio": "San Lorenzo",
+      "intervenido": true
+    },
+    {
+      "orden": 30,
+      "municipio": "Cuaspud Carlosama",
+      "intervenido": true
+    },
+    {
+      "orden": 31,
+      "municipio": "San Pedro de Cartago",
+      "intervenido": true
+    },
+    {
+      "orden": 32,
+      "municipio": "Cumbal",
+      "intervenido": true
+    },
+    {
+      "orden": 33,
+      "municipio": "Nariño",
+      "intervenido": true
+    },
+    {
+      "orden": 34,
+      "municipio": "Ipiales",
+      "intervenido": true
+    },
+    {
+      "orden": 35,
+      "municipio": "Policarpa",
+      "intervenido": true
+    },
+    {
+      "orden": 36,
+      "municipio": "Santacruz (Guachavés)",
+      "intervenido": true
+    },
+    {
+      "orden": 37,
+      "municipio": "Taminango",
+      "intervenido": true
+    },
+    {
+      "orden": 38,
+      "municipio": "Aldana",
+      "intervenido": true
+    },
+    {
+      "orden": 39,
+      "municipio": "Contadero",
+      "intervenido": true
+    },
+    {
+      "orden": 40,
+      "municipio": "Leiva",
+      "intervenido": true
+    },
+    {
+      "orden": 41,
+      "municipio": "Córdoba",
+      "intervenido": true
+    },
+    {
+      "orden": 42,
+      "municipio": "La Llanada",
+      "intervenido": true
+    },
+    {
+      "orden": 43,
+      "municipio": "Túquerres",
+      "intervenido": true
+    },
+    {
+      "orden": 44,
+      "municipio": "Cumbitara",
+      "intervenido": true
+    },
+    {
+      "orden": 45,
+      "municipio": "Providencia",
+      "intervenido": true
+    },
+    {
+      "orden": 46,
+      "municipio": "San Bernardo",
+      "intervenido": true
+    },
+    {
+      "orden": 47,
+      "municipio": "Consacá",
+      "intervenido": true
+    },
+    {
+      "orden": 48,
+      "municipio": "Belén",
+      "intervenido": true
+    },
+    {
+      "orden": 49,
+      "municipio": "Colón (Génova)",
+      "intervenido": true
+    },
+    {
+      "orden": 50,
+      "municipio": "Sandoná",
+      "intervenido": true
+    },
+    {
+      "orden": 51,
+      "municipio": "Guaitarilla",
+      "intervenido": true
+    },
+    {
+      "orden": 52,
+      "municipio": "Sapuyes",
+      "intervenido": true
+    },
+    {
+      "orden": 53,
+      "municipio": "Buesaco",
+      "intervenido": true
+    },
+    {
+      "orden": 54,
+      "municipio": "El Tablón de Gómez",
+      "intervenido": true
+    },
+    {
+      "orden": 55,
+      "municipio": "La Cruz",
+      "intervenido": true
+    }
+  ]
+}

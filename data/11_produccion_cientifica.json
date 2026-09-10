@@ -1,0 +1,104 @@
+{
+  "_meta": {
+    "conjunto": "Producción científica derivada del proyecto",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf",
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+    ],
+    "fecha_extraccion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "n": 7,
+    "notas": [
+      "La meta MGA era de 2 publicaciones indexadas; se reportan 6 ejecutadas.",
+      "Este listado incluye 7 documentos, entre ellos productos no indexados (carta al editor, boletín institucional)."
+    ]
+  },
+  "meta_mga_publicaciones_indexadas": 2,
+  "publicaciones_indexadas_ejecutadas": 6,
+  "porcentaje_avance": 300.0,
+  "publicaciones_por_anio": [
+    {
+      "anio": 2018,
+      "publicaciones": 2
+    },
+    {
+      "anio": 2019,
+      "publicaciones": 1
+    },
+    {
+      "anio": 2020,
+      "publicaciones": 0
+    },
+    {
+      "anio": 2021,
+      "publicaciones": 0
+    },
+    {
+      "anio": 2022,
+      "publicaciones": 1
+    },
+    {
+      "anio": 2023,
+      "publicaciones": 0
+    },
+    {
+      "anio": 2024,
+      "publicaciones": 0
+    },
+    {
+      "anio": 2025,
+      "publicaciones": 0
+    },
+    {
+      "anio": 2026,
+      "publicaciones": 3
+    }
+  ],
+  "publicaciones": [
+    {
+      "anio": 2018,
+      "documento": "Presentación oficial del proyecto",
+      "fuente": "Revista Colombiana de Cirugía",
+      "aporte_clave": "Define las tres zonas de riesgo de Nariño y el “enigma nariñense”"
+    },
+    {
+      "anio": 2018,
+      "documento": "Carta al Editor",
+      "fuente": "Revista Colombiana de Gastroenterología",
+      "aporte_clave": "Difusión nacional del proyecto ante la comunidad científica"
+    },
+    {
+      "anio": 2019,
+      "documento": "Boletín Hosdenar Investiga (Ed. 2)",
+      "fuente": "Hospital Universitario Departamental de Nariño",
+      "aporte_clave": "“Duo mortal”: asociación entre lesiones precursoras de malignidad e infección por H. pylori"
+    },
+    {
+      "anio": 2022,
+      "documento": "Guía de práctica clínica nacional",
+      "fuente": "Revista Colombiana de Cancerología",
+      "aporte_clave": "Recomienda la erradicación de H. pylori como estrategia central de prevención (metodología GRADE)"
+    },
+    {
+      "anio": 2026,
+      "documento": "Cuantificación de metaplasia con deep learning",
+      "fuente": "Scientific Reports",
+      "aporte_clave": "Modelo de inteligencia artificial con desempeño F1-Score de 0,80 para clasificar metaplasia intestinal"
+    },
+    {
+      "anio": 2026,
+      "documento": "Modelo ecológico multifactorial",
+      "fuente": "Cancer Epidemiology",
+      "aporte_clave": "Marco conceptual para interpretar el riesgo de cáncer gástrico según la cascada de Correa"
+    },
+    {
+      "anio": 2026,
+      "documento": "Diferencias en microbiota gástrica",
+      "fuente": "Journal of Gastroenterology and Hepatology",
+      "aporte_clave": "Compara poblaciones de Barbacoas y Cumbal; identifica posibles biomarcadores microbianos"
+    }
+  ]
+}

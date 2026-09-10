@@ -1,0 +1,94 @@
+{
+  "_meta": {
+    "conjunto": "Mapeo de actores institucionales del proyecto",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf",
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+    ],
+    "fecha_extraccion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "n": 11
+  },
+  "actores": [
+    {
+      "entidad": "Gobernación de Nariño",
+      "tipo": "Entidad territorial",
+      "rol_en_el_proyecto": "Cooperante, articulador político-administrativo",
+      "relevancia_para_la_plataforma": "Titular de la iniciativa de plataforma de datos",
+      "ambito": "nacional"
+    },
+    {
+      "entidad": "Hospital Universitario Departamental de Nariño (HUDN)",
+      "tipo": "ESE / Salud pública",
+      "rol_en_el_proyecto": "Ejecutor operativo, custodio de activos e infraestructura clínica",
+      "relevancia_para_la_plataforma": "Fuente primaria de datos clínicos",
+      "ambito": "nacional"
+    },
+    {
+      "entidad": "Instituto Departamental de Salud de Nariño (IDSN)",
+      "tipo": "Entidad territorial de salud",
+      "rol_en_el_proyecto": "Cooperante, socialización institucional con las 55 E.S.E. municipales",
+      "relevancia_para_la_plataforma": "Aliado para la articulación con la red pública de salud departamental",
+      "ambito": "nacional"
+    },
+    {
+      "entidad": "Fundación CIEDYN",
+      "tipo": "Centro de investigación",
+      "rol_en_el_proyecto": "Investigador principal, gerencia técnica y administrativa",
+      "relevancia_para_la_plataforma": "Custodio del biobanco y bases de datos históricas (2018–2023)",
+      "ambito": "nacional"
+    },
+    {
+      "entidad": "Instituto Nacional de Cancerología (INC)",
+      "tipo": "Entidad nacional de salud",
+      "rol_en_el_proyecto": "Cooperante, apoyo epidemiológico",
+      "relevancia_para_la_plataforma": "Aliado estratégico prioritario para escalar la plataforma a nivel nacional",
+      "ambito": "nacional"
+    },
+    {
+      "entidad": "Asociación Colombiana de Cirugía",
+      "tipo": "Gremio médico",
+      "rol_en_el_proyecto": "Cooperante, aporte en especie",
+      "relevancia_para_la_plataforma": "Canal de difusión y validación clínica",
+      "ambito": "nacional"
+    },
+    {
+      "entidad": "Fundación Universitaria de Ciencias de la Salud (FUCS) / Hospital San José",
+      "tipo": "Academia / Salud",
+      "rol_en_el_proyecto": "Análisis histopatológico centralizado de biopsias",
+      "relevancia_para_la_plataforma": "Aliado técnico-diagnóstico; nodo de interoperabilidad de datos de patología",
+      "ambito": "nacional"
+    },
+    {
+      "entidad": "University of New South Wales (UNSW Sydney)",
+      "tipo": "Academia internacional",
+      "rol_en_el_proyecto": "Coautoría en publicaciones recientes (microbiota, modelo multifactorial)",
+      "relevancia_para_la_plataforma": "Alianza internacional activa en analítica avanzada y datos de secuenciación",
+      "ambito": "internacional"
+    },
+    {
+      "entidad": "Universidad Nacional de Colombia",
+      "tipo": "Academia",
+      "rol_en_el_proyecto": "Desarrollo de modelo de deep learning para cuantificación de metaplasia",
+      "relevancia_para_la_plataforma": "Aliado técnico para componentes de inteligencia artificial",
+      "ambito": "nacional"
+    },
+    {
+      "entidad": "Vanderbilt University",
+      "tipo": "Academia internacional",
+      "rol_en_el_proyecto": "Patología investigadora",
+      "relevancia_para_la_plataforma": "Alianza histórica de respaldo científico internacional",
+      "ambito": "internacional"
+    },
+    {
+      "entidad": "Universidad Mariana (Pasto)",
+      "tipo": "Academia local",
+      "rol_en_el_proyecto": "Coinvestigación en nutrición y dietética",
+      "relevancia_para_la_plataforma": "Aliado local para el componente comunitario y territorial",
+      "ambito": "nacional"
+    }
+  ]
+}

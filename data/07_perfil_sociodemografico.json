@@ -1,0 +1,150 @@
+{
+  "_meta": {
+    "conjunto": "Perfil sociodemográfico y socioeconómico de los participantes",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf",
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+    ],
+    "fecha_extraccion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "n": 5000,
+    "notas": [
+      "Datos agregados de población; no contienen información individual identificable.",
+      "La distribución por género se calcula sobre n = 4.994 con dato registrado."
+    ]
+  },
+  "rango_etario": {
+    "minimo": 30,
+    "maximo": 70,
+    "unidad": "años"
+  },
+  "genero": {
+    "n_con_dato": 4994,
+    "distribucion": [
+      {
+        "categoria": "Mujeres",
+        "porcentaje": 64.2,
+        "personas": 3204
+      },
+      {
+        "categoria": "Hombres",
+        "porcentaje": 35.8,
+        "personas": 1790
+      }
+    ]
+  },
+  "pertenencia_etnica": {
+    "distribucion": [
+      {
+        "categoria": "Mestizo",
+        "porcentaje": 87.6
+      },
+      {
+        "categoria": "Indígena",
+        "porcentaje": 9.9
+      },
+      {
+        "categoria": "Afrodescendiente",
+        "porcentaje": 2.2
+      },
+      {
+        "categoria": "Otro / no reportado",
+        "porcentaje": 0.3
+      }
+    ],
+    "observaciones": [
+      "La presencia indígena es especialmente relevante en municipios de tradición amerindia como Cumbal, Aldana y Cuaspud Carlosama.",
+      "La población afrodescendiente se concentra en municipios de la zona verde de bajo riesgo, como Barbacoas."
+    ]
+  },
+  "nivel_educativo": {
+    "distribucion": [
+      {
+        "categoria": "Ninguno",
+        "porcentaje": 1.7
+      },
+      {
+        "categoria": "Primaria",
+        "porcentaje": 56.5
+      },
+      {
+        "categoria": "Secundaria",
+        "porcentaje": 26.7
+      },
+      {
+        "categoria": "Técnico / Tecnológico",
+        "porcentaje": 7.8
+      },
+      {
+        "categoria": "Profesional",
+        "porcentaje": 7.2
+      }
+    ],
+    "observacion": "Cerca del 15% alcanzó formación técnica, tecnológica o profesional."
+  },
+  "regimen_salud": {
+    "distribucion": [
+      {
+        "categoria": "Subsidiado",
+        "porcentaje": 81.9
+      },
+      {
+        "categoria": "Contributivo",
+        "porcentaje": 17.7
+      }
+    ]
+  },
+  "indicadores_socioeconomicos": [
+    {
+      "indicador": "Ingresos familiares entre $0 y $400.000",
+      "porcentaje": 53.6,
+      "moneda": "COP"
+    },
+    {
+      "indicador": "Ingresos familiares entre $400.000 y $600.000",
+      "porcentaje": 15.3,
+      "moneda": "COP"
+    },
+    {
+      "indicador": "Estrato socioeconómico 0 o 1",
+      "porcentaje": 86.2
+    },
+    {
+      "indicador": "Viven en condición de hacinamiento",
+      "porcentaje": 10.9
+    },
+    {
+      "indicador": "Cuentan con acceso a agua potable",
+      "porcentaje": 90.2
+    }
+  ],
+  "estado_nutricional": {
+    "criterio": "Índice de masa corporal",
+    "distribucion": [
+      {
+        "categoria": "Delgadez",
+        "porcentaje": 0.4,
+        "personas": null
+      },
+      {
+        "categoria": "Normal",
+        "porcentaje": 29.6,
+        "personas": null
+      },
+      {
+        "categoria": "Sobrepeso",
+        "porcentaje": 48.2,
+        "personas": 2330
+      },
+      {
+        "categoria": "Obesidad (tipo I, II, III)",
+        "porcentaje": 21.8,
+        "personas": 1053
+      }
+    ],
+    "observacion": "7 de cada 10 participantes presentan exceso de peso."
+  }
+}

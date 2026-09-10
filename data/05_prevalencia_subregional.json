@@ -1,0 +1,77 @@
+{
+  "_meta": {
+    "conjunto": "Prevalencia de LPM e infección por H. pylori por subregión de Nariño",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf"
+    ],
+    "fecha_extraccion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "unidad": "porcentaje",
+    "n": 11,
+    "notas": [
+      "Los documentos fuente reportan 11 subregiones; no se documentan las restantes.",
+      "Río Mayo concentra la mayor prevalencia combinada; Piedemonte Costero la más baja.",
+      "Ordenado de menor a mayor prevalencia de LPM, como en la fuente."
+    ]
+  },
+  "subregiones": [
+    {
+      "subregion": "Piedemonte Costero",
+      "prevalencia_lpm_porcentaje": 19.6,
+      "prevalencia_h_pylori_porcentaje": 55.0
+    },
+    {
+      "subregion": "Centro",
+      "prevalencia_lpm_porcentaje": 30.2,
+      "prevalencia_h_pylori_porcentaje": 66.2
+    },
+    {
+      "subregion": "Telembí",
+      "prevalencia_lpm_porcentaje": 31.0,
+      "prevalencia_h_pylori_porcentaje": 82.0
+    },
+    {
+      "subregion": "Obando",
+      "prevalencia_lpm_porcentaje": 32.2,
+      "prevalencia_h_pylori_porcentaje": 65.4
+    },
+    {
+      "subregion": "Guambuyaco",
+      "prevalencia_lpm_porcentaje": 33.4,
+      "prevalencia_h_pylori_porcentaje": 63.7
+    },
+    {
+      "subregion": "Juanambú",
+      "prevalencia_lpm_porcentaje": 36.2,
+      "prevalencia_h_pylori_porcentaje": 65.8
+    },
+    {
+      "subregion": "Abades",
+      "prevalencia_lpm_porcentaje": 37.4,
+      "prevalencia_h_pylori_porcentaje": 68.4
+    },
+    {
+      "subregion": "Occidente",
+      "prevalencia_lpm_porcentaje": 37.7,
+      "prevalencia_h_pylori_porcentaje": 65.9
+    },
+    {
+      "subregion": "Cordillera",
+      "prevalencia_lpm_porcentaje": 37.7,
+      "prevalencia_h_pylori_porcentaje": 72.8
+    },
+    {
+      "subregion": "La Sabana",
+      "prevalencia_lpm_porcentaje": 38.9,
+      "prevalencia_h_pylori_porcentaje": 70.7
+    },
+    {
+      "subregion": "Río Mayo",
+      "prevalencia_lpm_porcentaje": 44.3,
+      "prevalencia_h_pylori_porcentaje": 69.0
+    }
+  ]
+}

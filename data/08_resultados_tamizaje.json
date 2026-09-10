@@ -1,0 +1,36 @@
+{
+  "_meta": {
+    "conjunto": "Resultados del tamizaje: infección por H. pylori y lesión precursora de malignidad",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf",
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+    ],
+    "fecha_extraccion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "n": 5000
+  },
+  "infeccion_h_pylori": {
+    "positivos": {
+      "personas": 3370,
+      "porcentaje": 67.4
+    },
+    "negativos": {
+      "personas": 1630,
+      "porcentaje": 32.6
+    }
+  },
+  "lesion_precursora_malignidad": {
+    "positivos": {
+      "personas": 1755,
+      "porcentaje": 35.1
+    },
+    "negativos": {
+      "personas": 3245,
+      "porcentaje": 64.9
+    }
+  },
+  "metodo": "Endoscopia digestiva alta con toma de biopsias y diagnóstico histopatológico"
+}

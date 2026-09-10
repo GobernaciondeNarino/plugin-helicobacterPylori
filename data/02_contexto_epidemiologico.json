@@ -1,0 +1,96 @@
+{
+  "_meta": {
+    "conjunto": "Incidencia de cáncer gástrico por zona de riesgo y comparación nacional",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf",
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+    ],
+    "fecha_extraccion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "unidad": "casos por cada 100.000 habitantes",
+    "notas": [
+      "El 'enigma nariñense' o 'enigma colombiano' describe la coexistencia de zonas con incidencias muy distintas pese a una prevalencia alta y similar de infección por H. pylori."
+    ]
+  },
+  "zonas_de_riesgo": [
+    {
+      "zona": "Zona roja",
+      "territorio": "Norte y suroccidente del departamento",
+      "incidencia_por_100000": 150.0,
+      "nivel_riesgo": "alto",
+      "observacion": "Una de las incidencias más altas del mundo"
+    },
+    {
+      "zona": "Zona amarilla",
+      "territorio": "Pasto y municipios circunvecinos, delimitada por el río Guáitara",
+      "incidencia_por_100000": 40.0,
+      "nivel_riesgo": "intermedio",
+      "observacion": "Valor de la ficha MGA; un artículo científico posterior derivado del proyecto reporta 46 para la misma zona",
+      "valor_alternativo_publicacion": 46.0
+    },
+    {
+      "zona": "Zona verde",
+      "territorio": "Costa Pacífica",
+      "incidencia_por_100000": 6.0,
+      "nivel_riesgo": "bajo",
+      "observacion": "Mantiene alta prevalencia de infección por H. pylori pese a la baja incidencia"
+    }
+  ],
+  "comparacion_nacional": {
+    "fuente_oficial": "Instituto Nacional de Cancerología — Ministerio de Salud y Protección Social",
+    "referencia": "Pardo-Ramos y Cendales-Duarte, Revista Colombiana de Cancerología (2024)",
+    "periodo_datos": "2017-2021",
+    "posicion_nacional_cancer_estomago": {
+      "incidencia_en_hombres": "segundo cáncer más incidente",
+      "mortalidad": "segundo cáncer con mayor mortalidad, después de próstata"
+    },
+    "casos_nuevos_anuales_estimados_pais": 7679,
+    "muertes_anuales_estimadas_pais": 5306,
+    "tasas": [
+      {
+        "ambito": "Colombia hombres",
+        "tasa_por_100000": 17.3,
+        "tipo": "ajustada por edad"
+      },
+      {
+        "ambito": "Colombia mujeres",
+        "tasa_por_100000": 9.4,
+        "tipo": "ajustada por edad"
+      },
+      {
+        "ambito": "Nariño departamental",
+        "tasa_por_100000": 63.4,
+        "tipo": "ambos sexos combinados"
+      },
+      {
+        "ambito": "Zona roja de Nariño",
+        "tasa_por_100000": 150.0,
+        "tipo": "incidencia zonal"
+      }
+    ],
+    "razones": {
+      "narino_departamental_vs_colombia_hombres": 3.66,
+      "zona_roja_vs_colombia_hombres": 8.67
+    }
+  },
+  "contraste_documentado": {
+    "descripcion": "Comparación estudiada en profundidad en uno de los artículos derivados del proyecto",
+    "municipios": [
+      {
+        "municipio": "Cumbal",
+        "poblacion_predominante": "amerindia-mestiza",
+        "zona": "alto riesgo",
+        "mortalidad_por_100000": 12.25
+      },
+      {
+        "municipio": "Barbacoas",
+        "poblacion_predominante": "afrodescendiente",
+        "zona": "bajo riesgo",
+        "mortalidad_por_100000": 2.62
+      }
+    ]
+  }
+}

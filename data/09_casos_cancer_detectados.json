@@ -1,0 +1,70 @@
+{
+  "_meta": {
+    "conjunto": "Casos de cáncer gástrico detectados mediante tamizaje endoscópico preventivo",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf",
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+    ],
+    "fecha_extraccion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "n": 8,
+    "notas": [
+      "Todos los casos se detectaron en personas voluntarias asintomáticas al momento del examen.",
+      "El desenlace corresponde a la fecha del último informe disponible.",
+      "No se documentan datos individuales de los pacientes."
+    ]
+  },
+  "resumen": {
+    "casos_detectados": 8,
+    "municipios_con_casos": 7,
+    "en_atencion_por_su_eps": 5,
+    "fallecieron": 3,
+    "metodo_deteccion": "Endoscopia digestiva alta (tamizaje preventivo)",
+    "condicion_al_examen": "Asintomáticos"
+  },
+  "distribucion_por_municipio": [
+    {
+      "municipio": "Belén",
+      "casos": 2
+    },
+    {
+      "municipio": "Yacuanquer",
+      "casos": 1
+    },
+    {
+      "municipio": "Chachagüí",
+      "casos": 1
+    },
+    {
+      "municipio": "Ipiales",
+      "casos": 1
+    },
+    {
+      "municipio": "La Unión",
+      "casos": 1
+    },
+    {
+      "municipio": "Barbacoas",
+      "casos": 1
+    },
+    {
+      "municipio": "Consacá",
+      "casos": 1
+    }
+  ],
+  "desenlace": [
+    {
+      "estado": "En atención por su EPS",
+      "casos": 5,
+      "observacion": "Iniciaron tratamiento oportuno gracias a la detección temprana"
+    },
+    {
+      "estado": "Fallecieron",
+      "casos": 3,
+      "observacion": "Hasta la fecha del último informe disponible"
+    }
+  ]
+}

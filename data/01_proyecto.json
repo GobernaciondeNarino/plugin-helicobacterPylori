@@ -1,0 +1,77 @@
+{
+  "_meta": {
+    "conjunto": "Identificación, financiación y estado de ejecución del proyecto",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf",
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+    ],
+    "fecha_extraccion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)"
+  },
+  "identificacion": {
+    "nombre_corto": "URKUNINA 5000",
+    "nombre_completo": "Investigación de la prevalencia de lesiones precursoras de malignidad y efecto de la erradicación de Helicobacter pylori como prevención primaria del cáncer gástrico en el departamento de Nariño",
+    "origen_del_nombre": {
+      "vocablo": "Urkunina",
+      "lengua": "indígena",
+      "significado": "montaña de fuego",
+      "referencia": "Volcán Galeras"
+    },
+    "bpin": "2015000100064",
+    "sistema_registro": "SUIFP — Sistema General de Regalías",
+    "formulador_ficha_mga": "Hospital Universitario Departamental de Nariño",
+    "departamento": "Nariño",
+    "pais": "Colombia"
+  },
+  "aprobacion": {
+    "instancia": "OCAD del Fondo de Ciencia, Tecnología e Innovación del SGR del Departamento de Nariño",
+    "acuerdo": "Acuerdo No. 57",
+    "fecha_acuerdo": "2017-06-09"
+  },
+  "financiacion": {
+    "moneda": "COP",
+    "presupuesto_total": 11268273011,
+    "fuentes": [
+      {
+        "fuente": "Fondo de Ciencia, Tecnología e Innovación (SGR)",
+        "valor": 9588676219
+      },
+      {
+        "fuente": "Cofinanciación de entidades cooperantes",
+        "valor": 1679596792
+      }
+    ]
+  },
+  "ejecucion": {
+    "fecha_inicio": "2018-11-01",
+    "fecha_fin_trabajo_campo": "2023-04",
+    "estado": "En etapa de cierre",
+    "ejecucion_fisica_porcentaje": 100.0,
+    "ejecucion_financiera_porcentaje": 100.0,
+    "productos_mga_total": 23,
+    "productos_mga_cumplidos": 23
+  },
+  "metas_globales": {
+    "municipios_priorizados": 55,
+    "municipios_intervenidos": 55,
+    "cobertura_municipal_porcentaje": 100.0,
+    "participantes_meta": 5000,
+    "participantes_captados": 5000,
+    "cobertura_poblacional_porcentaje": 100.0,
+    "rango_etario_participantes": {
+      "minimo": 30,
+      "maximo": 70,
+      "unidad": "años"
+    },
+    "casos_cancer_gastrico_detectados": 8
+  },
+  "contexto_departamental": {
+    "poblacion_aproximada": 1800000,
+    "municipios_totales": 64,
+    "municipios_zona_andina": 55,
+    "porcentaje_poblacion_en_zona_andina": 81.7
+  }
+}

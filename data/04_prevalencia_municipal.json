@@ -1,0 +1,126 @@
+{
+  "_meta": {
+    "conjunto": "Municipios con mayor prevalencia de lesión precursora de malignidad (LPM) e infección por H. pylori",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf"
+    ],
+    "fecha_extraccion": "2026-09-09",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "unidad": "porcentaje sobre el total de participantes evaluados en cada municipio",
+    "notas": [
+      "Solo se documentan los 10 municipios con mayor prevalencia en cada indicador.",
+      "Consacá y San Bernardo aparecen en ambos listados."
+    ]
+  },
+  "top10_lesion_precursora_malignidad": [
+    {
+      "posicion": 1,
+      "municipio": "La Cruz",
+      "prevalencia_lpm_porcentaje": 54.4
+    },
+    {
+      "posicion": 2,
+      "municipio": "El Tablón de Gómez",
+      "prevalencia_lpm_porcentaje": 50.0
+    },
+    {
+      "posicion": 3,
+      "municipio": "Buesaco",
+      "prevalencia_lpm_porcentaje": 48.9
+    },
+    {
+      "posicion": 4,
+      "municipio": "Sapuyes",
+      "prevalencia_lpm_porcentaje": 47.1
+    },
+    {
+      "posicion": 5,
+      "municipio": "Guaitarilla",
+      "prevalencia_lpm_porcentaje": 46.3
+    },
+    {
+      "posicion": 6,
+      "municipio": "Sandoná",
+      "prevalencia_lpm_porcentaje": 45.0
+    },
+    {
+      "posicion": 7,
+      "municipio": "Colón (Génova)",
+      "prevalencia_lpm_porcentaje": 45.0
+    },
+    {
+      "posicion": 8,
+      "municipio": "Belén",
+      "prevalencia_lpm_porcentaje": 44.1
+    },
+    {
+      "posicion": 9,
+      "municipio": "Consacá",
+      "prevalencia_lpm_porcentaje": 43.5
+    },
+    {
+      "posicion": 10,
+      "municipio": "San Bernardo",
+      "prevalencia_lpm_porcentaje": 43.3
+    }
+  ],
+  "top10_infeccion_h_pylori": [
+    {
+      "posicion": 1,
+      "municipio": "Barbacoas",
+      "prevalencia_h_pylori_porcentaje": 82.0
+    },
+    {
+      "posicion": 2,
+      "municipio": "Cuaspud Carlosama",
+      "prevalencia_h_pylori_porcentaje": 81.4
+    },
+    {
+      "posicion": 3,
+      "municipio": "Chachagüí",
+      "prevalencia_h_pylori_porcentaje": 78.5
+    },
+    {
+      "posicion": 4,
+      "municipio": "San Bernardo",
+      "prevalencia_h_pylori_porcentaje": 77.8
+    },
+    {
+      "posicion": 5,
+      "municipio": "Cumbitara",
+      "prevalencia_h_pylori_porcentaje": 77.1
+    },
+    {
+      "posicion": 6,
+      "municipio": "San Pedro de Cartago",
+      "prevalencia_h_pylori_porcentaje": 77.1
+    },
+    {
+      "posicion": 7,
+      "municipio": "Sandoná",
+      "prevalencia_h_pylori_porcentaje": 76.0
+    },
+    {
+      "posicion": 8,
+      "municipio": "Sapuyes",
+      "prevalencia_h_pylori_porcentaje": 75.7
+    },
+    {
+      "posicion": 9,
+      "municipio": "Los Andes (Sotomayor)",
+      "prevalencia_h_pylori_porcentaje": 75.6
+    },
+    {
+      "posicion": 10,
+      "municipio": "Consacá",
+      "prevalencia_h_pylori_porcentaje": 75.4
+    }
+  ],
+  "municipios_en_ambos_listados": [
+    "Consacá",
+    "San Bernardo"
+  ]
+}
