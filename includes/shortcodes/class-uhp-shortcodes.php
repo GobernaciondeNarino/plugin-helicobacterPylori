@@ -43,6 +43,7 @@ final class UHP_Shortcodes {
 		add_shortcode( 'urkunina_cifras', array( $this, 'sc_cifras' ) );
 		add_shortcode( 'urkunina_fuente', array( $this, 'sc_fuente' ) );
 		add_shortcode( 'urkunina_mapa', array( $this, 'sc_mapa' ) );
+		add_shortcode( 'urkunina_geomapa', array( $this, 'sc_geomapa' ) );
 		add_shortcode( 'urkunina_kpi', array( $this, 'sc_kpi' ) );
 		add_shortcode( 'urkunina_tabla', array( $this, 'sc_tabla' ) );
 		add_shortcode( 'urkunina_ficha', array( $this, 'sc_ficha' ) );
@@ -694,6 +695,127 @@ final class UHP_Shortcodes {
 				<?php esc_html_e( 'Cartografía: © colaboradores de OpenStreetMap (ODbL). Geometría municipal: marco geoestadístico del DANE. Datos: proyecto URKUNINA 5000 (BPIN 2015000100064).', 'urkunina-5000' ); ?>
 			</p>
 		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	/* ================================================================= */
+	/* [urkunina_geomapa]                                                */
+	/* ================================================================= */
+
+	/**
+	 * Mapa coroplético del departamento dibujado con D3plus Geomap.
+	 *
+	 * Es el gráfico de mapa del módulo de Gráficos, no un visor: se dibuja
+	 * con el mismo motor que el resto de vistas y comparte su chrome. Para
+	 * navegar el territorio —arrastrar, acercar, consultar municipio a
+	 * municipio— está [urkunina_mapa], que va sobre Leaflet.
+	 *
+	 * La capa base de teselas se enciende y se apaga con `teselas`: sin
+	 * ella queda una plancha limpia, que es lo que pide la identidad de la
+	 * entidad para una ficha o un impreso; con ella se sitúan mejor los
+	 * municipios sobre el relieve.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_geomapa( $atts ) {
+		$atts = $this->fusionar(
+			array(
+				'view'      => '',
+				'indicador' => 'lpm',
+				'titulo'    => '',
+				'alto'      => '',
+				'tema'      => 'claro',
+				'teselas'   => 'no',
+				'capa'      => '',
+				'zoom'      => 'si',
+				'leyenda'   => 'si',
+				'etiquetas' => 'no',
+			),
+			$atts,
+			'urkunina_geomapa'
+		);
+
+		$vista = UHP_Security::clave( $atts['view'] );
+		if ( '' !== $vista && ! UHP_Views::es_territorial( $vista ) ) {
+			$nombres = wp_list_pluck( UHP_Views::territoriales(), 'id' );
+			return $this->aviso(
+				sprintf(
+					/* translators: 1: vista solicitada; 2: lista de vistas válidas. */
+					__( 'La vista «%1$s» no nombra un territorio con geometría, de modo que no puede dibujarse sobre el mapa. Vistas territoriales disponibles: %2$s.', 'urkunina-5000' ),
+					$vista,
+					implode( ', ', $nombres )
+				)
+			);
+		}
+
+		$indicadores = UHP_Rest::indicadores_mapa();
+		$indicador   = UHP_Security::clave( $atts['indicador'] );
+		if ( '' === $vista && ! isset( $indicadores[ $indicador ] ) ) {
+			$indicador = 'lpm';
+		}
+
+		UHP_Estilos::encolar_fuentes();
+		wp_enqueue_style( UHP_Assets::P . 'geomapa' );
+		UHP_Assets::encolar_libreria( 'd3plus' );
+		wp_enqueue_script( UHP_Assets::P . 'geomapa' );
+
+		$id      = $this->id( 'uhpgeo' );
+		$teselas = in_array( strtolower( (string) $atts['teselas'] ), array( 'si', 'sí', '1', 'true' ), true );
+		$capa    = UHP_Security::clave( $atts['capa'] );
+		if ( ! in_array( $capa, array( 'claro', 'oscuro', 'osm' ), true ) ) {
+			$capa = '';
+		}
+
+		// El nivel lo decide la vista, no quien maqueta: una vista subregional
+		// dibujada sobre municipios (o al revés) no cruzaría con nada.
+		$nivel  = ( '' !== $vista ) ? UHP_Views::nivel( $vista ) : 'municipio';
+		$clases = 'uhp uhp-geo uhp-geo--' . $nivel . ( 'oscuro' === $atts['tema'] ? ' uhp-geo--oscuro' : '' );
+
+		$estilo = UHP_Estilos::inline( $atts );
+		if ( '' !== $atts['alto'] ) {
+			$estilo .= '--uhp-geo-alto:' . UHP_Estilos::sanitizar_css( $atts['alto'] ) . ';';
+		}
+
+		// El título de servidor evita que la tarjeta arranque sin encabezado
+		// mientras llega la respuesta; el JavaScript solo lo rellena si se
+		// dejó vacío.
+		$rotulo = $atts['titulo'];
+		if ( '' === $rotulo && 'no' !== $atts['titulo'] ) {
+			$rotulo = ( '' !== $vista )
+				? UHP_Views::meta( $vista )['name']
+				: $indicadores[ $indicador ]['etiqueta'];
+		}
+
+		ob_start();
+		?>
+		<figure id="<?php echo esc_attr( $id ); ?>"
+			class="<?php echo esc_attr( $clases ); ?>"
+			style="<?php echo esc_attr( $estilo ); ?>"
+			data-uhp-geomapa
+			data-view="<?php echo esc_attr( $vista ); ?>"
+			data-indicador="<?php echo esc_attr( '' === $vista ? $indicador : '' ); ?>"
+			data-nivel="<?php echo esc_attr( $nivel ); ?>"
+			data-tema="<?php echo esc_attr( 'oscuro' === $atts['tema'] ? 'oscuro' : 'claro' ); ?>"
+			data-teselas="<?php echo $teselas ? '1' : '0'; ?>"
+			data-capa="<?php echo esc_attr( $capa ); ?>"
+			data-zoom="<?php echo 'no' === $atts['zoom'] ? '0' : '1'; ?>"
+			data-leyenda="<?php echo 'no' === $atts['leyenda'] ? '0' : '1'; ?>"
+			data-etiquetas="<?php echo 'si' === $atts['etiquetas'] ? '1' : '0'; ?>">
+
+			<?php if ( 'no' !== $atts['titulo'] ) : ?>
+				<figcaption class="uhp-geo__titulo"><?php echo esc_html( $rotulo ); ?></figcaption>
+			<?php endif; ?>
+
+			<div class="uhp-geo__lienzo"></div>
+
+			<?php if ( 'no' !== $atts['leyenda'] ) : ?>
+				<div class="uhp-geo__leyenda"></div>
+			<?php endif; ?>
+
+			<?php echo $this->skeleton( __( 'Cargando el mapa del departamento…', 'urkunina-5000' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+		</figure>
 		<?php
 		return ob_get_clean();
 	}

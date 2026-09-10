@@ -35,6 +35,18 @@ final class UHP_Security {
 	/** Tamaño máximo aceptado al subir un archivo de datos (2 MiB). */
 	const MAX_JSON_BYTES = 2097152;
 
+	/**
+	 * Tamaño máximo de un archivo de geometría (8 MiB).
+	 *
+	 * Los catorce archivos de cifras del proyecto no pasan de unos pocos
+	 * kilobytes y el tope de 2 MiB les sobra. La cartografía es otra cosa:
+	 * el archivo de subregiones ocupa 3 MiB solo en vértices. Se le da su
+	 * propio tope, generoso pero acotado, en vez de aflojar el de todos:
+	 * un límite laxo en los archivos de cifras sería una puerta abierta a
+	 * agotar la memoria del sitio con un JSON enorme.
+	 */
+	const MAX_GEO_BYTES = 8388608;
+
 	/* ----------------------------------------------------------------- */
 	/* Autorización                                                       */
 	/* ----------------------------------------------------------------- */

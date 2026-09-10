@@ -63,6 +63,8 @@ final class UHP_Plugin {
 		// Datos.
 		require_once $base . 'data/class-uhp-datos.php';
 		require_once $base . 'data/class-uhp-municipios.php';
+		require_once $base . 'data/class-uhp-subregiones.php';
+		require_once $base . 'data/class-uhp-topojson.php';
 		require_once $base . 'data/class-uhp-views.php';
 
 		// Análisis (generación automática de texto a partir de los datos).

@@ -91,7 +91,8 @@ final class UHP_Admin_Datos {
 		}
 
 		$tamano = (int) filesize( $tmp );
-		if ( $tamano > UHP_Security::MAX_JSON_BYTES ) {
+		$tope   = UHP_Datos::tope_bytes( $clave );
+		if ( $tamano > $tope ) {
 			$this->volver(
 				$clave,
 				'error',
@@ -99,7 +100,7 @@ final class UHP_Admin_Datos {
 					/* translators: 1: tamaño del archivo, 2: tamaño máximo. */
 					__( 'El archivo pesa %1$s y el máximo admitido es %2$s.', 'urkunina-5000' ),
 					size_format( $tamano ),
-					size_format( UHP_Security::MAX_JSON_BYTES )
+					size_format( $tope )
 				)
 			);
 		}
@@ -172,6 +173,8 @@ final class UHP_Admin_Datos {
 
 		UHP_Datos::purgar();
 		UHP_Municipios::purgar();
+		UHP_Subregiones::purgar();
+		UHP_Topojson::purgar();
 		$this->volver( '', 'ok', __( 'Caché de datos vaciada. Los componentes volverán a leer los archivos de /data.', 'urkunina-5000' ) );
 	}
 
@@ -216,8 +219,19 @@ final class UHP_Admin_Datos {
 	 */
 	private function refrescar_caches( $clave ) {
 		UHP_Datos::purgar( $clave );
+
 		if ( 'geojson' === $clave || 'cobertura' === $clave ) {
 			UHP_Municipios::purgar();
+		}
+		if ( 'geojson_subregiones' === $clave ) {
+			UHP_Subregiones::purgar();
+		}
+		// Las dos topologías se derivan de la geometría y de la lista de
+		// municipios priorizados: si cambia cualquiera de las tres, hay que
+		// reconstruirlas o el mapa seguiría sirviendo la anterior durante
+		// doce horas.
+		if ( in_array( $clave, array( 'geojson', 'geojson_subregiones', 'cobertura' ), true ) ) {
+			UHP_Topojson::purgar();
 		}
 	}
 

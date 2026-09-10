@@ -105,6 +105,42 @@ final class UHP_Rest {
 
 		register_rest_route(
 			self::NS,
+			'/topojson',
+			array(
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'ruta_topojson' ),
+				'permission_callback' => $publico,
+				'args'                => array(
+					'nivel' => array(
+						'required'          => false,
+						'sanitize_callback' => array( UHP_Security::class, 'clave' ),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
+			'/geomapa',
+			array(
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'ruta_geomapa' ),
+				'permission_callback' => $publico,
+				'args'                => array(
+					'indicador' => array(
+						'required'          => false,
+						'sanitize_callback' => array( UHP_Security::class, 'clave' ),
+					),
+					'view'      => array(
+						'required'          => false,
+						'sanitize_callback' => array( UHP_Security::class, 'clave' ),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/dashboard',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -305,6 +341,195 @@ final class UHP_Rest {
 				'features' => $features,
 			)
 		);
+	}
+
+	/**
+	 * GET /topojson — geometría municipal como topología para D3plus Geomap.
+	 *
+	 * Va por separado de los valores y con la caché más generosa del plugin:
+	 * la geometría no cambia nunca, mientras que los valores sí lo hacen cada
+	 * vez que alguien edita un JSON. Así, cambiar de indicador en el mapa no
+	 * vuelve a descargar los 70 KB del territorio.
+	 *
+	 * @param \WP_REST_Request $peticion Petición; `nivel` elige municipio o
+	 *                                    subregión.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function ruta_topojson( $peticion ) {
+		$limite = self::limitar( 'topojson', 30 );
+		if ( $limite ) {
+			return $limite;
+		}
+
+		$topo = UHP_Topojson::topologia( (string) $peticion->get_param( 'nivel' ) );
+		if ( empty( $topo['arcs'] ) ) {
+			return new \WP_Error(
+				'uhp_sin_geometria',
+				'No se pudo construir la topología municipal.',
+				array( 'status' => 503 )
+			);
+		}
+
+		return self::respuesta( $topo );
+	}
+
+	/**
+	 * GET /geomapa — valores por municipio para pintar el mapa de D3plus.
+	 *
+	 * Admite dos orígenes. Con `view` toma las filas de una vista del
+	 * catálogo que nombre municipios; con `indicador`, uno de los cuatro
+	 * indicadores del mapa. Devuelve siempre la misma forma, de modo que el
+	 * componente no tiene que saber de dónde vino el dato.
+	 *
+	 * @param \WP_REST_Request $peticion Petición.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function ruta_geomapa( $peticion ) {
+		$limite = self::limitar( 'geomapa' );
+		if ( $limite ) {
+			return $limite;
+		}
+
+		$vista = (string) $peticion->get_param( 'view' );
+		if ( '' !== $vista && ! UHP_Views::es_territorial( $vista ) ) {
+			return new \WP_Error(
+				'uhp_vista_no_territorial',
+				'Esa vista no nombra municipios, de modo que no puede dibujarse sobre el mapa.',
+				array( 'status' => 400 )
+			);
+		}
+
+		return self::respuesta(
+			self::carga_geomapa( $vista, (string) $peticion->get_param( 'indicador' ) )
+		);
+	}
+
+	/**
+	 * Carga de /geomapa.
+	 *
+	 * Vive aparte de la ruta y es pública a propósito: el generador de
+	 * fixtures de la suite la llama directamente, de modo que lo que
+	 * ejercita el navegador en las pruebas es exactamente la misma
+	 * respuesta que devuelve WordPress. Duplicar aquí la construcción de la
+	 * carga fue lo que dejó pasar dos fallos de dependencias.
+	 *
+	 * @param string $vista     Vista territorial, o cadena vacía.
+	 * @param string $indicador Indicador del mapa; se usa si no hay vista.
+	 * @return array<string,mixed>
+	 */
+	public static function carga_geomapa( $vista = '', $indicador = 'lpm' ) {
+		$catalogo = self::indicadores_mapa();
+
+		if ( '' !== $vista && UHP_Views::es_territorial( $vista ) ) {
+			$meta  = UHP_Views::meta( $vista );
+			$carga = array(
+				'origen'  => 'vista',
+				'clave'   => $vista,
+				'nivel'   => $meta['geo']['nivel'],
+				'meta'    => array(
+					'etiqueta' => $meta['name'],
+					'corto'    => $meta['name'],
+					'unidad'   => self::unidad_de( $meta['geo']['medida'] ),
+					'nota'     => $meta['description'],
+					'fuente'   => isset( $meta['fuente'] ) ? $meta['fuente'] : '',
+					// Los indicadores traen su rampa; una vista no, de modo
+					// que toma la de lesión precursora, que es la escala
+					// cálida con la que se lee el resto del proyecto.
+					'escala'   => $catalogo['lpm']['escala'],
+				),
+				'valores' => self::valores_vista( $vista ),
+			);
+		} else {
+			if ( ! isset( $catalogo[ $indicador ] ) ) {
+				$indicador = 'lpm';
+			}
+			$carga = array(
+				'origen'  => 'indicador',
+				'clave'   => $indicador,
+				// Los cuatro indicadores del mapa son municipales: se
+				// publican municipio a municipio, no por subregión.
+				'nivel'   => 'municipio',
+				'meta'    => $catalogo[ $indicador ],
+				'valores' => self::valores_mapa( $indicador ),
+			);
+		}
+
+		$carga['indicadores']   = $catalogo;
+		$carga['territoriales'] = UHP_Views::territoriales();
+		$carga['objeto']        = UHP_Topojson::objeto( $carga['nivel'] );
+
+		return $carga;
+	}
+
+	/**
+	 * Valores por territorio de una vista territorial.
+	 *
+	 * La clave del resultado es el identificador que lleva la geometría:
+	 * el DIVIPOLA en el nivel municipal y el código de subregión en el
+	 * subregional.
+	 *
+	 * @param string $vista Identificador de la vista.
+	 * @return array<string,array{valor:float,nombre:string}>
+	 */
+	public static function valores_vista( $vista ) {
+		$meta = UHP_Views::meta( $vista );
+		if ( empty( $meta['geo'] ) ) {
+			return array();
+		}
+
+		$campo  = $meta['geo']['campo'];
+		$medida = $meta['geo']['medida'];
+		$sub    = ( 'subregion' === $meta['geo']['nivel'] );
+		$v      = UHP_Views::obtener( $vista );
+		$salida = array();
+
+		foreach ( (array) ( isset( $v['data'] ) ? $v['data'] : array() ) as $fila ) {
+			if ( ! isset( $fila[ $campo ], $fila[ $medida ] ) ) {
+				continue;
+			}
+			if ( $sub ) {
+				self::acumular_subregion( $salida, $fila[ $campo ], (float) $fila[ $medida ] );
+			} else {
+				self::acumular_mapa( $salida, $fila[ $campo ], (float) $fila[ $medida ] );
+			}
+		}
+
+		return $salida;
+	}
+
+	/**
+	 * Añade una subregión a la tabla del mapa resolviendo su código.
+	 *
+	 * @param array  $salida    Tabla acumulada (por referencia).
+	 * @param string $subregion Nombre de la subregión, como lo escriban los datos.
+	 * @param float  $valor     Valor.
+	 */
+	private static function acumular_subregion( &$salida, $subregion, $valor ) {
+		$codigo = UHP_Subregiones::codigo_de( $subregion );
+		if ( '' === $codigo ) {
+			return;
+		}
+		$salida[ $codigo ] = array(
+			'valor'  => $valor,
+			// El nombre cartográfico, no el del informe: es el que el
+			// visitante ve en el mapa y en la ficha del territorio.
+			'nombre' => UHP_Subregiones::nombre_de( $codigo ),
+		);
+	}
+
+	/**
+	 * Unidad legible de una medida territorial.
+	 *
+	 * @param string $medida Nombre de la medida.
+	 * @return string
+	 */
+	private static function unidad_de( $medida ) {
+		$unidades = array(
+			'prevalencia' => '%',
+			'mortalidad'  => 'por 100.000',
+			'casos'       => 'casos',
+		);
+		return isset( $unidades[ $medida ] ) ? $unidades[ $medida ] : '';
 	}
 
 	/**

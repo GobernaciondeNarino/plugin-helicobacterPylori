@@ -114,6 +114,9 @@ final class UHP_Assets {
 		wp_register_style( self::P . 'grafico', $css . 'uhp-grafico.css', array( self::P . 'base' ), UHP_VERSION );
 		wp_register_style( self::P . '3d', $css . 'uhp-3d.css', array(), UHP_VERSION );
 		wp_register_style( self::P . 'mapa', $css . 'uhp-mapa.css', array( self::P . 'base', self::css( 'leaflet' ) ), UHP_VERSION );
+		// El geomapa no usa Leaflet: es un gráfico de D3plus, de modo que su
+		// hoja no arrastra el CSS del visor de mapas.
+		wp_register_style( self::P . 'geomapa', $css . 'uhp-geomapa.css', array( self::P . 'base' ), UHP_VERSION );
 		// El tablero reutiliza el mapa y el motor de gráficos, así que
 		// depende de sus dos hojas: la leyenda y el tooltip del mapa viven
 		// en uhp-mapa.css y sin ella saldrían sin estilo.
@@ -146,6 +149,16 @@ final class UHP_Assets {
 		);
 		wp_register_script( self::P . 'grafico', $js . 'uhp-grafico.js', array( self::P . 'renderer', self::P . 'core' ), UHP_VERSION, true );
 		wp_register_script( self::P . 'mapa', $js . 'uhp-mapa.js', array( self::handle( 'leaflet' ), self::P . 'core' ), UHP_VERSION, true );
+		// Declarar aquí d3plus Y core no es redundante: el geomapa usa las
+		// dos, y omitir una deja que WordPress imprima este archivo antes
+		// que ella. Ese error ya costó dos módulos rotos en silencio.
+		wp_register_script(
+			self::P . 'geomapa',
+			$js . 'uhp-geomapa.js',
+			array( self::handle( 'd3plus' ), self::P . 'core' ),
+			UHP_VERSION,
+			true
+		);
 		// El tablero NO habla con Leaflet directamente: construye su mapa a
 		// través de UHPMapa, que vive en uhp-mapa.js. Declararlo aquí como
 		// dependencia es lo que garantiza que encolar el tablero arrastre

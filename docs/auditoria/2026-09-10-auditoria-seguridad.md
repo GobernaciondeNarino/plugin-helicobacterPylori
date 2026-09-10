@@ -393,5 +393,64 @@ node --check (7 archivos)    →  sin errores de sintaxis
 
 ---
 
+## Anexo — revisión del módulo de geomapas
+
+*Añadido el mismo día, después del informe anterior, al incorporarse
+`[urkunina_geomapa]`, la conversión a TopoJSON y la capa subregional. El
+cuerpo del informe describe el estado en el momento de firmarlo; este anexo
+cubre lo que se añadió después y no lo reescribe.*
+
+### Superficie nueva
+
+| Superficie | Detalle |
+|---|---|
+| API REST | Dos rutas más: `/topojson` y `/geomapa`. Diez en total |
+| Shortcodes | Siete más desde el informe: los seis de texto y `[urkunina_geomapa]`. Dieciséis en total |
+| Datos | Un archivo más: `dep-sub-mun.geojson`. Dieciséis en total |
+| Clases | `UHP_Topojson` y `UHP_Subregiones` |
+
+### Hallazgos
+
+Ninguno explotable. Se comprobó lo siguiente:
+
+- **Las dos rutas nuevas son de solo lectura**, públicas y sin efectos
+  secundarios, con el mismo límite de peticiones por IP que las demás
+  (`/topojson` con el más estricto, 30 por minuto, por ser la más pesada).
+  Sus dos únicos parámetros —`nivel`, `view` e `indicador`— pasan por
+  `UHP_Security::clave()` y se contrastan contra listas cerradas: un `nivel`
+  desconocido cae a `municipio`, un indicador desconocido cae a `lpm` y una
+  vista que no sea territorial devuelve 400 sin tocar el disco.
+- **La topología se construye solo desde archivos de la lista blanca.** No hay
+  ninguna ruta de archivo derivada de la petición.
+- **`[urkunina_geomapa]` no acepta el nivel como atributo**: lo decide la vista.
+  Es una decisión de corrección de datos, no de seguridad, pero reduce a cero
+  las combinaciones que quien maqueta puede pedir. El resto de atributos se
+  sanea con `UHP_Security::clave()` o se compara contra una lista cerrada, y la
+  altura pasa por `UHP_Estilos::sanitizar_css()`.
+- **El nombre de la subregión que llega al mapa es el cartográfico**, tomado del
+  índice del plugin, no el que venga en el archivo de cifras.
+- **La atribución de las teselas la deriva D3plus de la URL de la capa**, que es
+  una constante del plugin. No hay HTML de origen externo en ese punto.
+
+### Cambio deliberado en un límite
+
+`UHP_Security::MAX_JSON_BYTES` seguía en 2 MiB y el archivo de subregiones pesa
+3 MiB. **No se aflojó el límite general**: se añadió `MAX_GEO_BYTES` (8 MiB),
+que se aplica únicamente a las entradas del registro marcadas `geo`. Los catorce
+archivos de cifras conservan su tope de 2 MiB, que es donde importa: son los
+que se editan a diario desde el panel y los que un JSON enorme podría usar para
+agotar la memoria del sitio. El tope se aplica en los tres puntos donde se mide
+el tamaño —validación, subida y el `MAX_FILE_SIZE` del formulario— a través de
+`UHP_Datos::tope_bytes()`, de modo que no puede quedar uno desalineado.
+
+### Resultado de las pruebas tras el anexo
+
+```
+php tests/test-datos.php     →  311 de 311 comprobaciones en verde
+npx playwright test          →   36 de 36 pruebas de navegador en verde
+```
+
+---
+
 *Informe generado el 10 de septiembre de 2026. Clasificación TLP:AMBER:
 compartir solo dentro de la entidad y con los responsables del despliegue.*

@@ -668,7 +668,7 @@ final class UHP_Admin {
 						<form method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 							<input type="hidden" name="action" value="<?php echo esc_attr( UHP_Admin_Datos::ACCION . 'subir' ); ?>">
 							<input type="hidden" name="archivo" value="<?php echo esc_attr( $clave ); ?>">
-							<input type="hidden" name="MAX_FILE_SIZE" value="<?php echo esc_attr( UHP_Security::MAX_JSON_BYTES ); ?>">
+							<input type="hidden" name="MAX_FILE_SIZE" value="<?php echo esc_attr( UHP_Datos::tope_bytes( $clave ) ); ?>">
 							<?php wp_nonce_field( UHP_Security::NONCE, '_uhp_nonce' ); ?>
 
 							<label class="screen-reader-text" for="uhp-subida">
@@ -689,7 +689,7 @@ final class UHP_Admin {
 									sprintf(
 										/* translators: %s: tamaño máximo permitido. */
 										__( 'Tamaño máximo: %s.', 'urkunina-5000' ),
-										size_format( UHP_Security::MAX_JSON_BYTES )
+										size_format( UHP_Datos::tope_bytes( $clave ) )
 									)
 								);
 								?>
@@ -865,6 +865,19 @@ final class UHP_Admin {
 				<?php $this->copiable( '[urkunina_analisis view="' . $v['id'] . '" modo="completo"]' ); ?>
 				<?php $this->copiable( '[urkunina_tabla view="' . $v['id'] . '"]' ); ?>
 
+				<?php if ( UHP_Views::es_territorial( $v['id'] ) ) : ?>
+					<p class="uhpa-nota">
+						<?php
+						echo esc_html(
+							'subregion' === UHP_Views::nivel( $v['id'] )
+								? __( 'Esta vista nombra subregiones: también puede llevarse al mapa.', 'urkunina-5000' )
+								: __( 'Esta vista nombra municipios: también puede llevarse al mapa.', 'urkunina-5000' )
+						);
+						?>
+					</p>
+					<?php $this->copiable( '[urkunina_geomapa view="' . $v['id'] . '"]' ); ?>
+				<?php endif; ?>
+
 				<?php if ( $completa && $completa['fuente'] ) : ?>
 					<p class="uhpa-nota"><?php echo esc_html( 'Fuente: ' . $completa['fuente'] ); ?></p>
 				<?php endif; ?>
@@ -992,6 +1005,30 @@ final class UHP_Admin {
 					'barra'    => __( 'si o no. Oculta toda la barra de herramientas.', 'urkunina-5000' ),
 				),
 				'nota'        => __( 'Dibuja SOLO el gráfico. La descripción, la interpretación, el resumen, las cifras y la fuente son shortcodes aparte, para poder maquetarlos donde convenga. No olvide publicar la fuente: su cita es obligatoria.', 'urkunina-5000' ),
+			),
+			array(
+				'tag'         => 'urkunina_geomapa',
+				'titulo'      => __( 'Geomapa de una vista territorial', 'urkunina-5000' ),
+				'descripcion' => __( 'Mapa coroplético dibujado con D3plus Geomap: es un gráfico más del módulo, del mismo motor y con la misma lectura que el resto de vistas. Colorea el territorio a partir de una vista del catálogo que nombre municipios o subregiones, o de uno de los cuatro indicadores del mapa. La capa base de teselas se enciende y se apaga desde el propio shortcode.', 'urkunina-5000' ),
+				'ejemplos'    => array(
+					'[urkunina_geomapa view="prev_lpm_municipios"]',
+					'[urkunina_geomapa view="prev_subregion_lpm" alto="520px"]',
+					'[urkunina_geomapa indicador="intervencion" teselas="si"]',
+					'[urkunina_geomapa view="cancer_municipios" tema="oscuro" leyenda="no"]',
+				),
+				'atributos'   => array(
+					'view'      => __( 'Vista territorial del catálogo. El nivel —municipios o subregiones— lo decide la propia vista.', 'urkunina-5000' ),
+					'indicador' => __( 'Alternativa a «view»: lpm, hpylori, cancer o intervencion. Siempre municipal.', 'urkunina-5000' ),
+					'teselas'   => __( 'si o no (por defecto, no). Enciende la capa base de cartografía bajo el territorio.', 'urkunina-5000' ),
+					'capa'      => __( 'claro, oscuro u osm. Elige el proveedor de teselas; si se omite, se usa el que corresponde al tema.', 'urkunina-5000' ),
+					'titulo'    => __( 'Sustituye el título; con «no» se oculta.', 'urkunina-5000' ),
+					'alto'      => __( 'Altura del lienzo.', 'urkunina-5000' ),
+					'tema'      => __( 'claro u oscuro.', 'urkunina-5000' ),
+					'leyenda'   => __( 'si o no. Muestra la rampa de color con su rango.', 'urkunina-5000' ),
+					'etiquetas' => __( 'si o no. Escribe el nombre sobre cada territorio; conviene solo en mapas grandes.', 'urkunina-5000' ),
+					'zoom'      => __( 'si o no. Permite acercar y desplazar el mapa.', 'urkunina-5000' ),
+				),
+				'nota'        => __( 'Con teselas encendidas, la atribución de OpenStreetMap y del proveedor se imprime sola: es condición de la licencia y no debe retirarse. Para navegar el territorio municipio a municipio, con ficha emergente y selector de indicador, use [urkunina_mapa], que va sobre Leaflet.', 'urkunina-5000' ),
 			),
 			array(
 				'tag'         => 'urkunina_mapa',

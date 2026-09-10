@@ -18,6 +18,7 @@ use GobernacionNarino\Urkunina\UHP_Datos;
 use GobernacionNarino\Urkunina\UHP_Municipios;
 use GobernacionNarino\Urkunina\UHP_Views;
 use GobernacionNarino\Urkunina\UHP_Rest;
+use GobernacionNarino\Urkunina\UHP_Topojson;
 
 $destino = isset( $argv[1] ) ? rtrim( $argv[1], '/' ) : __DIR__ . '/fixtures';
 if ( ! is_dir( $destino ) ) {
@@ -124,6 +125,25 @@ escribir(
 		'features' => $features,
 	)
 );
+
+/* ---- /topojson por nivel (la topología que consume D3plus Geomap) ---- */
+foreach ( UHP_Topojson::NIVELES as $nivel ) {
+	escribir( $destino, 'topojson--' . $nivel, UHP_Topojson::topologia( $nivel, true ) );
+}
+copy( $destino . '/topojson--municipio.json', $destino . '/topojson.json' );
+
+/* ---- /geomapa por indicador y por vista territorial ----
+   Se llama a la MISMA función que usa la ruta real: si la carga cambia,
+   los fixtures cambian con ella y la suite no puede quedarse probando una
+   respuesta que ya no existe. */
+foreach ( array_keys( UHP_Rest::indicadores_mapa() ) as $clave ) {
+	escribir( $destino, 'geomapa--ind-' . $clave, UHP_Rest::carga_geomapa( '', $clave ) );
+}
+copy( $destino . '/geomapa--ind-lpm.json', $destino . '/geomapa.json' );
+
+foreach ( UHP_Views::territoriales() as $t ) {
+	escribir( $destino, 'geomapa--vista-' . $t['id'], UHP_Rest::carga_geomapa( $t['id'] ) );
+}
 
 /* ---- /dashboard ---- */
 escribir(
