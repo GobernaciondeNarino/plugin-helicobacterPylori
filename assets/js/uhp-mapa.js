@@ -66,7 +66,10 @@
    * Crea un mapa coroplético.
    *
    * @param {HTMLElement} nodo Contenedor del mapa.
-   * @param {Object}      opts lat, lon, zoom, teselas, indicador, alSeleccionar.
+   * @param {Object}      opts lat, lon, zoom, teselas, tema, indicador,
+   *                           nivel ('municipio' | 'subregion' |
+   *                           'departamento'), contorno (bool) y los
+   *                           avisos alSeleccionar / alDeseleccionar.
    * @return {Object|null} Controlador o null si Leaflet no está disponible.
    */
   function crear(nodo, opts) {
@@ -99,8 +102,13 @@
     }).addTo(mapa);
 
     var estado = {
+      nivel: opts.nivel || 'municipio',
+      indicador: opts.indicador || 'lpm',
       geo: null,
       capa: null,
+      // Contorno del departamento por debajo de la capa activa: da marco a
+      // las subregiones y a los municipios sin competir con ellos.
+      contorno: null,
       valores: {},
       meta: null,
       min: 0,
@@ -111,8 +119,16 @@
 
     /* ---------------- Estilo ---------------- */
 
-    function colorDe(divipola) {
-      var v = estado.valores[divipola];
+    /* El identificador es el mismo campo en las tres capas —lo pone
+       UHP_Topojson::features()—, de modo que nada de aquí abajo tiene que
+       saber si está dibujando municipios o subregiones. */
+    function idDe(feature) {
+      var p = (feature && feature.properties) || {};
+      return p.id || p.divipola || p.codigo || '';
+    }
+
+    function colorDe(id) {
+      var v = estado.valores[id];
       if (!v || !estado.meta) { return tema.sinDato; }
       var rango = (estado.max - estado.min) || 1;
       return C.rampa(estado.meta.escala, (v.valor - estado.min) / rango);
@@ -120,12 +136,15 @@
 
     function estilo(feature) {
       var p = feature.properties || {};
-      var tieneDato = !!estado.valores[p.divipola];
+      var id = idDe(feature);
+      var tieneDato = !!estado.valores[id];
       return {
-        fillColor: colorDe(p.divipola),
+        fillColor: colorDe(id),
         fillOpacity: tieneDato ? 0.85 : 0.45,
         color: p.priorizado ? tema.priorizado : tema.borde,
-        weight: p.priorizado ? 0.9 : 0.6,
+        // Las subregiones y el departamento llevan trazo más grueso: son
+        // menos y más grandes, y con el grosor municipal se difuminan.
+        weight: 'municipio' !== estado.nivel ? 1.4 : (p.priorizado ? 0.9 : 0.6),
         opacity: 0.9
       };
     }
@@ -136,8 +155,9 @@
 
     /* ---------------- Interacción ---------------- */
 
-    function porCadaMunicipio(feature, capa) {
+    function porCadaTerritorio(feature, capa) {
       var p = feature.properties || {};
+      var id = idDe(feature);
 
       capa.on({
         mouseover: function (e) {
@@ -145,20 +165,15 @@
           if (e.target.bringToFront) { e.target.bringToFront(); }
         },
         mouseout: function (e) {
-          if (estado.seleccion === p.divipola) { return; }
+          if (estado.seleccion === id) { return; }
           e.target.setStyle(estilo(feature));
         },
-        click: function () {
-          seleccionar(p.divipola);
-          if (typeof opts.alSeleccionar === 'function') {
-            opts.alSeleccionar(p.divipola, p.nombre, estado.valores[p.divipola] || null);
-          }
-        }
+        click: function () { alternar(id, p); }
       });
 
       capa.bindTooltip(textoTooltip(p), { sticky: true, direction: 'auto', className: 'uhp-mapa__tip' });
 
-      // Accesible por teclado: cada municipio es un elemento enfocable.
+      // Accesible por teclado: cada territorio es un elemento enfocable.
       if (capa.getElement) {
         capa.once('add', function () {
           var el = capa.getElement();
@@ -169,18 +184,30 @@
           el.addEventListener('keydown', function (ev) {
             if (ev.key === 'Enter' || ev.key === ' ') {
               ev.preventDefault();
-              seleccionar(p.divipola);
-              if (typeof opts.alSeleccionar === 'function') {
-                opts.alSeleccionar(p.divipola, p.nombre, estado.valores[p.divipola] || null);
-              }
+              alternar(id, p);
             }
           });
         });
       }
     }
 
+    /* Volver a pulsar el territorio ya seleccionado lo deselecciona: sin
+       esto, quien filtra por un municipio no tiene forma de volver al
+       departamento sin buscar el botón de la ficha. */
+    function alternar(id, p) {
+      if (estado.seleccion === id) {
+        seleccionar('');
+        if (typeof opts.alDeseleccionar === 'function') { opts.alDeseleccionar(); }
+        return;
+      }
+      seleccionar(id);
+      if (typeof opts.alSeleccionar === 'function') {
+        opts.alSeleccionar(id, p.nombre, estado.valores[id] || null, estado.nivel);
+      }
+    }
+
     function textoPlano(p) {
-      var v = estado.valores[p.divipola];
+      var v = estado.valores[p.id || p.divipola];
       var partes = [p.nombre];
       if (v && estado.meta) {
         partes.push(estado.meta.etiqueta + ': ' + C.num(v.valor) +
@@ -193,7 +220,7 @@
     }
 
     function textoTooltip(p) {
-      var v = estado.valores[p.divipola];
+      var v = estado.valores[p.id || p.divipola];
       var html = '<strong>' + C.esc(p.nombre) + '</strong>';
       if (v && estado.meta) {
         var unidad = estado.meta.unidad === '%' ? ' %' : ' ' + C.esc(estado.meta.unidad);
@@ -205,15 +232,20 @@
       if (p.priorizado) {
         html += '<br><span class="uhp-mapa__tip-etq">Municipio priorizado</span>';
       }
+      if (p.subregion) {
+        html += '<br><span class="uhp-mapa__tip-etq">Subregión ' + C.esc(p.subregion) + '</span>';
+      }
+      if (p.municipios) {
+        html += '<br><span class="uhp-mapa__tip-etq">' + C.esc(p.municipios) + ' municipios</span>';
+      }
       return html;
     }
 
-    function seleccionar(divipola) {
-      estado.seleccion = divipola;
+    function seleccionar(id) {
+      estado.seleccion = id || '';
       if (!estado.capa) { return; }
       estado.capa.eachLayer(function (l) {
-        var p = (l.feature && l.feature.properties) || {};
-        l.setStyle(p.divipola === divipola ? estiloResaltado() : estilo(l.feature));
+        l.setStyle(idDe(l.feature) === estado.seleccion ? estiloResaltado() : estilo(l.feature));
       });
     }
 
@@ -285,7 +317,7 @@
       if (estado.capa) { mapa.removeLayer(estado.capa); }
       estado.capa = L.geoJSON(estado.geo, {
         style: estilo,
-        onEachFeature: porCadaMunicipio
+        onEachFeature: porCadaTerritorio
       }).addTo(mapa);
 
       try {
@@ -306,6 +338,28 @@
       pintarLeyenda();
     }
 
+    /* Contorno del departamento bajo la capa activa. Se dibuja una sola
+       vez y no se toca al cambiar de capa ni de indicador: es el marco,
+       no un dato. Sin él, las subregiones flotan sin referencia y los
+       municipios sin dato se pierden contra el fondo. */
+    function pintarContorno(geo) {
+      if (estado.contorno) { mapa.removeLayer(estado.contorno); }
+      estado.contorno = L.geoJSON(geo, {
+        interactive: false,
+        // Clase propia: es marco, no dato. Permite distinguirlo del
+        // coropleto tanto en la hoja de estilos como en las pruebas, que
+        // cuentan territorios y no deben contar el contorno.
+        className: 'uhp-mapa__contorno',
+        style: {
+          fill: false,
+          color: tema.borde,
+          weight: 1.6,
+          opacity: 0.75
+        }
+      }).addTo(mapa);
+      if (estado.contorno.bringToBack) { estado.contorno.bringToBack(); }
+    }
+
     /**
      * Cambia el indicador que colorea el mapa sin recargar la geometría.
      *
@@ -313,7 +367,8 @@
      * @return {Promise}
      */
     function cambiarIndicador(indicador) {
-      return C.rest('/mapa', { indicador: indicador }).then(function (r) {
+      estado.indicador = indicador;
+      return C.rest('/mapa', { indicador: indicador, nivel: estado.nivel }).then(function (r) {
         estado.valores = r.valores || {};
         estado.meta = r.meta || null;
         calcularRango();
@@ -322,16 +377,57 @@
       });
     }
 
-    function iniciar() {
+    /**
+     * Cambia la capa territorial: municipios, subregiones o departamento.
+     *
+     * Recarga geometría y valores porque las dos cosas cambian con el
+     * nivel, pero deja intactos el encuadre del contorno y el indicador
+     * elegido. La selección se limpia: un municipio no es una selección
+     * válida en la capa de subregiones.
+     *
+     * @param {string} nivel Nivel territorial.
+     * @return {Promise}
+     */
+    function cambiarNivel(nivel) {
+      estado.nivel = nivel || 'municipio';
+      estado.seleccion = '';
       nodo.classList.add('is-cargando');
+
       return Promise.all([
-        C.restCache('/geo'),
-        C.rest('/mapa', { indicador: opts.indicador || 'lpm' })
+        C.restCache('/geo', { nivel: estado.nivel }),
+        C.rest('/mapa', { indicador: estado.indicador, nivel: estado.nivel })
       ]).then(function (res) {
         estado.geo = res[0];
         estado.valores = res[1].valores || {};
         estado.meta = res[1].meta || null;
         calcularRango();
+        pintarGeometria();
+        pintarLeyenda();
+        nodo.classList.remove('is-cargando');
+        return res[1];
+      }).catch(function (e) {
+        nodo.classList.remove('is-cargando');
+        throw e;
+      });
+    }
+
+    function iniciar() {
+      nodo.classList.add('is-cargando');
+      var peticiones = [
+        C.restCache('/geo', { nivel: estado.nivel }),
+        C.rest('/mapa', { indicador: estado.indicador, nivel: estado.nivel })
+      ];
+      // El contorno solo se pide si se va a usar y no es ya la capa activa.
+      if (opts.contorno && 'departamento' !== estado.nivel) {
+        peticiones.push(C.restCache('/geo', { nivel: 'departamento' }));
+      }
+
+      return Promise.all(peticiones).then(function (res) {
+        estado.geo = res[0];
+        estado.valores = res[1].valores || {};
+        estado.meta = res[1].meta || null;
+        calcularRango();
+        if (res[2]) { pintarContorno(res[2]); }
         pintarGeometria();
         pintarLeyenda();
         nodo.classList.remove('is-cargando');
@@ -348,6 +444,7 @@
       mapa: mapa,
       iniciar: iniciar,
       cambiarIndicador: cambiarIndicador,
+      cambiarNivel: cambiarNivel,
       seleccionar: seleccionar,
       redimensionar: function () { mapa.invalidateSize(); },
       estado: estado

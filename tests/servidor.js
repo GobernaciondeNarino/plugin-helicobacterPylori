@@ -56,11 +56,30 @@ function fixtureDe(ruta, query) {
     return path.join(FIXTURES, `render--${vista}.json`);
   }
 
+  /* /mapa?indicador=X&nivel=Y  →  mapa--X--Y.json */
   if (base === '/mapa') {
     const ind = (query.indicador || '').replace(/[^a-z0-9_-]/gi, '');
+    const niv = (query.nivel || '').replace(/[^a-z0-9_-]/gi, '');
+    const conAmbos = path.join(FIXTURES, `mapa--${ind}--${niv}.json`);
+    if (ind && niv && fs.existsSync(conAmbos)) { return conAmbos; }
     const conInd = path.join(FIXTURES, `mapa--${ind}.json`);
     if (ind && fs.existsSync(conInd)) { return conInd; }
     return path.join(FIXTURES, 'mapa.json');
+  }
+
+  /* /geo?nivel=X  →  geo--X.json */
+  if (base === '/geo') {
+    const niv = (query.nivel || '').replace(/[^a-z0-9_-]/gi, '');
+    const porNivel = path.join(FIXTURES, `geo--${niv}.json`);
+    if (niv && fs.existsSync(porNivel)) { return porNivel; }
+    return path.join(FIXTURES, 'geo.json');
+  }
+
+  /* /territorio?nivel=X&id=Y  →  territorio--X-Y.json */
+  if (base === '/territorio') {
+    const niv = (query.nivel || 'departamento').replace(/[^a-z0-9_-]/gi, '');
+    const id = (query.id || '52').replace(/[^a-z0-9_-]/gi, '');
+    return path.join(FIXTURES, `territorio--${niv}-${id}.json`);
   }
 
   /* /topojson?nivel=X  →  topojson--X.json */
@@ -75,6 +94,17 @@ function fixtureDe(ruta, query) {
      /geomapa?indicador=X  →  geomapa--ind-X.json */
   if (base === '/geomapa') {
     const vista = (query.view || '').replace(/[^a-z0-9_-]/gi, '');
+    // La serie viaja como texto: el fixture se numera, así que se resuelve
+    // leyendo cuál de los archivos por serie coincide con la pedida.
+    if (vista && query.serie) {
+      for (let i = 0; i < 8; i++) {
+        const f = path.join(FIXTURES, `geomapa--vista-${vista}--serie${i}.json`);
+        if (!fs.existsSync(f)) { break; }
+        try {
+          if (JSON.parse(fs.readFileSync(f, 'utf8')).serie === query.serie) { return f; }
+        } catch (e) { /* fixture ilegible: se sigue buscando */ }
+      }
+    }
     const porVista = path.join(FIXTURES, `geomapa--vista-${vista}.json`);
     if (vista && fs.existsSync(porVista)) { return porVista; }
     const ind = (query.indicador || '').replace(/[^a-z0-9_-]/gi, '');

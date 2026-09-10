@@ -46,8 +46,17 @@ final class UHP_Topojson {
 	/** Nombre del objeto dentro de la topología subregional. */
 	const OBJETO_SUB = 'subregiones';
 
-	/** Niveles territoriales que se pueden dibujar. */
+	/**
+	 * Niveles con topología para D3plus Geomap.
+	 *
+	 * El departamento no está: un coropleto de un solo polígono no dice
+	 * nada. Como GEOMETRÍA sí existe —`features( 'departamento' )`— porque
+	 * el mapa del tablero dibuja su contorno.
+	 */
 	const NIVELES = array( 'municipio', 'subregion' );
+
+	/** Niveles de los que se puede pedir geometría. */
+	const NIVELES_GEO = array( 'municipio', 'subregion', 'departamento' );
 
 	/**
 	 * Topología de un nivel territorial, lista para D3plus Geomap.
@@ -116,11 +125,39 @@ final class UHP_Topojson {
 	/* ----------------------------------------------------------------- */
 
 	/**
+	 * Geometría de un nivel territorial, como GeoJSON.
+	 *
+	 * Es la fuente ÚNICA de la que salen tanto el GeoJSON que dibuja
+	 * Leaflet en el tablero como la topología que consume D3plus Geomap.
+	 * Tenerla una sola vez es lo que garantiza que los dos mapas dibujen
+	 * exactamente el mismo departamento: si cada uno construyera lo suyo,
+	 * bastaría un cambio en uno para que dejaran de coincidir sin que nada
+	 * lo avisara.
+	 *
+	 * Las propiedades vienen ya adelgazadas —de las ~90 columnas censales
+	 * del DANE solo sobreviven las que el mapa usa— y todas llevan `id`,
+	 * que es la clave con la que se cruzan los valores.
+	 *
+	 * @param string $nivel 'municipio', 'subregion' o 'departamento'.
+	 * @return array<int,array> Features de GeoJSON.
+	 */
+	public static function features( $nivel = 'municipio' ) {
+		switch ( $nivel ) {
+			case 'subregion':
+				return self::features_subregiones();
+			case 'departamento':
+				return self::features_departamento();
+			default:
+				return self::features_municipios();
+		}
+	}
+
+	/**
 	 * Los 64 municipios, con su subregión de pertenencia.
 	 *
-	 * @return array<string,mixed>
+	 * @return array<int,array>
 	 */
-	private static function de_municipios() {
+	private static function features_municipios() {
 		$geo = UHP_Datos::leer( 'geojson' );
 		if ( empty( $geo['features'] ) ) {
 			return array();
@@ -128,29 +165,35 @@ final class UHP_Topojson {
 
 		$prioritarios = UHP_Municipios::set_priorizados();
 		$subregiones  = UHP_Subregiones::por_municipio();
+		$salida       = array();
 
-		return self::construir(
-			$geo['features'],
-			self::OBJETO,
-			static function ( $p ) use ( $prioritarios, $subregiones ) {
-				if ( empty( $p['MPIO_CDPMP'] ) ) {
-					return null;
-				}
-				$divipola = (string) $p['MPIO_CDPMP'];
-				$sub      = isset( $subregiones[ $divipola ] ) ? $subregiones[ $divipola ] : array();
-				return array(
-					'id'         => $divipola,
-					'propiedades' => array(
-						'divipola'   => $divipola,
-						'nombre'     => UHP_Municipios::titulo( (string) $p['MPIO_CNMBR'] ),
-						'lat'        => isset( $p['LATITUD'] ) ? round( (float) $p['LATITUD'], 5 ) : null,
-						'lon'        => isset( $p['LONGITUD'] ) ? round( (float) $p['LONGITUD'], 5 ) : null,
-						'priorizado' => isset( $prioritarios[ $divipola ] ),
-						'subregion'  => isset( $sub['nombre'] ) ? $sub['nombre'] : '',
-					),
-				);
+		foreach ( (array) $geo['features'] as $f ) {
+			$p = isset( $f['properties'] ) ? $f['properties'] : array();
+			if ( empty( $p['MPIO_CDPMP'] ) || empty( $f['geometry'] ) ) {
+				continue;
 			}
-		);
+			$divipola = (string) $p['MPIO_CDPMP'];
+			$sub      = isset( $subregiones[ $divipola ] ) ? $subregiones[ $divipola ] : array();
+
+			$salida[] = array(
+				'type'       => 'Feature',
+				'id'         => $divipola,
+				'properties' => array(
+					'id'               => $divipola,
+					'nivel'            => 'municipio',
+					'divipola'         => $divipola,
+					'nombre'           => UHP_Municipios::titulo( (string) $p['MPIO_CNMBR'] ),
+					'lat'              => isset( $p['LATITUD'] ) ? round( (float) $p['LATITUD'], 5 ) : null,
+					'lon'              => isset( $p['LONGITUD'] ) ? round( (float) $p['LONGITUD'], 5 ) : null,
+					'priorizado'       => isset( $prioritarios[ $divipola ] ),
+					'subregion'        => isset( $sub['nombre'] ) ? $sub['nombre'] : '',
+					'subregion_codigo' => isset( $sub['codigo'] ) ? $sub['codigo'] : '',
+				),
+				'geometry'   => $f['geometry'],
+			);
+		}
+
+		return $salida;
 	}
 
 	/**
@@ -163,12 +206,101 @@ final class UHP_Topojson {
 	 * está generalizada, y el resultado son 13 polígonos de unos pocos
 	 * kilobytes con exactamente el mismo contorno exterior.
 	 *
-	 * @return array<string,mixed>
+	 * @return array<int,array>
 	 */
-	private static function de_subregiones() {
+	private static function features_subregiones() {
+		list( $municipales, $fichas ) = self::capas_del_archivo();
+		$salida = array();
+
+		foreach ( $municipales as $codigo => $geometrias ) {
+			if ( ! isset( $fichas[ $codigo ] ) ) {
+				continue;
+			}
+			$poligonos = self::disolver( $geometrias );
+			if ( empty( $poligonos ) ) {
+				continue;
+			}
+			$p = $fichas[ $codigo ];
+
+			$salida[] = array(
+				'type'       => 'Feature',
+				'id'         => (string) $codigo,
+				'properties' => array(
+					'id'         => (string) $codigo,
+					'nivel'      => 'subregion',
+					'codigo'     => (string) $codigo,
+					'nombre'     => (string) $p['nombre'],
+					'municipios' => isset( $p['n_municipios'] ) ? (int) $p['n_municipios'] : 0,
+					'area_km2'   => isset( $p['area_km2'] ) ? (float) $p['area_km2'] : 0.0,
+				),
+				'geometry'   => array(
+					'type'        => 'MultiPolygon',
+					'coordinates' => $poligonos,
+				),
+			);
+		}
+
+		return $salida;
+	}
+
+	/**
+	 * El contorno del departamento, disuelto de sus 64 municipios.
+	 *
+	 * El archivo trae una capa `departamento`, pero con la misma
+	 * cartografía de alta resolución que la subregional. Se reconstruye por
+	 * el mismo camino que las subregiones para que el contorno case al
+	 * vértice con las otras dos capas: dibujadas juntas, un borde que no
+	 * coincidiera se vería como un halo.
+	 *
+	 * @return array<int,array>
+	 */
+	private static function features_departamento() {
+		list( $municipales ) = self::capas_del_archivo();
+
+		$todas = array();
+		foreach ( $municipales as $geometrias ) {
+			foreach ( $geometrias as $g ) {
+				$todas[] = $g;
+			}
+		}
+		if ( empty( $todas ) ) {
+			return array();
+		}
+
+		$poligonos = self::disolver( $todas );
+		if ( empty( $poligonos ) ) {
+			return array();
+		}
+
+		return array(
+			array(
+				'type'       => 'Feature',
+				'id'         => UHP_Territorios::DEPARTAMENTO,
+				'properties' => array(
+					'id'         => UHP_Territorios::DEPARTAMENTO,
+					'nivel'      => 'departamento',
+					'codigo'     => UHP_Territorios::DEPARTAMENTO,
+					'nombre'     => 'Nariño',
+					'municipios' => count( $todas ),
+				),
+				'geometry'   => array(
+					'type'        => 'MultiPolygon',
+					'coordinates' => $poligonos,
+				),
+			),
+		);
+	}
+
+	/**
+	 * Separa el archivo de tres capas en lo que hace falta de cada una.
+	 *
+	 * @return array{0:array<string,array>,1:array<string,array>} Geometrías
+	 *         municipales agrupadas por subregión, y ficha de cada subregión.
+	 */
+	private static function capas_del_archivo() {
 		$geo = UHP_Datos::leer( 'geojson_subregiones' );
 		if ( empty( $geo['features'] ) ) {
-			return array();
+			return array( array(), array() );
 		}
 
 		$municipales = array();
@@ -186,40 +318,25 @@ final class UHP_Topojson {
 			}
 		}
 
-		$features = array();
-		foreach ( $municipales as $codigo => $geometrias ) {
-			$poligonos = self::disolver( $geometrias );
-			if ( empty( $poligonos ) || ! isset( $fichas[ $codigo ] ) ) {
-				continue;
-			}
-			$features[] = array(
-				'type'       => 'Feature',
-				'properties' => $fichas[ $codigo ],
-				'geometry'   => array(
-					'type'        => 'MultiPolygon',
-					'coordinates' => $poligonos,
-				),
-			);
-		}
+		return array( $municipales, $fichas );
+	}
 
-		return self::construir(
-			$features,
-			self::OBJETO_SUB,
-			static function ( $p ) {
-				if ( empty( $p['codigo'] ) ) {
-					return null;
-				}
-				return array(
-					'id'          => (string) $p['codigo'],
-					'propiedades' => array(
-						'codigo'     => (string) $p['codigo'],
-						'nombre'     => (string) $p['nombre'],
-						'municipios' => isset( $p['n_municipios'] ) ? (int) $p['n_municipios'] : 0,
-						'area_km2'   => isset( $p['area_km2'] ) ? (float) $p['area_km2'] : 0.0,
-					),
-				);
-			}
-		);
+	/**
+	 * Topología municipal.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function de_municipios() {
+		return self::construir( self::features( 'municipio' ), self::OBJETO );
+	}
+
+	/**
+	 * Topología subregional.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function de_subregiones() {
+		return self::construir( self::features( 'subregion' ), self::OBJETO_SUB );
 	}
 
 	/**
@@ -410,13 +527,14 @@ final class UHP_Topojson {
 	/**
 	 * Convierte una colección de features en una topología.
 	 *
-	 * @param array    $features Features del GeoJSON original.
-	 * @param string   $objeto   Nombre del objeto dentro de la topología.
-	 * @param callable $leer     Recibe las propiedades del feature y devuelve
-	 *                           {id, propiedades}, o null para descartarlo.
+	 * Las features llegan ya adelgazadas de `features()`, con su `id` en las
+	 * propiedades: aquí solo se cuantiza la geometría.
+	 *
+	 * @param array  $features Features de GeoJSON.
+	 * @param string $objeto   Nombre del objeto dentro de la topología.
 	 * @return array<string,mixed>
 	 */
-	private static function construir( $features, $objeto, $leer ) {
+	private static function construir( $features, $objeto ) {
 		// 1) Extensión de todas las coordenadas, para fijar la rejilla.
 		$caja = self::caja( $features );
 		if ( null === $caja ) {
@@ -441,8 +559,7 @@ final class UHP_Topojson {
 				continue;
 			}
 
-			$campos = $leer( $p );
-			if ( ! $campos ) {
+			if ( empty( $p['id'] ) ) {
 				continue;
 			}
 
@@ -469,9 +586,9 @@ final class UHP_Topojson {
 
 			$geometrias[] = array(
 				'type'       => $tipo,
-				'id'         => $campos['id'],
+				'id'         => (string) $p['id'],
 				'arcs'       => $indices,
-				'properties' => $campos['propiedades'],
+				'properties' => $p,
 			);
 		}
 

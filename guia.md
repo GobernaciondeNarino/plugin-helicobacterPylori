@@ -81,6 +81,7 @@ urkunina-5000/
 │   │   ├── class-uhp-datos.php       lectura, validación, respaldo, integridad
 │   │   ├── class-uhp-municipios.php  cruce con la geometría del DANE
 │   │   ├── class-uhp-subregiones.php cruce y composición de las 13 subregiones
+│   │   ├── class-uhp-territorios.php índice territorial y condición de cada cifra
 │   │   ├── class-uhp-topojson.php    GeoJSON → TopoJSON para D3plus Geomap
 │   │   ├── class-uhp-views.php       registro de vistas del motor de gráficos
 │   │   └── textos-graficos.php       descripción y análisis de cada vista
@@ -105,7 +106,7 @@ urkunina-5000/
 
 ## 3. El conjunto de datos
 
-Dieciséis archivos en `data/`: catorce JSON del proyecto y dos de cartografía.
+Diecisiete archivos en `data/`: quince JSON del proyecto y dos de cartografía.
 
 | Clave | Archivo | Contenido |
 |---|---|---|
@@ -123,6 +124,7 @@ Dieciséis archivos en `data/`: catorce JSON del proyecto y dos de cartografía.
 | `publicaciones` | `11_produccion_cientifica.json` | Producción científica derivada |
 | `metas` | `12_metas_mga.json` | Los 23 productos de la ficha MGA |
 | `retos` | `13_retos_siguiente_fase.json` | Retos para la siguiente fase |
+| `subregiones` | `14_subregiones_municipios.json` | División subregional oficial de la Gobernación: las 13 subregiones y sus municipios |
 | `geojson` | `narino_municipios.geojson` | Geometría de los 64 municipios (DANE) |
 | `geojson_subregiones` | `dep-sub-mun.geojson` | Tres capas: departamento, 13 subregiones y los 64 municipios con la subregión de cada uno |
 
@@ -165,6 +167,24 @@ donde la cartografía dice «Pie de Monte Costero», y «La Sabana» donde dice
 subregiones con dato cruzan con las trece del departamento**; las dos restantes
 —Pacífico Sur y Sanquianga— quedan como «sin dato», que es lo que corresponde
 porque los informes no las documentan.
+
+Cuatro municipios circulan además con dos nombres, y las fuentes usan
+indistintamente uno u otro: la cartografía del DANE escribe el oficial completo
+y las tablas de la entidad el de uso corriente —Cuaspud Carlosama / Cuaspud,
+San Andrés de Tumaco / Tumaco, Magüí / Magüí Payán, Los Andes / Los Andes
+Sotomayor—. Quitar el paréntesis no basta, porque «Los Andes Sotomayor» no lo
+lleva, así que `UHP_Municipios::normalizar()` los reduce al mismo nombre con una
+tabla corta y cerrada: seis líneas, cada una un municipio concreto verificado
+contra su DIVIPOLA.
+
+**La división subregional viene de dos fuentes y cada una aporta lo suyo.** El
+archivo oficial de la Gobernación (`14_subregiones_municipios.json`) da los
+nombres con que se rotulan las subregiones —«Los Abades», «La Cordillera»,
+«Piedemonte Costero»— y la composición declarada; la cartografía aporta la
+geometría y los códigos DIVIPOLA, que el archivo oficial no trae. Las dos
+coinciden municipio a municipio, y hay una prueba que lo comprueba en cada
+ejecución: si algún día dejaran de coincidir, la suite lo dice en vez de que el
+tablero mezcle en silencio dos divisiones distintas del departamento.
 
 ---
 
@@ -449,21 +469,98 @@ colores de dato: codifican el nivel de riesgo y tienen que leerse en los dos
 temas, así que en claro se oscurecen y pierden el halo, que sobre blanco solo
 emborrona el punto.
 
-#### 4.8.3 La capa base sigue al tema
+#### 4.8.3 Todo gira alrededor de un territorio
+
+El tablero mantiene **un territorio seleccionado** —el departamento entero, una
+de sus 13 subregiones o uno de sus 64 municipios— y cada pieza se recoloca a su
+alrededor. Se selecciona pulsando en el mapa, pulsando una barra del gráfico,
+en el selector de los controles o navegando por la ficha hacia arriba (su
+subregión) o hacia abajo (sus municipios). Volver a pulsar el territorio ya
+elegido lo deselecciona.
+
+El mapa dibuja **tres capas** —`/geo?nivel=municipio|subregion|departamento`—
+con el contorno del departamento siempre por debajo como marco. Las tres salen
+de `UHP_Topojson::features()`, la misma función de la que se construye la
+topología de D3plus: los dos mapas del plugin dibujan así el mismo
+departamento, vértice a vértice, y no pueden divergir con un cambio en uno solo.
+
+Al cambiar de vista en el panel, **el mapa sigue a la vista**: si el gráfico
+pasa a hablar de subregiones, el mapa se dibuja por subregiones. Las vistas
+departamentales no mueven la capa, porque no tienen un nivel al que llevarla.
+
+#### 4.8.4 Lo que no se puede filtrar se dice
+
+Es la regla que sostiene la honestidad del tablero. De las 24 vistas del
+catálogo, 4 nombran municipios y 3 subregiones: **las otras 17 solo existen para
+el conjunto del departamento**. De los 6 indicadores del cintillo, 2 no están
+desagregados en ninguna fuente.
+
+`UHP_Territorios` decide, para cada indicador y cada nivel, en cuál de estas
+cuatro condiciones está la cifra, y la condición viaja con ella hasta la
+interfaz:
+
+| Condición | Qué significa | Cómo se ve |
+|---|---|---|
+| `publicado` | El proyecto publica ese dato para ese territorio | La cifra, sin marca |
+| `sin_dato` | Se publica a ese nivel, pero no para ese territorio | Una raya, no un cero |
+| `agregado` | No viene dado, pero se suma de sus municipios sin inventar nada | Marca «suma» |
+| `departamental` | No se desagrega por territorio en ninguna fuente | Marca «departamental» y filete amarillo |
+
+Enseñar el 67,4 % de infección del departamento con «Telembí» seleccionado, sin
+decir que esa cifra es departamental, es afirmar algo que el proyecto no ha
+medido. Un tablero público de una entidad no puede hacer eso. Cuando la vista
+del panel no puede hablar del territorio elegido, el análisis lo advierte antes
+que el texto.
+
+**Dos cosas que el tablero NO hace, a propósito:**
+
+- **No promedia prevalencias** de municipios para obtener la de su subregión.
+  Son porcentajes sobre bases distintas y sin las bases no hay media ponderada
+  posible; el promedio simple daría un número verosímil y falso. La subregión
+  usa su valor publicado o ninguno.
+- **No reparte** los 5.000 participantes ni las muestras del biobanco entre
+  territorios. No están desagregados en ninguna fuente.
+
+Lo que sí se agrega son **conteos**: casos de cáncer y municipios intervenidos
+se suman por subregión, porque sumar casos no inventa nada. Una prueba comprueba
+que esas sumas cuadran con los totales del departamento (8 casos, 55
+municipios).
+
+#### 4.8.5 Cero no es «sin dato»
+
+Un cero es una cifra; «sin dato» es la ausencia de una. Confundirlos deforma la
+lectura, y el plugin lo hacía en dos sitios hasta que se corrigió:
+
+- El renderer descartaba las filas cuyo valor era cero. En la serie de
+  producción científica eso borraba cinco años —2020, 2021, 2023, 2024 y 2025— y
+  la línea saltaba de 2019 a 2022 como si no hubiera habido años de por medio,
+  cuando lo que hubo fue un vacío de publicaciones: justo lo que había que ver.
+- El geomapa subregional descartaba las subregiones con conteo cero y las
+  pintaba como «sin dato publicado». De esas subregiones sí se sabe, y lo que
+  se sabe es que no tienen casos documentados.
+
+Hay dos pruebas de navegador que lo vigilan, y una tercera comprueba que **cada
+gráfico dibuja una marca por fila**: lo que publica la API es lo que se ve. Esa
+última cuenta marcas y no rótulos a propósito —D3plus escribe la etiqueta dentro
+de cada barra y la acorta cuando no cabe, pero acortar un rótulo no es perder un
+dato: la barra está, y el nombre completo sigue en el tooltip y en la tabla de
+datos.
+
+#### 4.8.6 La capa base sigue al tema
 
 `teselas` por defecto vale `auto`: la capa base la decide el tema —clara con el
 tema claro, oscura con el oscuro—. Un tablero claro con teselas oscuras se lee
 fatal y es el descuido más fácil de cometer al cambiar solo el tema. Pedir una
 capa concreta (`teselas="humanitario"`) sigue mandando sobre el automatismo.
 
-#### 4.8.4 Accesibilidad
+#### 4.8.7 Accesibilidad
 
 Todos los pares tinta/fondo se verificaron **en el navegador, sobre el tablero
 ya pintado**, en los dos temas: mínimo 7,15:1 en oscuro y 5,48:1 en claro, por
 encima del 4,5:1 que exige el Anexo 1 de la Resolución 1519 de 2020 para texto
 normal.
 
-#### 4.8.5 Tokens propios
+#### 4.8.8 Tokens propios
 
 Los tokens del tablero se declaran con prefijo propio (`--uhp-db-*`) en vez de
 reutilizar los `--uhp3d-*`, porque el objeto 3D puede no estar en la página.
@@ -586,11 +683,11 @@ npm run test:datos   # capa de datos, sin WordPress
 npm test             # lo anterior más las pruebas de navegador
 ```
 
-### 8.1 Capa de datos — 321 comprobaciones
+### 8.1 Capa de datos — 354 comprobaciones
 
 `tests/test-datos.php` ejecuta las clases del plugin fuera de WordPress, con
 sustitutos mínimos de sus funciones (`tests/stubs-wordpress.php`). Comprueba
-que los dieciséis archivos se leen y cumplen su contrato, que la topología que
+que los diecisiete archivos se leen y cumplen su contrato, que la topología que
 consume D3plus se construye bien —anillos cerrados, sentido de giro correcto,
 error de cuantización por debajo del 0,03 % y subregiones disueltas—, que el saneador de CSS
 neutraliza lo peligroso **y conserva intacto lo legítimo**, que los 55
@@ -600,7 +697,7 @@ cifras cuadran entre sí: los positivos y negativos suman 5.000, la distribució
 municipal de casos suma el total declarado, las muestras por tipo suman el
 inventario y las fuentes de financiación suman el presupuesto.
 
-### 8.2 Navegador — 39 pruebas
+### 8.2 Navegador — 50 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a
@@ -673,7 +770,7 @@ Resumen; el informe completo está en
   a través de `UHP_Security::escribir_atomico()`.
 - **Autorización.** Las seis acciones de escritura exigen `manage_options` y
   nonce. Las páginas del panel comprueban la capacidad antes de pintar nada.
-- **API pública de solo lectura.** Las diez rutas sirven datos agregados ya
+- **API pública de solo lectura.** Las once rutas sirven datos agregados ya
   divulgados institucionalmente. No se exige nonce a propósito: con caché de
   página, un nonce caducado devolvería 403 a visitantes legítimos. La
   protección es el límite de peticiones por IP y la ausencia total de

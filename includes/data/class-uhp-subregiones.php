@@ -7,6 +7,21 @@
  * `subregion` de dep-sub-mun.geojson, junto con la lista de municipios que
  * la componen.
  *
+ * DOS FUENTES, CADA UNA PARA LO SUYO:
+ *
+ *   · `14_subregiones_municipios.json` es la división oficial que entregó
+ *     la Gobernación. De ahí salen los NOMBRES con los que se rotulan las
+ *     subregiones —«Los Abades», «La Cordillera», «Piedemonte Costero»— y
+ *     la composición declarada de cada una.
+ *   · `dep-sub-mun.geojson` aporta la GEOMETRÍA y el cruce con los códigos
+ *     DIVIPOLA, que el archivo oficial no trae.
+ *
+ * Las dos coinciden municipio a municipio —verificado, y hay una prueba
+ * que lo comprueba en cada ejecución—, de modo que no hay que elegir entre
+ * ellas: cada una aporta lo que la otra no tiene. Si algún día dejaran de
+ * coincidir, la suite lo dice en vez de que el tablero mezcle en silencio
+ * dos divisiones distintas del departamento.
+ *
  * El cruce por nombre no es directo: los informes del proyecto escriben
  * «Piedemonte Costero» donde la cartografía dice «Pie de Monte Costero», y
  * «La Sabana» donde dice «Sabana». Se normaliza igual que en
@@ -44,8 +59,9 @@ final class UHP_Subregiones {
 			return $cache;
 		}
 
-		$geo    = UHP_Datos::leer( 'geojson_subregiones' );
-		$salida = array();
+		$geo      = UHP_Datos::leer( 'geojson_subregiones' );
+		$oficiales = self::nombres_oficiales();
+		$salida    = array();
 
 		foreach ( (array) ( isset( $geo['features'] ) ? $geo['features'] : array() ) as $f ) {
 			$p = isset( $f['properties'] ) ? $f['properties'] : array();
@@ -54,9 +70,15 @@ final class UHP_Subregiones {
 			}
 
 			$codigos = isset( $p['codigos_dane'] ) ? (string) $p['codigos_dane'] : '';
+			$clave   = self::normalizar( (string) $p['nombre'] );
+
 			$salida[ (string) $p['codigo'] ] = array(
 				'codigo'     => (string) $p['codigo'],
-				'nombre'     => (string) $p['nombre'],
+				// El nombre oficial de la entidad manda sobre el de la
+				// cartografía: es el que ve el ciudadano y el que usan los
+				// informes del proyecto.
+				'nombre'     => isset( $oficiales[ $clave ] ) ? $oficiales[ $clave ] : (string) $p['nombre'],
+				'cartografia' => (string) $p['nombre'],
 				'n'          => isset( $p['n_municipios'] ) ? (int) $p['n_municipios'] : 0,
 				'area'       => isset( $p['area_km2'] ) ? (float) $p['area_km2'] : 0.0,
 				'municipios' => array_values(
@@ -74,6 +96,33 @@ final class UHP_Subregiones {
 	public static function purgar() {
 		self::$memoria = null;
 		delete_transient( self::CACHE );
+	}
+
+	/**
+	 * Nombres oficiales por clave normalizada.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function nombres_oficiales() {
+		$salida = array();
+		foreach ( (array) UHP_Datos::valor( 'subregiones', 'subregiones', array() ) as $s ) {
+			if ( ! empty( $s['nombre'] ) ) {
+				$salida[ self::normalizar( $s['nombre'] ) ] = (string) $s['nombre'];
+			}
+		}
+		return $salida;
+	}
+
+	/**
+	 * División declarada por la entidad, tal cual viene del archivo.
+	 *
+	 * Se expone para poder contrastarla con la geometría: es la prueba de
+	 * que las dos fuentes describen el mismo departamento.
+	 *
+	 * @return array<int,array{nombre:string,municipios:string[]}>
+	 */
+	public static function declaradas() {
+		return (array) UHP_Datos::valor( 'subregiones', 'subregiones', array() );
 	}
 
 	/**
@@ -100,6 +149,11 @@ final class UHP_Subregiones {
 			$porNombre = array();
 			foreach ( self::indice() as $codigo => $s ) {
 				$porNombre[ self::normalizar( $s['nombre'] ) ] = $codigo;
+				// El nombre cartográfico también, por si un dato viene con
+				// la grafía del DANE en vez de la de la entidad.
+				if ( ! empty( $s['cartografia'] ) ) {
+					$porNombre[ self::normalizar( $s['cartografia'] ) ] = $codigo;
+				}
 				// El propio código también sirve de clave: así una vista
 				// puede traer «rio_mayo» en lugar del nombre.
 				$porNombre[ self::normalizar( $codigo ) ] = $codigo;
@@ -111,7 +165,7 @@ final class UHP_Subregiones {
 	}
 
 	/**
-	 * Nombre cartográfico de una subregión.
+	 * Nombre oficial de una subregión.
 	 *
 	 * @param string $codigo Código.
 	 * @return string
@@ -143,9 +197,12 @@ final class UHP_Subregiones {
 			if ( empty( $p['capa'] ) || 'municipio' !== $p['capa'] || empty( $p['MPIO_CDPMP'] ) ) {
 				continue;
 			}
+			$codigo = isset( $p['subregion_codigo'] ) ? (string) $p['subregion_codigo'] : '';
 			$mapa[ (string) $p['MPIO_CDPMP'] ] = array(
-				'codigo' => isset( $p['subregion_codigo'] ) ? (string) $p['subregion_codigo'] : '',
-				'nombre' => isset( $p['subregion'] ) ? (string) $p['subregion'] : '',
+				'codigo' => $codigo,
+				// El nombre oficial, no el de la cartografía: es el que
+				// acaba en el tooltip del mapa y en la ficha.
+				'nombre' => '' !== $codigo ? self::nombre_de( $codigo ) : '',
 			);
 		}
 
