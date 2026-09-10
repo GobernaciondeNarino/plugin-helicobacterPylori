@@ -219,7 +219,7 @@ Las que separan un gráfico publicable de uno que confunde:
    seguridad de contenido estricta— el renderer dibuja un gráfico simple en SVG
    en lugar de dejar un hueco.
 
-### 4.4 Los dos textos de cada vista
+### 4.4 Los cuatro textos de cada vista
 
 Cada gráfico se publica acompañado de texto. Hay dos clases y viven en sitios
 distintos a propósito:
@@ -231,7 +231,43 @@ distintos a propósito:
   redacta `UHP_Analisis` a partir de los datos, de modo que se actualizan solos
   cuando cambia un archivo.
 
-### 4.5 Añadir una vista
+### 4.5 El gráfico y sus textos son piezas separadas
+
+`[urkunina_grafico]` **no imprime ni una línea de texto**. La tarjeta contiene
+el título, la barra de herramientas y el lienzo; nada más. Cada texto de la
+vista es su propio shortcode:
+
+| Shortcode | Qué pinta | De dónde sale |
+|---|---|---|
+| `[urkunina_titulo]` | Nombre de la vista | `UHP_Views::meta()` |
+| `[urkunina_descripcion]` | Qué muestra y cómo leerlo | `textos-graficos.php` |
+| `[urkunina_interpretacion]` | Qué significa | `textos-graficos.php` |
+| `[urkunina_resumen]` | Hallazgo principal | `UHP_Analisis` |
+| `[urkunina_cifras]` | Cifras de apoyo | `UHP_Analisis` |
+| `[urkunina_fuente]` | Atribución del dato | `UHP_Views::meta()` |
+| `[urkunina_analisis modo="…"]` | Varias de las anteriores | atajo agrupado |
+
+La razón es de maquetación: quien arma la página decide si el texto va al lado
+del gráfico, encima, debajo o en otra columna, sin pelearse con el ancho de una
+tarjeta que ya traía su prosa dentro. Todos se renderizan en el servidor —el
+contenido viaja en el HTML, sin petición ni parpadeo— y por tanto funcionan sin
+JavaScript. Su marcado no lleva chrome propio: solo fijan medida de línea y
+ritmo vertical, y heredan el flujo de la página.
+
+Dos consecuencias prácticas:
+
+- El gráfico admite `titulo="no"` para suprimir también su cabecera cuando el
+  título ya se publicó con `[urkunina_titulo]`.
+- **La atribución dejó de ser automática.** Al no imprimirla el gráfico, hay que
+  publicar `[urkunina_fuente view="…"]` de forma explícita. Citar la procedencia
+  del dato no es opcional en una publicación de la entidad.
+
+El texto accesible del gráfico no se pierde: el lienzo conserva
+`role="img"` con un `aria-label` que reúne el nombre de la vista, su
+descripción y sus cifras, de modo que un lector de pantalla sigue recibiendo la
+lectura completa aunque el texto visible se haya maquetado en otro sitio.
+
+### 4.6 Añadir una vista
 
 Tres pasos, sin JavaScript nuevo:
 
@@ -246,7 +282,7 @@ que produce filas, que sus filas traen todas las dimensiones y medidas que
 declara, que su tipo por defecto es compatible y que sus dos textos llegan a
 los 375 caracteres.
 
-### 4.6 Identidad visual del tablero
+### 4.7 Identidad visual del tablero
 
 El tablero viste la paleta del objeto 3D: fondo `#0C1116`, paneles
 translúcidos con desenfoque y borde blanco al 9 %, verde `#10A13B` y amarillo
@@ -401,7 +437,7 @@ cifras cuadran entre sí: los positivos y negativos suman 5.000, la distribució
 municipal de casos suma el total declarado, las muestras por tipo suman el
 inventario y las fuentes de financiación suman el presupuesto.
 
-### 8.2 Navegador — 20 pruebas
+### 8.2 Navegador — 26 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a
@@ -412,7 +448,10 @@ los datos reales.
 Se verifica que la escena 3D arranca con contexto WebGL y llena su contenedor,
 que sus controles avanzan y pausan, que embebida no se apropia del teclado; que
 las ocho vistas de la página de gráficos se dibujan y que el color va por serie
-y no por punto; que el mapa pinta los 64 municipios sobre OpenStreetMap con su
+y no por punto; que la tarjeta del gráfico **no emite ningún texto** y que los
+textos de la vista, que son shortcodes aparte, llegan en el HTML con el
+JavaScript desactivado y se maquetan en su propia columna; que el mapa pinta los
+64 municipios sobre OpenStreetMap con su
 leyenda y su atribución, que cambiar de indicador no vuelve a descargar la
 geometría y que los polígonos son accesibles con teclado; que el tablero ocupa
 el 100 % de ancho y 100vh de alto, que sus filtros responden, que al pulsar un

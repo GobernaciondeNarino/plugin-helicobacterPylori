@@ -149,13 +149,48 @@ test.describe('Gráficos', () => {
 
       // El título llega de la API y no queda con el valor de servidor.
       await expect(fig.locator('.uhp-g__titulo')).not.toHaveText('');
-      // El análisis automático se pinta bajo el gráfico.
-      await expect(fig.locator('.uhp-g__analisis p').first()).toBeVisible();
-      // La atribución de fuente aparece.
-      await expect(fig.locator('.uhp-g__fuente')).toContainText('Fuente:');
+      // El gráfico NO pinta textos: descripción, análisis y fuente son
+      // shortcodes aparte para poder maquetarlos por libre.
+      await expect(fig.locator('.uhp-texto')).toHaveCount(0);
+      await expect(fig).not.toContainText('Fuente:');
     }
 
     expect(errores).toEqual([]);
+  });
+
+  test('el shortcode del gráfico no emite ningún texto de análisis', async ({ page }) => {
+    // El enunciado es explícito: «todos los gráficos shortcode sin texto
+    // adicional». Aquí se comprueba pieza a pieza, para que nadie vuelva a
+    // colgar prosa dentro de la tarjeta.
+    await page.goto(BASE + '/paginas/graficos.html');
+
+    const fig = page.locator('[data-uhp-grafico]').first();
+    await expect(fig.locator('.uhp-g__lienzo svg')).toHaveCount(1, { timeout: 20000 });
+    // El esqueleto se retira cuando el hidratado termina: hasta entonces
+    // la figura aún no tiene su contenido definitivo.
+    await expect(fig.locator('.uhp-skeleton')).toHaveCount(0, { timeout: 20000 });
+
+    // Los únicos hijos directos admitidos son el título, la barra y el
+    // lienzo. Cualquier párrafo dentro de la figura sería texto colado.
+    const dentro = await fig.evaluate((nodo) => ({
+      parrafos: nodo.querySelectorAll('p').length,
+      hijos: Array.from(nodo.children).map((n) => n.className),
+      // Todo lo que no sea el título, la barra de herramientas ni el
+      // dibujo: si el shortcode colara prosa, aparecería aquí.
+      textoAjeno: Array.from(nodo.children)
+        .filter((n) => !n.matches('.uhp-g__titulo, .uhp-g__barra, .uhp-g__lienzo'))
+        .map((n) => n.textContent.trim())
+        .join(' ')
+    }));
+
+    expect(dentro.parrafos).toBe(0);
+    dentro.hijos.forEach((c) => {
+      expect(
+        ['uhp-g__titulo', 'uhp-g__barra', 'uhp-g__lienzo'].some((k) => c.includes(k)),
+        'hijo inesperado en la tarjeta del gráfico: ' + c
+      ).toBe(true);
+    });
+    expect(dentro.textoAjeno).toBe('');
   });
 
   test('la barra de herramientas abre el detalle y la tabla de datos', async ({ page }) => {
@@ -213,6 +248,59 @@ test.describe('Gráficos', () => {
     });
     expect(colores.length).toBeGreaterThan(0);
     expect(colores.length).toBeLessThanOrEqual(4);
+  });
+});
+
+/* ================================================================== */
+test.describe('Textos de una vista', () => {
+
+  test('llegan en el HTML y no dependen de JavaScript', async ({ page }) => {
+    // Se renderizan en servidor: sin JavaScript el texto tiene que estar.
+    await page.route('**/*.js', (route) => route.abort());
+    await page.goto(BASE + '/paginas/maqueta.html');
+
+    const columna = page.locator('[data-columna="texto"]');
+    await expect(columna.locator('.uhp-texto--descripcion')).toHaveCount(1);
+    await expect(columna.locator('.uhp-texto--interpretacion')).toHaveCount(1);
+    await expect(columna.locator('.uhp-texto--resumen')).toHaveCount(1);
+    await expect(columna.locator('.uhp-texto--cifras')).toHaveCount(1);
+    await expect(columna.locator('.uhp-texto--fuente')).toContainText('Fuente:');
+
+    // Los textos redactados son largos por norma del proyecto.
+    const descripcion = await columna.locator('.uhp-texto--descripcion').textContent();
+    expect(descripcion.trim().length).toBeGreaterThan(200);
+
+    // El título es su propio shortcode y respeta la etiqueta pedida.
+    const titulo = page.locator('.uhp-titulo');
+    await expect(titulo).toHaveCount(1);
+    expect(await titulo.evaluate((n) => n.tagName)).toBe('H2');
+    await expect(titulo).not.toHaveText('');
+
+    // El atajo agrupado pinta las cuatro piezas de una vez.
+    await expect(page.locator('[data-columna="grupo"] .uhp-texto')).toHaveCount(4);
+  });
+
+  test('el gráfico y sus textos se maquetan en columnas independientes', async ({ page }) => {
+    const errores = vigilar(page);
+    await page.goto(BASE + '/paginas/maqueta.html');
+
+    const fig = page.locator('[data-uhp-grafico]');
+    await expect(fig.locator('.uhp-g__lienzo svg')).toHaveCount(1, { timeout: 20000 });
+
+    // El gráfico vive en su columna y los textos en la suya: ni uno solo
+    // de los textos cuelga de la figura.
+    await expect(page.locator('[data-columna="grafico"] .uhp-texto')).toHaveCount(0);
+    await expect(page.locator('[data-columna="texto"] .uhp-texto')).toHaveCount(5);
+
+    // Con titulo="no" la tarjeta ni siquiera lleva su cabecera.
+    await expect(fig.locator('.uhp-g__titulo')).toHaveCount(0);
+
+    // Están de verdad lado a lado, no apilados.
+    const g = await page.locator('[data-columna="grafico"]').boundingBox();
+    const t = await page.locator('[data-columna="texto"]').boundingBox();
+    expect(t.x).toBeGreaterThan(g.x + g.width - 2);
+
+    expect(errores).toEqual([]);
   });
 });
 

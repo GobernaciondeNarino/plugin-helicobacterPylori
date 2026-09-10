@@ -980,18 +980,18 @@ final class UHP_Admin {
 				'ejemplos'    => array(
 					'[urkunina_grafico view="tamizaje_hp" type="donut"]',
 					'[urkunina_grafico view="prev_lpm_municipios" type="bar" alto="480px"]',
-					'[urkunina_grafico view="metas_mga" barra="no" analisis="no"]',
+					'[urkunina_grafico view="metas_mga" barra="no" titulo="no"]',
 				),
 				'atributos'   => array(
 					'view'     => __( 'Identificador de la vista. Consulte el módulo Gráficos.', 'urkunina-5000' ),
 					'type'     => __( 'Tipo de gráfico. Si se omite o no es compatible, se usa el tipo por defecto de la vista.', 'urkunina-5000' ),
-					'titulo'   => __( 'Sustituye el título de la vista.', 'urkunina-5000' ),
+					'titulo'   => __( 'Sustituye el título de la vista; con «no» se oculta.', 'urkunina-5000' ),
 					'alto'     => __( 'Altura del lienzo del gráfico.', 'urkunina-5000' ),
 					'tema'     => __( 'claro u oscuro.', 'urkunina-5000' ),
-					'analisis' => __( 'no, descripcion, descriptivo, cuantitativo, ambos o completo.', 'urkunina-5000' ),
 					'acciones' => __( 'Lista separada por comas de los botones a mostrar.', 'urkunina-5000' ),
 					'barra'    => __( 'si o no. Oculta toda la barra de herramientas.', 'urkunina-5000' ),
 				),
+				'nota'        => __( 'Dibuja SOLO el gráfico. La descripción, la interpretación, el resumen, las cifras y la fuente son shortcodes aparte, para poder maquetarlos donde convenga. No olvide publicar la fuente: su cita es obligatoria.', 'urkunina-5000' ),
 			),
 			array(
 				'tag'         => 'urkunina_mapa',
@@ -1026,16 +1026,84 @@ final class UHP_Admin {
 				),
 			),
 			array(
+				'tag'         => 'urkunina_descripcion',
+				'titulo'      => __( 'Texto: qué muestra el gráfico', 'urkunina-5000' ),
+				'descripcion' => __( 'Explica qué representa la vista, en qué unidades y cómo leer sus ejes, en lenguaje claro y sin jerga clínica. Es el texto escrito a mano y no depende de las cifras.', 'urkunina-5000' ),
+				'ejemplos'    => array(
+					'[urkunina_descripcion view="tamizaje_hp"]',
+				),
+				'atributos'   => array(
+					'view' => __( 'Identificador de la vista.', 'urkunina-5000' ),
+				),
+			),
+			array(
+				'tag'         => 'urkunina_interpretacion',
+				'titulo'      => __( 'Texto: qué significa', 'urkunina-5000' ),
+				'descripcion' => __( 'El análisis cualitativo: el contexto epidemiológico o de política pública que convierte el dato en información útil. También escrito a mano.', 'urkunina-5000' ),
+				'ejemplos'    => array(
+					'[urkunina_interpretacion view="zonas_riesgo"]',
+				),
+				'atributos'   => array(
+					'view' => __( 'Identificador de la vista.', 'urkunina-5000' ),
+				),
+			),
+			array(
+				'tag'         => 'urkunina_resumen',
+				'titulo'      => __( 'Texto: lectura automática', 'urkunina-5000' ),
+				'descripcion' => __( 'Una frase con el hallazgo principal de la vista, redactada a partir de las cifras del archivo de origen. Se actualiza sola cuando los datos cambian.', 'urkunina-5000' ),
+				'ejemplos'    => array(
+					'[urkunina_resumen view="tamizaje_hp"]',
+				),
+				'atributos'   => array(
+					'view' => __( 'Identificador de la vista.', 'urkunina-5000' ),
+				),
+			),
+			array(
+				'tag'         => 'urkunina_cifras',
+				'titulo'      => __( 'Texto: cifras de apoyo', 'urkunina-5000' ),
+				'descripcion' => __( 'Máximo, mínimo, promedio, total y brecha entre extremos, según lo que corresponda a la vista. También se redacta a partir de los datos.', 'urkunina-5000' ),
+				'ejemplos'    => array(
+					'[urkunina_cifras view="prev_subregion_lpm"]',
+				),
+				'atributos'   => array(
+					'view' => __( 'Identificador de la vista.', 'urkunina-5000' ),
+				),
+			),
+			array(
+				'tag'         => 'urkunina_fuente',
+				'titulo'      => __( 'Texto: fuente del dato', 'urkunina-5000' ),
+				'descripcion' => __( 'La atribución de la vista. Su cita es obligatoria al publicar los datos del proyecto, y desde que el gráfico no la incluye hay que publicarla explícitamente.', 'urkunina-5000' ),
+				'ejemplos'    => array(
+					'[urkunina_fuente view="tamizaje_hp"]',
+				),
+				'atributos'   => array(
+					'view' => __( 'Identificador de la vista.', 'urkunina-5000' ),
+				),
+			),
+			array(
+				'tag'         => 'urkunina_titulo',
+				'titulo'      => __( 'Texto: título de la vista', 'urkunina-5000' ),
+				'descripcion' => __( 'El nombre de la vista como encabezado propio, para titular una sección cuyo gráfico se publica sin título.', 'urkunina-5000' ),
+				'ejemplos'    => array(
+					'[urkunina_titulo view="tamizaje_hp"]',
+					'[urkunina_titulo view="zonas_riesgo" etiqueta="h2"]',
+				),
+				'atributos'   => array(
+					'view'     => __( 'Identificador de la vista.', 'urkunina-5000' ),
+					'etiqueta' => __( 'h2, h3, h4, h5 o p. Por defecto h3.', 'urkunina-5000' ),
+				),
+			),
+			array(
 				'tag'         => 'urkunina_analisis',
-				'titulo'      => __( 'Análisis sin gráfico', 'urkunina-5000' ),
-				'descripcion' => __( 'Solo el texto de una vista, para maquetarlo aparte del gráfico o para acompañar una imagen propia.', 'urkunina-5000' ),
+				'titulo'      => __( 'Texto: varias piezas juntas', 'urkunina-5000' ),
+				'descripcion' => __( 'Atajo que imprime varias de las piezas anteriores de una vez, para cuando no hace falta maquetarlas por separado.', 'urkunina-5000' ),
 				'ejemplos'    => array(
 					'[urkunina_analisis view="zonas_riesgo" modo="completo"]',
 					'[urkunina_analisis view="tamizaje_lpm" modo="cuantitativo"]',
 				),
 				'atributos'   => array(
 					'view' => __( 'Identificador de la vista.', 'urkunina-5000' ),
-					'modo' => __( 'descripcion, descriptivo, cuantitativo, analisis, ambos o completo.', 'urkunina-5000' ),
+					'modo' => __( 'descripcion, analisis, descriptivo, cuantitativo, ambos o completo.', 'urkunina-5000' ),
 				),
 			),
 			array(

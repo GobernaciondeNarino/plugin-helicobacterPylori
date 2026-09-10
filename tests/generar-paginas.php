@@ -236,6 +236,52 @@ $paginas['graficos'] = construir(
 	}
 );
 
+$paginas['maqueta'] = construir(
+	'maqueta',
+	'Gráfico y textos maquetados por separado',
+	function ( $sc ) {
+		$vista = 'tamizaje_hp';
+
+		// El caso de uso que motiva la separación: el gráfico en una
+		// columna y su lectura en otra. Ninguna de las dos piezas sabe de
+		// la otra, que es justo lo que permite maquetarlas por libre.
+		return '<div class="pagina">' .
+			$sc->sc_titulo(
+				array(
+					'view'     => $vista,
+					'etiqueta' => 'h2',
+				)
+			) .
+			'<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">' .
+			'<div data-columna="grafico">' .
+			$sc->sc_grafico(
+				array(
+					'view'   => $vista,
+					'type'   => 'donut',
+					'alto'   => '360px',
+					'titulo' => 'no',
+				)
+			) .
+			'</div>' .
+			'<div data-columna="texto">' .
+			$sc->sc_descripcion( array( 'view' => $vista ) ) .
+			$sc->sc_interpretacion( array( 'view' => $vista ) ) .
+			$sc->sc_resumen( array( 'view' => $vista ) ) .
+			$sc->sc_cifras( array( 'view' => $vista ) ) .
+			$sc->sc_fuente( array( 'view' => $vista ) ) .
+			'</div></div>' .
+			// El atajo agrupado, para comprobar que sigue funcionando.
+			'<div data-columna="grupo">' .
+			$sc->sc_analisis(
+				array(
+					'view' => 'prev_subregion',
+					'modo' => 'completo',
+				)
+			) .
+			'</div></div>';
+	}
+);
+
 $paginas['mapa'] = construir(
 	'mapa',
 	'Mapa',

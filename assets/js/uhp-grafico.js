@@ -1,8 +1,13 @@
-/* [urkunina_grafico] y [urkunina_analisis] — hidratadores.
+/* [urkunina_grafico] — hidratador.
 
-   Leen los data-* del contenedor, piden /render a la REST, llaman a
-   UHPRenderer y cablean la barra de herramientas: Detalle, Datos,
+   Lee los data-* del contenedor, pide /render a la REST, llama a
+   UHPRenderer y cablea la barra de herramientas: Detalle, Datos,
    Compartir, Imagen PNG, Descarga JSON y cambio de tipo en vivo.
+
+   El shortcode dibuja SOLO el gráfico. La descripción, la
+   interpretación, el resumen, las cifras y la fuente son shortcodes
+   aparte que se renderizan en servidor, para poder maquetarlos por libre
+   en la página; aquí no queda nada que pintar de ellos.
 
    Toda la salida se compone con textContent o con nodos creados a mano:
    nada de lo que devuelve la REST se inserta como HTML. */
@@ -33,7 +38,6 @@
 
   C.ready(function () {
     Array.prototype.forEach.call(document.querySelectorAll('[data-uhp-grafico]'), iniciarGrafico);
-    Array.prototype.forEach.call(document.querySelectorAll('[data-uhp-analisis]'), iniciarAnalisis);
   });
 
   /* ================================================================== */
@@ -51,7 +55,6 @@
       legend: fig.getAttribute('data-legend') !== '0',
       legendStyle: fig.getAttribute('data-legend-style') || 'text',
       legendPos: fig.getAttribute('data-legend-pos') || 'bottom',
-      analisis: fig.getAttribute('data-analisis') || 'ambos',
       acciones: parseAcciones(fig.getAttribute('data-acciones')),
       payload: null,
       viz: null
@@ -93,8 +96,6 @@
         });
 
         pintarBarra(fig, lienzo, titulo, st);
-        pintarAnalisis(fig.querySelector('.uhp-g__analisis'), p, st.analisis);
-        pintarFuente(fig, p);
       }, function () {
         C.error(lienzo, 'No se pudieron cargar los datos del gráfico.', function () {
           cargar(fig, lienzo, titulo, st);
@@ -411,61 +412,4 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
   }
 
-  /* ---------------- Textos ---------------- */
-
-  function pintarAnalisis(caja, payload, modo) {
-    if (!caja || modo === 'no') { return; }
-    var v = (payload && payload.view) || {};
-    var a = v.analisis || {};
-    caja.innerHTML = '';
-
-    if (modo === 'descripcion' || modo === 'ambos' || modo === 'completo') {
-      if (v.descripcion_larga) {
-        caja.appendChild(C.el('p', 'uhp-g__desc', v.descripcion_larga));
-      }
-    }
-    if (modo === 'descriptivo' || modo === 'ambos' || modo === 'completo') {
-      if (a.descriptivo) {
-        caja.appendChild(C.el('p', 'uhp-g__desc', a.descriptivo));
-      }
-    }
-    if (modo === 'cuantitativo' || modo === 'ambos' || modo === 'completo') {
-      if (a.cuantitativo) {
-        caja.appendChild(C.el('p', 'uhp-g__num', a.cuantitativo));
-      }
-    }
-    if (modo === 'analisis' || modo === 'completo') {
-      if (v.analisis_largo) {
-        caja.appendChild(C.el('p', 'uhp-g__analisis', v.analisis_largo));
-      }
-    }
-  }
-
-  function pintarFuente(fig, payload) {
-    var pie = fig.querySelector('.uhp-g__fuente');
-    if (!pie) { return; }
-    var v = (payload && payload.view) || {};
-    pie.textContent = v.fuente ? 'Fuente: ' + v.fuente : '';
-  }
-
-  /* ================================================================== */
-  /* [urkunina_analisis] — solo el texto, sin gráfico                   */
-  /* ================================================================== */
-
-  function iniciarAnalisis(caja) {
-    var st = {
-      view: caja.getAttribute('data-view') || '',
-      modo: caja.getAttribute('data-modo') || 'ambos'
-    };
-
-    C.rest('/render', { view: st.view })
-      .then(function (p) {
-        C.quitarSkeleton(caja);
-        var destino = caja.querySelector('.uhp-g__analisis-cuerpo') || caja;
-        pintarAnalisis(destino, p, st.modo);
-      })
-      .catch(function () {
-        C.error(caja, 'No se pudo cargar el análisis.', function () { iniciarAnalisis(caja); });
-      });
-  }
 })();

@@ -188,6 +188,57 @@
 .uhp-tabla tbody tr:last-child td { border-bottom: 0; }
 .uhp-num { text-align: right; font-variant-numeric: tabular-nums; }
 
+/* ---------- Piezas de texto de una vista ----------
+   [urkunina_descripcion], [urkunina_interpretacion], [urkunina_resumen],
+   [urkunina_cifras] y [urkunina_fuente]. Son bloques independientes del
+   gráfico para poder maquetarlos por separado, así que no llevan chrome
+   propio: heredan el flujo de la página y solo fijan medida de línea y
+   ritmo vertical. */
+.uhp-titulo {
+  margin: 0 0 8px;
+  font-size: 1.08rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--uhp-azul);
+}
+
+.uhp-texto {
+  margin: 0 0 14px;
+  font-size: .95rem;
+  line-height: 1.65;
+  color: var(--uhp-tinta);
+  /* Medida de lectura cómoda; el contenedor puede ser más ancho. */
+  max-width: 74ch;
+}
+.uhp-texto:last-child { margin-bottom: 0; }
+
+/* La interpretación es el texto de más peso: se marca con un filete. */
+.uhp-texto--interpretacion {
+  padding-left: 14px;
+  border-left: 3px solid var(--uhp-verde);
+}
+
+/* Las cifras de apoyo se destacan y usan numeración tabular. */
+.uhp-texto--cifras {
+  padding: 10px 14px;
+  font-family: var(--uhp-fuente-etq);
+  font-size: .88rem;
+  color: var(--uhp-azul);
+  background: rgba(0, 51, 102, .05);
+  border-left: 3px solid var(--uhp-azul);
+  border-radius: 0 6px 6px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.uhp-texto--fuente {
+  font-size: .78rem;
+  line-height: 1.45;
+  color: var(--uhp-suave);
+}
+
+/* Agrupador de [urkunina_analisis]: solo separa sus piezas. */
+.uhp-texto-grupo > .uhp-texto:last-child { margin-bottom: 0; }
+
 /* ---------- Pie de fuentes ---------- */
 .uhp-fuentes {
   margin: 10px 0 0;
