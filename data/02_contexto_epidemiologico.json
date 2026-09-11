@@ -12,7 +12,9 @@
     "separador_decimal_origen": "coma (convertido a punto en este JSON)",
     "unidad": "casos por cada 100.000 habitantes",
     "notas": [
-      "El 'enigma nariñense' o 'enigma colombiano' describe la coexistencia de zonas con incidencias muy distintas pese a una prevalencia alta y similar de infección por H. pylori."
+      "El 'enigma nariñense' o 'enigma colombiano' describe la coexistencia de zonas con incidencias muy distintas pese a una prevalencia alta y similar de infección por H. pylori.",
+      "La serie anual de mortalidad departamental (2019-2022) vive en 15_mortalidad_departamental.json.",
+      "La oferta de servicios oncológicos del departamento vive en 16_acceso_servicios_oncologicos.json."
     ]
   },
   "zonas_de_riesgo": [
@@ -90,6 +92,62 @@
         "poblacion_predominante": "afrodescendiente",
         "zona": "bajo riesgo",
         "mortalidad_por_100000": 2.62
+      }
+    ]
+  },
+  "municipios_referencia_por_zona": {
+    "_nota": "Territorios que la presentación de cierre nombra como referencia de cada zona. No es una asignación exhaustiva de los 64 municipios a las tres zonas: la fuente cita ejemplos, y los municipios que no nombra quedan sin zona declarada.",
+    "_tipos": "La fuente mezcla niveles territoriales: «Juanambú» es una subregión y el resto son municipios. Cada referencia lleva su `tipo` para que pueda cruzarse con la cartografía correcta sin tener que adivinarlo.",
+    "fuente": "URKUNINA 5000 — Presentación Informe Final (diapositiva 5)",
+    "zonas": [
+      {
+        "zona": "Zona roja",
+        "territorio": "Norte y suroccidente del departamento",
+        "incidencia_por_100000": 150.0,
+        "referencias": [
+          {
+            "nombre": "Juanambú",
+            "tipo": "subregion"
+          },
+          {
+            "nombre": "Túquerres",
+            "tipo": "municipio"
+          },
+          {
+            "nombre": "Cumbal",
+            "tipo": "municipio"
+          }
+        ],
+        "observacion": "La fuente añade «y municipios circunvecinos» a Juanambú y Túquerres, sin enumerarlos."
+      },
+      {
+        "zona": "Zona amarilla",
+        "territorio": "Pasto y municipios circunvecinos",
+        "incidencia_por_100000": 40.0,
+        "incidencia_alternativa_por_100000": 46.0,
+        "referencias": [
+          {
+            "nombre": "Pasto",
+            "tipo": "municipio"
+          }
+        ],
+        "observacion": "La diapositiva expresa el rango como «40–46 x 100.000 hab.»: 40 es el valor de la ficha MGA y 46 el de un artículo posterior derivado del proyecto."
+      },
+      {
+        "zona": "Zona verde",
+        "territorio": "Costa Pacífica",
+        "incidencia_por_100000": 6.0,
+        "referencias": [
+          {
+            "nombre": "Tumaco",
+            "tipo": "municipio"
+          },
+          {
+            "nombre": "Barbacoas",
+            "tipo": "municipio"
+          }
+        ],
+        "observacion": "El nombre oficial de Tumaco en la DIVIPOLA es «San Andrés de Tumaco»."
       }
     ]
   }

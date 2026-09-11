@@ -51,8 +51,8 @@ echo "\n1. Archivos del conjunto\n";
 
 $registro = UHP_Datos::registro();
 comprobar(
-	17 === count( $registro ),
-	sprintf( 'El registro declara los 15 archivos JSON y las dos capas de geometría (%d entradas)', count( $registro ) )
+	19 === count( $registro ),
+	sprintf( 'El registro declara los 17 archivos JSON y las dos capas de geometría (%d entradas)', count( $registro ) )
 );
 
 // La cartografía tiene su propio tope de tamaño: si volviera a compartirlo
@@ -917,6 +917,48 @@ foreach ( (array) UHP_Datos::valor( 'proyecto', 'financiacion.fuentes', array() 
 comprobar(
 	(int) UHP_Datos::valor( 'proyecto', 'financiacion.presupuesto_total', 0 ) === $fuentes,
 	'Las fuentes de financiación suman el presupuesto total'
+);
+
+// La cifra que el informe destaca (+35,64%) debe salir de la propia serie:
+// si alguien corrige un año y no el titular, esta comprobación lo delata.
+$serie = (array) UHP_Datos::valor( 'mortalidad', 'serie', array() );
+comprobar( 4 === count( $serie ), sprintf( 'La serie de mortalidad cubre los cuatro años 2019-2022 (%d)', count( $serie ) ) );
+
+$inicial = (float) UHP_Datos::valor( 'mortalidad', 'variacion_periodo.valor_inicial', 0 );
+$final   = (float) UHP_Datos::valor( 'mortalidad', 'variacion_periodo.valor_final', 0 );
+$anio_i  = (int) UHP_Datos::valor( 'mortalidad', 'variacion_periodo.anio_inicial', 0 );
+$anio_f  = (int) UHP_Datos::valor( 'mortalidad', 'variacion_periodo.anio_final', 0 );
+$por_anio = array();
+foreach ( $serie as $a ) {
+	$por_anio[ (int) $a['anio'] ] = (float) $a['fallecimientos'];
+}
+comprobar(
+	isset( $por_anio[ $anio_i ] ) && isset( $por_anio[ $anio_f ] )
+		&& $por_anio[ $anio_i ] === $inicial && $por_anio[ $anio_f ] === $final,
+	'Los extremos declarados de la mortalidad coinciden con los años de la serie'
+);
+comprobar(
+	$inicial > 0 && abs( ( $final / $inicial - 1 ) * 100 - (float) UHP_Datos::valor( 'mortalidad', 'variacion_periodo.variacion_porcentaje', 0 ) ) < 0.01,
+	'La variación declarada de la mortalidad se deriva de sus propios extremos'
+);
+
+$con   = (int) UHP_Datos::valor( 'acceso_oncologico', 'resumen.municipios_con_oferta', 0 );
+$sin   = (int) UHP_Datos::valor( 'acceso_oncologico', 'resumen.municipios_sin_oferta', 0 );
+$total = (int) UHP_Datos::valor( 'acceso_oncologico', 'resumen.municipios_del_departamento', 0 );
+comprobar( $con + $sin === $total, 'Los municipios con y sin oferta oncológica suman los del departamento' );
+comprobar(
+	count( (array) UHP_Datos::valor( 'acceso_oncologico', 'instituciones', array() ) )
+		=== (int) UHP_Datos::valor( 'acceso_oncologico', 'resumen.ips_habilitadas_departamento', 0 ),
+	'Las IPS listadas suman las habilitadas que declara el resumen'
+);
+
+$municipios_ips = array();
+foreach ( (array) UHP_Datos::valor( 'acceso_oncologico', 'instituciones', array() ) as $ips ) {
+	$municipios_ips[ $ips['municipio'] ] = true;
+}
+comprobar(
+	count( $municipios_ips ) === (int) UHP_Datos::valor( 'acceso_oncologico', 'resumen.municipios_con_oferta', 0 ),
+	'Las IPS se reparten entre tantos municipios como declara el resumen'
 );
 
 /* ---------------------------------------------------------------- */

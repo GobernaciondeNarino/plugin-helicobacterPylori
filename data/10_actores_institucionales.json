@@ -10,7 +10,11 @@
     "fecha_extraccion": "2026-09-09",
     "codificacion": "UTF-8",
     "separador_decimal_origen": "coma (convertido a punto en este JSON)",
-    "n": 11
+    "n": 12,
+    "notas": [
+      "La tabla de actores del informe preliminar no incluye al National Cancer Institute de Estados Unidos, pero el cuerpo del informe y la presentación de cierre sí lo nombran como asesor internacional: se incorpora con esa fuente.",
+      "No confundir el «Instituto Nacional de Cancerología (INC)» de Colombia con el «National Cancer Institute (NCI)» de Estados Unidos: son dos entidades distintas y el informe abrevia ambas como «Instituto Nacional de Cáncer»."
+    ]
   },
   "actores": [
     {
@@ -47,6 +51,13 @@
       "rol_en_el_proyecto": "Cooperante, apoyo epidemiológico",
       "relevancia_para_la_plataforma": "Aliado estratégico prioritario para escalar la plataforma a nivel nacional",
       "ambito": "nacional"
+    },
+    {
+      "entidad": "National Cancer Institute (NCI, Estados Unidos)",
+      "tipo": "Entidad internacional de salud",
+      "rol_en_el_proyecto": "Asesoría internacional al proyecto",
+      "relevancia_para_la_plataforma": "Aliado internacional previsto para la plataforma de datos, junto al INC, UNSW Sydney y Vanderbilt",
+      "ambito": "internacional"
     },
     {
       "entidad": "Asociación Colombiana de Cirugía",

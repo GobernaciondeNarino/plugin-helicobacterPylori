@@ -152,6 +152,27 @@ final class UHP_Views {
 				'fuente'      => 'Artículo derivado del proyecto — microbiota gástrica',
 			),
 
+			'mortalidad_anio'      => array(
+				'name'        => 'Mortalidad por cáncer de estómago en Nariño',
+				'description' => 'Fallecimientos registrados cada año en el departamento entre 2019 y 2022.',
+				'category'    => 'temporal',
+				'dimensions'  => array( 'anio' ),
+				'measures'    => array( 'fallecimientos' ),
+				'default'     => 'line',
+				'grupo'       => 'Epidemiología',
+				'fuente'      => 'Instituto Departamental de Salud de Nariño (IDSN), 2022',
+			),
+			'acceso_oncologico'    => array(
+				'name'        => 'Municipios con oferta de servicios oncológicos',
+				'description' => 'Las seis IPS habilitadas del departamento están en un solo municipio: los otros 63 no tienen oferta propia.',
+				'category'    => 'parte_todo',
+				'dimensions'  => array( 'categoria' ),
+				'measures'    => array( 'municipios' ),
+				'default'     => 'donut',
+				'grupo'       => 'Epidemiología',
+				'fuente'      => 'Instituto Departamental de Salud de Nariño (IDSN), 2022',
+			),
+
 			/* ---------- Resultados del tamizaje ---------- */
 			'tamizaje_hp'          => array(
 				'name'        => 'Infección por Helicobacter pylori',
@@ -209,6 +230,23 @@ final class UHP_Views {
 				'measures'    => array( 'prevalencia' ),
 				'default'     => 'bar',
 				'heatmap'     => true,
+				'geo'         => array(
+					'nivel'  => 'municipio',
+					'campo'  => 'municipio',
+					'medida' => 'prevalencia',
+				),
+				'grupo'       => 'Prevalencia',
+				'fuente'      => 'Informe preliminar URKUNINA 5000',
+			),
+			'prev_lpm_extremos'    => array(
+				'name'        => 'Lesión precursora: los extremos publicados',
+				'description' => 'Los diez municipios con mayor prevalencia de lesión precursora y los cinco con menor, los dos extremos que publica el informe.',
+				'category'    => 'comparativa',
+				'dimensions'  => array( 'municipio', 'extremo' ),
+				'measures'    => array( 'prevalencia' ),
+				'default'     => 'bar',
+				// Cada municipio aparece una sola vez, de modo que el mapa
+				// puede colorear los quince sin partir la vista en series.
 				'geo'         => array(
 					'nivel'  => 'municipio',
 					'campo'  => 'municipio',
@@ -678,6 +716,43 @@ final class UHP_Views {
 				}
 				return $filas;
 
+			case 'mortalidad_anio':
+				$filas = array();
+				foreach ( (array) UHP_Datos::valor( 'mortalidad', 'serie', array() ) as $a ) {
+					if ( ! isset( $a['anio'] ) ) {
+						continue;
+					}
+					$filas[] = array(
+						// El año viaja como texto: es una categoría del eje,
+						// no una magnitud que deba escalarse.
+						'anio'           => (string) (int) $a['anio'],
+						'fallecimientos' => isset( $a['fallecimientos'] ) ? (int) $a['fallecimientos'] : 0,
+					);
+				}
+				return $filas;
+
+			case 'acceso_oncologico':
+				$total = (int) UHP_Datos::valor( 'acceso_oncologico', 'resumen.municipios_del_departamento', 0 );
+				$con   = (int) UHP_Datos::valor( 'acceso_oncologico', 'resumen.municipios_con_oferta', 0 );
+				$sin   = (int) UHP_Datos::valor( 'acceso_oncologico', 'resumen.municipios_sin_oferta', 0 );
+				// El complemento se recalcula solo si el archivo no lo trae:
+				// una resta en silencio escondería un dato que falta.
+				if ( 0 === $sin && $total > 0 ) {
+					$sin = $total - $con;
+				}
+				return array(
+					array(
+						'categoria'  => 'Con oferta oncológica',
+						'municipios' => $con,
+						'detalle'    => 'Pasto, con las seis IPS habilitadas del departamento',
+					),
+					array(
+						'categoria'  => 'Sin oferta oncológica',
+						'municipios' => $sin,
+						'detalle'    => 'Deben remitir a sus pacientes a Pasto',
+					),
+				);
+
 			/* ---------- Tamizaje ---------- */
 			case 'tamizaje_hp':
 				return self::filas_tamizaje( 'infeccion_h_pylori', 'Infectados', 'No infectados' );
@@ -706,6 +781,26 @@ final class UHP_Views {
 
 			case 'prev_hp_municipios':
 				return self::filas_top( 'top10_infeccion_h_pylori', 'prevalencia_h_pylori_porcentaje' );
+
+			case 'prev_lpm_extremos':
+				$filas  = array();
+				$bloque = array(
+					'top10_lesion_precursora_malignidad'              => 'Mayor prevalencia',
+					'menor_prevalencia_lesion_precursora_malignidad'  => 'Menor prevalencia',
+				);
+				foreach ( $bloque as $clave => $extremo ) {
+					foreach ( (array) UHP_Datos::valor( 'prev_municipal', $clave, array() ) as $m ) {
+						if ( empty( $m['municipio'] ) ) {
+							continue;
+						}
+						$filas[] = array(
+							'municipio'   => (string) $m['municipio'],
+							'extremo'     => $extremo,
+							'prevalencia' => isset( $m['prevalencia_lpm_porcentaje'] ) ? (float) $m['prevalencia_lpm_porcentaje'] : 0.0,
+						);
+					}
+				}
+				return $filas;
 
 			case 'prev_subregion':
 				$filas = array();
