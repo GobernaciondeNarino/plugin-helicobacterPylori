@@ -208,6 +208,9 @@ shortcodes. Detalle en la sección «Verificación» de [`guia.md`](guia.md).
   añadir una vista, módulo de datos y verificación.
 - [`docs/auditoria/2026-09-10-auditoria-seguridad.md`](docs/auditoria/2026-09-10-auditoria-seguridad.md)
   — informe de auditoría de seguridad.
+- [`docs/datos/2026-09-11-informacion-nueva.md`](docs/datos/2026-09-11-informacion-nueva.md)
+  — qué aportó la revisión de septiembre del informe de cierre, qué confirmó lo
+  que ya había y qué discrepancias quedaron registradas sin reconciliar.
 - `Investigacion/` y `documentacion/` — documentos fuente del proyecto.
 
 ---
