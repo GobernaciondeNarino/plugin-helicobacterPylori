@@ -14,6 +14,13 @@
   --uhp-g-suave: var(--uhp-suave, #5b6773);
   --uhp-g-acento: var(--uhp-verde, #10A13B);
   --uhp-g-acento-2: var(--uhp-azul, #003366);
+  /* Borde de los controles interactivos (los <select>). Va aparte de
+     --uhp-g-borde porque la norma les pide más: la línea que separa un
+     control de su fondo es «información visual necesaria para
+     identificar un componente de interfaz», y WCAG 2.1 §1.4.11 —que la
+     Resolución 1519 de 2020 adopta— exige 3:1. El borde decorativo de
+     las tarjetas no tiene esa obligación y se vería pesado con ella. */
+  --uhp-g-borde-control: #7c8b9c;
 
   /* Posicionada para que la leyenda del tipo «mapa», que es hermana del
      lienzo, se ancle a la tarjeta y no al primer ancestro que resulte
@@ -33,6 +40,7 @@
   --uhp-g-bg: #0f172a;
   --uhp-g-superficie: #1e293b;
   --uhp-g-borde: #334155;
+  --uhp-g-borde-control: #94a3b8;
   --uhp-g-tinta: #f8fafc;
   --uhp-g-suave: #a9b7c1;
 }
@@ -111,7 +119,7 @@
   font-size: .82rem;
   color: var(--uhp-g-tinta);
   background: var(--uhp-g-bg);
-  border: 1px solid var(--uhp-g-borde);
+  border: 1px solid var(--uhp-g-borde-control);
   border-radius: 6px;
   cursor: pointer;
 }
@@ -286,6 +294,7 @@
   --uhp-g-tinta: var(--uhp-tinta, #0f172a);
   --uhp-g-suave: var(--uhp-suave, #5b6773);
   --uhp-g-acento-2: var(--uhp-azul, #003366);
+  --uhp-g-borde-control: #7c8b9c;
 
   margin: 18px 0;
   padding: 16px 18px;
@@ -338,7 +347,7 @@
   font-size: .92rem;
   color: var(--uhp-g-tinta);
   background: var(--uhp-g-superficie);
-  border: 1px solid var(--uhp-g-borde);
+  border: 1px solid var(--uhp-g-borde-control);
   border-radius: 8px;
   cursor: pointer;
 }
@@ -359,6 +368,12 @@
 
 /* Los paneles de un canal se esconden con el atributo `hidden`. Se
    refuerza aquí porque algunos temas de WordPress declaran `display` en
-   selectores de elemento y ganarían al valor por defecto del navegador,
-   dejando visibles a la vez todas las vistas del canal. */
-.uhp-panel[hidden] { display: none !important; }
+   selectores de elemento —`p { display: block }` es de lo más común— y
+   ganarían al valor por defecto del navegador, dejando visibles a la vez
+   todas las vistas del canal.
+
+   El selector es el ATRIBUTO y no la clase `.uhp-panel`: un panel puede
+   ser un <div> envolvente con esa clase o el propio párrafo de la
+   descripción dentro del selector, que no la lleva. Lo que define a un
+   panel es `data-uhp-panel`, que es también lo que busca el JavaScript. */
+[data-uhp-panel][hidden] { display: none !important; }

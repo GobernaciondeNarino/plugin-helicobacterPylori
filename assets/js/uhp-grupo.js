@@ -61,10 +61,51 @@
       }));
     });
 
-    // Estado inicial: la vista que el servidor dejó visible. Se reafirma
-    // aquí por si la página trae dos selectores del mismo canal, o por si
-    // el navegador restauró la selección anterior al recargar.
-    if (sel.value) { mostrar(canal, sel.value); }
+    // Estado inicial. El servidor dejó un panel visible y marcó esa misma
+    // opción como seleccionada, de modo que normalmente no hay nada que
+    // hacer. Pero al recargar, el navegador RESTAURA el valor anterior del
+    // <select> y puede no coincidir con lo que el servidor pintó: entonces
+    // los paneles enseñarían una vista y el gráfico tendría otra cargada.
+    //
+    // Se compara contra el panel que llegó visible y, si difieren, se
+    // avisa al canal entero como si el usuario acabara de elegir.
+    var servidor = servidorPinto(canal);
+    if (sel.value) {
+      mostrar(canal, sel.value);
+
+      // Se avisa también cuando no hay paneles con los que comparar —un
+      // canal de solo selector y gráfico—, porque entonces no hay forma
+      // de saber si el valor restaurado coincide. El gráfico descarta el
+      // aviso si ya tiene esa vista cargada, de modo que sobrar no cuesta
+      // nada y faltar deja las dos mitades desincronizadas.
+      //
+      // El aviso se aplaza un turno A PROPÓSITO. `C.ready` ejecuta sus
+      // devoluciones en el orden en que se registraron, que es el orden
+      // en que WordPress imprime los scripts, que a su vez depende de qué
+      // shortcode aparece antes en la página. Con el selector delante del
+      // gráfico, este avisaría antes de que la figura tuviera puesto su
+      // oyente y el aviso se perdería. Aplazarlo garantiza que todas las
+      // piezas ya están escuchando, sea cual sea el orden de maquetación.
+      if (servidor !== sel.value) {
+        var pendiente = sel.value;
+        setTimeout(function () {
+          document.dispatchEvent(new CustomEvent(EVENTO, {
+            detail: { canal: canal, vista: pendiente }
+          }));
+        }, 0);
+      }
+    }
+  }
+
+  /* Qué vista dejó visible el servidor en este canal.
+
+     Se lee ANTES de tocar nada: en cuanto `mostrar()` corre, todos los
+     paneles siguen ya al <select> y la respuesta se habría perdido. */
+  function servidorPinto(canal) {
+    var visible = document.querySelector(
+      '[data-uhp-panel][data-canal="' + escapar(canal) + '"]:not([hidden])'
+    );
+    return visible ? visible.getAttribute('data-vista') : '';
   }
 
   /* Enseña el panel de una vista y esconde los demás del mismo canal.

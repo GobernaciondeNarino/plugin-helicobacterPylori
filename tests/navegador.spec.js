@@ -1427,8 +1427,63 @@ test.describe('Selector de vistas', () => {
     // que realmente está oculto y no solo transparente: algunos temas
     // declaran `display` en selectores de elemento y ganarían al valor por
     // defecto del navegador.
-    const oculto = page.locator('[data-zona="titulo"] [data-uhp-panel][hidden]').first();
-    await expect(oculto).toBeHidden();
+    //
+    // Se prueban las DOS formas de panel: el <div> envolvente que lleva la
+    // clase .uhp-panel y el <p> de la descripción dentro del propio
+    // selector, que no la lleva. Lo que define a un panel es el atributo,
+    // y la defensa del CSS tiene que ir contra el atributo.
+    await expect(page.locator('[data-zona="titulo"] [data-uhp-panel][hidden]').first()).toBeHidden();
+    await expect(page.locator('[data-zona="selector"] p[data-uhp-panel][hidden]').first()).toBeHidden();
+
+    // Y exactamente una descripción visible dentro del selector.
+    await expect(page.locator('[data-zona="selector"] p[data-uhp-panel]:not([hidden])')).toHaveCount(1);
+  });
+
+  test('un canal de solo selector y gráfico funciona con el selector delante', async ({ page }) => {
+    const errores = vigilar(page);
+    await page.goto(BASE + '/paginas/selector.html');
+
+    const zona = page.locator('[data-zona="solo-grafico"]');
+    const fig = zona.locator('[data-uhp-grafico]');
+    await expect(fig.locator('.uhp-skeleton')).toHaveCount(0, { timeout: 25000 });
+    await expect(fig).toHaveAttribute('data-view', 'cancer_municipios');
+
+    // Con el selector delante del gráfico, su script se imprime antes: un
+    // aviso inmediato al arrancar se perdería porque la figura todavía no
+    // tendría puesto su oyente. Aquí se comprueba el camino normal, que es
+    // que el cambio del usuario sí llega.
+    await zona.locator('.uhp-sel__select').selectOption('cancer_desenlace');
+    await expect(fig).toHaveAttribute('data-view', 'cancer_desenlace');
+    await expect(fig.locator('.uhp-g__lienzo svg')).toHaveCount(1, { timeout: 25000 });
+
+    expect(errores).toEqual([]);
+  });
+
+  test('el borde del control se distingue de su fondo, como exige la norma', async ({ page }) => {
+    await page.goto(BASE + '/paginas/selector.html');
+
+    // WCAG 2.1 §1.4.11, que la Resolución 1519 de 2020 adopta: la línea
+    // que separa un control de su fondo es información visual necesaria
+    // para identificarlo y pide 3:1. El borde decorativo de una tarjeta
+    // no tiene esa obligación; el de un <select>, sí.
+    const medida = await page.locator('[data-zona="selector"] .uhp-sel__select').evaluate((n) => {
+      const s = getComputedStyle(n);
+      return { borde: s.borderTopColor, fondo: s.backgroundColor };
+    });
+
+    const lum = (css) => {
+      const [r, g, b] = css.match(/[\d.]+/g).slice(0, 3).map(Number);
+      const f = (v) => {
+        const x = v / 255;
+        return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const a = lum(medida.borde);
+    const b = lum(medida.fondo);
+    const razon = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+    expect(razon, `borde ${medida.borde} sobre ${medida.fondo}`).toBeGreaterThanOrEqual(3);
   });
 
   test('un selector sin grupo avisa en vez de romper la página', async ({ page }) => {

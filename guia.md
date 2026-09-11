@@ -807,7 +807,7 @@ silencioso:
   Ofrecerlo en una vista sin territorio produciría un mapa vacío; no ofrecerlo
   en una que sí lo tiene esconde la mitad de la lectura.
 
-### 8.2 Navegador — 60 pruebas
+### 8.2 Navegador — 66 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a
@@ -848,8 +848,13 @@ gráfico nuevo quedaría encima del mapa.
 Del selector se comprueba que elegir en la lista cambia el título, los textos,
 la tabla y el gráfico a la vez; que dos canales en la misma página no se pisan;
 que una lista explícita respeta su orden y su vista inicial; que el cambio se
-anuncia en una región `aria-live` y que el panel oculto sale de verdad del árbol
-de accesibilidad; y que un selector sin grupo avisa en vez de romper la página.
+anuncia en una región `aria-live` y que **las dos formas de panel** —el `<div>`
+con clase y el `<p>` de la descripción dentro del propio selector— salen de
+verdad del árbol de accesibilidad al ocultarse; que un canal de solo selector y
+gráfico funciona **con el selector delante**, que es el orden que hace que su
+script se imprima primero; que el borde del control llega a 3:1 sobre su fondo,
+como exige WCAG 2.1 §1.4.11; y que un selector sin grupo avisa en vez de romper
+la página.
 
 El entorno de pruebas espeja Three.js, D3plus y Leaflet en local
 (`tests/vendor`, no versionado) para no depender de la red, incluida la ruta

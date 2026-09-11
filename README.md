@@ -194,7 +194,7 @@ cáncer detectado: esa información no está en los documentos fuente.
 ```bash
 npm install          # instala Playwright
 npm run test:datos   # 417 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 60 pruebas de navegador
+npm test             # lo anterior más 66 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los

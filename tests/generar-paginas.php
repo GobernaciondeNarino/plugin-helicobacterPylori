@@ -396,6 +396,27 @@ $paginas['selector'] = construir(
 			$sc->sc_titulo( array( 'views' => 'mortalidad_anio,acceso_oncologico,zonas_riesgo', 'canal' => 'contexto', 'view' => 'acceso_oncologico' ) ) .
 			'</div>' .
 
+			// Un canal de SOLO selector y gráfico, sin paneles de texto con
+			// los que comparar, y con el selector delante: es el orden que
+			// hace que el script del selector se imprima antes que el del
+			// gráfico y que un aviso inmediato se perdiera.
+			'<div data-zona="solo-grafico">' .
+			$sc->sc_selector(
+				array(
+					'views'       => 'cancer_municipios,cancer_desenlace',
+					'canal'       => 'casos',
+					'descripcion' => 'no',
+				)
+			) .
+			$sc->sc_grafico(
+				array(
+					'views' => 'cancer_municipios,cancer_desenlace',
+					'canal' => 'casos',
+					'alto'  => '320px',
+				)
+			) .
+			'</div>' .
+
 			// Un selector sin grupo: avisa, no rompe la página.
 			'<div data-zona="sin-grupo">' . $sc->sc_selector( array() ) . '</div>' .
 			'</div>';
