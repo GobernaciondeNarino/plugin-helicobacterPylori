@@ -794,6 +794,7 @@ final class UHP_Admin {
 		$this->pestanas( 'uhp-graficos', $pestanas, $tab );
 		?>
 		<div class="uhpa">
+			<?php $this->tarjeta_grupo( $slugs[ $tab ], $grupos[ $slugs[ $tab ] ] ); ?>
 			<div class="uhpa-rejilla uhpa-rejilla--2">
 				<?php foreach ( $grupos[ $slugs[ $tab ] ] as $v ) : ?>
 					<?php $this->tarjeta_vista( $v ); ?>
@@ -802,6 +803,126 @@ final class UHP_Admin {
 		</div>
 		<?php
 		$this->pie();
+	}
+
+	/**
+	 * Tarjeta que agrupa todas las vistas de una pestaña.
+	 *
+	 * Va delante de las tarjetas individuales y resuelve la pregunta que
+	 * estas no pueden: cómo publicar la pestaña ENTERA en una sola pieza
+	 * de página, en vez de copiar un shortcode por vista.
+	 *
+	 * La lista de aquí es una vista previa —cambia el nombre y el
+	 * identificador que muestran los shortcodes de abajo— para que quien
+	 * maqueta vea a qué vista corresponde cada uno antes de copiarlo. El
+	 * comportamiento real, con el gráfico y los textos cambiando a la vez,
+	 * es el de [urkunina_selector] en la página pública.
+	 *
+	 * @param string $grupo  Nombre del grupo (la pestaña).
+	 * @param array  $vistas Vistas que lo componen.
+	 */
+	private function tarjeta_grupo( $grupo, $vistas ) {
+		$id           = 'uhpa-grupo-' . sanitize_title( $grupo );
+		$territoriales = 0;
+		foreach ( $vistas as $v ) {
+			if ( ! empty( $v['geo'] ) ) {
+				$territoriales++;
+			}
+		}
+		?>
+		<section class="uhpa-card uhpa-card--grupo" data-uhpa-grupo>
+			<header class="uhpa-card__cab">
+				<h2>
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %s: nombre del grupo de vistas. */
+							__( 'Todas las vistas de %s en una sola tarjeta', 'urkunina-5000' ),
+							$grupo
+						)
+					);
+					?>
+				</h2>
+				<p>
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %d: número de vistas del grupo. */
+							_n(
+								'Una lista desplegable gobierna las %d vista de esta pestaña: al elegir un nombre cambian a la vez el título, la descripción, el análisis, las cifras, la tabla y el gráfico.',
+								'Una lista desplegable gobierna las %d vistas de esta pestaña: al elegir un nombre cambian a la vez el título, la descripción, el análisis, las cifras, la tabla y el gráfico.',
+								count( $vistas ),
+								'urkunina-5000'
+							),
+							count( $vistas )
+						)
+					);
+					?>
+				</p>
+			</header>
+			<div class="uhpa-card__cuerpo">
+				<h3 class="uhpa-h3"><?php esc_html_e( 'Vistas que agrupa', 'urkunina-5000' ); ?></h3>
+				<p class="uhpa-campo">
+					<label class="uhpa-etq" for="<?php echo esc_attr( $id ); ?>">
+						<?php esc_html_e( 'Vista', 'urkunina-5000' ); ?>
+					</label>
+					<select class="uhpa-select" id="<?php echo esc_attr( $id ); ?>" data-uhpa-grupo-select>
+						<?php foreach ( $vistas as $v ) : ?>
+							<option value="<?php echo esc_attr( $v['id'] ); ?>"
+								data-descripcion="<?php echo esc_attr( $v['description'] ); ?>">
+								<?php echo esc_html( $v['name'] ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</p>
+				<p class="uhpa-texto" data-uhpa-grupo-desc>
+					<?php echo esc_html( $vistas[0]['description'] ); ?>
+				</p>
+
+				<h3 class="uhpa-h3"><?php esc_html_e( 'Cómo publicar la pestaña completa', 'urkunina-5000' ); ?></h3>
+				<p class="uhpa-nota">
+					<?php esc_html_e( 'Cada pieza es un shortcode independiente y ninguna sabe de las otras: pueden colocarse en columnas distintas, en otro orden o repartidas por la página. Lo único que las une es el grupo.', 'urkunina-5000' ); ?>
+				</p>
+				<?php $this->copiable( '[urkunina_selector grupo="' . $grupo . '"]' ); ?>
+				<?php $this->copiable( '[urkunina_titulo grupo="' . $grupo . '" etiqueta="h2"]' ); ?>
+				<?php $this->copiable( '[urkunina_grafico grupo="' . $grupo . '" alto="420px" titulo="no"]' ); ?>
+				<?php $this->copiable( '[urkunina_descripcion grupo="' . $grupo . '"]' ); ?>
+				<?php $this->copiable( '[urkunina_interpretacion grupo="' . $grupo . '"]' ); ?>
+				<?php $this->copiable( '[urkunina_resumen grupo="' . $grupo . '"]' ); ?>
+				<?php $this->copiable( '[urkunina_cifras grupo="' . $grupo . '"]' ); ?>
+				<?php $this->copiable( '[urkunina_tabla grupo="' . $grupo . '"]' ); ?>
+				<?php $this->copiable( '[urkunina_fuente grupo="' . $grupo . '"]' ); ?>
+
+				<h3 class="uhpa-h3"><?php esc_html_e( 'Vista concreta al arrancar', 'urkunina-5000' ); ?></h3>
+				<p class="uhpa-nota">
+					<?php esc_html_e( 'Sin más atributos arranca la primera vista de la lista. Con «view» arranca la que se indique, y con «canal» pueden convivir dos selectores independientes del mismo grupo en una misma página.', 'urkunina-5000' ); ?>
+				</p>
+				<?php $this->copiable( '[urkunina_selector grupo="' . $grupo . '" view="' . $vistas[ count( $vistas ) - 1 ]['id'] . '" canal="secundario"]' ); ?>
+
+				<?php if ( $territoriales ) : ?>
+					<h3 class="uhpa-h3"><?php esc_html_e( 'Vistas de esta pestaña que van al mapa', 'urkunina-5000' ); ?></h3>
+					<p class="uhpa-nota">
+						<?php
+						echo esc_html(
+							sprintf(
+								/* translators: 1: vistas territoriales; 2: total de vistas del grupo. */
+								_n(
+									'%1$d de las %2$d vistas nombra territorios con geometría, de modo que ofrece «Mapa» entre sus tipos de gráfico. El shortcode puede pedir que arranque ya en el mapa.',
+									'%1$d de las %2$d vistas nombran territorios con geometría, de modo que ofrecen «Mapa» entre sus tipos de gráfico. El shortcode puede pedir que arranque ya en el mapa.',
+									$territoriales,
+									'urkunina-5000'
+								),
+								$territoriales,
+								count( $vistas )
+							)
+						);
+						?>
+					</p>
+					<?php $this->copiable( '[urkunina_grafico grupo="' . $grupo . '" type="mapa" teselas="si"]' ); ?>
+				<?php endif; ?>
+			</div>
+		</section>
+		<?php
 	}
 
 	/**
@@ -1000,17 +1121,24 @@ final class UHP_Admin {
 				'descripcion' => __( 'Dibuja cualquier vista del catálogo con D3plus, acompañada de su barra de herramientas —detalle, tabla de datos, compartir, exportar a PNG, descargar JSON y cambiar de tipo en vivo— y de su texto de análisis.', 'urkunina-5000' ),
 				'ejemplos'    => array(
 					'[urkunina_grafico view="tamizaje_hp" type="donut"]',
-					'[urkunina_grafico view="prev_lpm_municipios" type="bar" alto="480px"]',
+					'[urkunina_grafico view="prev_lpm_municipios" type="mapa" teselas="si"]',
+					'[urkunina_grafico grupo="Prevalencia" alto="420px" titulo="no"]',
 					'[urkunina_grafico view="metas_mga" barra="no" titulo="no"]',
 				),
 				'atributos'   => array(
-					'view'     => __( 'Identificador de la vista. Consulte el módulo Gráficos.', 'urkunina-5000' ),
-					'type'     => __( 'Tipo de gráfico. Si se omite o no es compatible, se usa el tipo por defecto de la vista.', 'urkunina-5000' ),
-					'titulo'   => __( 'Sustituye el título de la vista; con «no» se oculta.', 'urkunina-5000' ),
-					'alto'     => __( 'Altura del lienzo del gráfico.', 'urkunina-5000' ),
-					'tema'     => __( 'claro u oscuro.', 'urkunina-5000' ),
-					'acciones' => __( 'Lista separada por comas de los botones a mostrar.', 'urkunina-5000' ),
-					'barra'    => __( 'si o no. Oculta toda la barra de herramientas.', 'urkunina-5000' ),
+					'view'      => __( 'Identificador de la vista. Consulte el módulo Gráficos.', 'urkunina-5000' ),
+					'type'      => __( 'Tipo de gráfico con el que arranca. Si se omite o la vista no lo admite, se usa su tipo por defecto. Las vistas que nombran territorios admiten además «mapa».', 'urkunina-5000' ),
+					'titulo'    => __( 'Sustituye el título de la vista; con «no» se oculta.', 'urkunina-5000' ),
+					'alto'      => __( 'Altura del lienzo del gráfico.', 'urkunina-5000' ),
+					'tema'      => __( 'claro u oscuro.', 'urkunina-5000' ),
+					'acciones'  => __( 'Lista separada por comas de los botones a mostrar.', 'urkunina-5000' ),
+					'barra'     => __( 'si o no. Oculta toda la barra de herramientas.', 'urkunina-5000' ),
+					'grupo'     => __( 'Nombre de una pestaña del módulo Gráficos. El gráfico obedece entonces al [urkunina_selector] de ese grupo.', 'urkunina-5000' ),
+					'views'     => __( 'Lista de vistas separadas por comas, como alternativa a «grupo».', 'urkunina-5000' ),
+					'canal'     => __( 'Nombre del canal, para tener dos selectores independientes del mismo grupo en una página.', 'urkunina-5000' ),
+					'teselas'   => __( 'si o no. Solo en el tipo «mapa»: enciende la capa base de teselas.', 'urkunina-5000' ),
+					'serie'     => __( 'Solo en el tipo «mapa» y en vistas con más de un indicador por territorio: cuál de ellos se colorea.', 'urkunina-5000' ),
+					'etiquetas' => __( 'si o no. Solo en el tipo «mapa»: rotula los territorios sobre la geometría.', 'urkunina-5000' ),
 				),
 				'nota'        => __( 'Dibuja SOLO el gráfico. La descripción, la interpretación, el resumen, las cifras y la fuente son shortcodes aparte, para poder maquetarlos donde convenga. No olvide publicar la fuente: su cita es obligatoria.', 'urkunina-5000' ),
 			),
@@ -1126,6 +1254,27 @@ final class UHP_Admin {
 				'atributos'   => array(
 					'view' => __( 'Identificador de la vista.', 'urkunina-5000' ),
 				),
+			),
+			array(
+				'tag'         => 'urkunina_selector',
+				'titulo'      => __( 'Lista que agrupa todas las vistas de una pestaña', 'urkunina-5000' ),
+				'descripcion' => __( 'Una sola lista desplegable gobierna al título, la descripción, el análisis, las cifras, la fuente, la tabla y el gráfico que compartan su grupo: al elegir un nombre cambian todos a la vez. Cada pieza sigue siendo su propio shortcode, de modo que pueden colocarse en columnas distintas, en otro orden o repartidas por la página.', 'urkunina-5000' ),
+				'ejemplos'    => array(
+					'[urkunina_selector grupo="Prevalencia"]',
+					'[urkunina_selector grupo="Tamizaje" titulo="Resultados del tamizaje"]',
+					'[urkunina_selector views="mortalidad_anio,acceso_oncologico" canal="contexto"]',
+				),
+				'atributos'   => array(
+					'grupo'       => __( 'Nombre de una pestaña del módulo Gráficos: Epidemiología, Tamizaje, Prevalencia, Población, Biobanco, Casos detectados o Proyecto.', 'urkunina-5000' ),
+					'views'       => __( 'Lista de vistas separadas por comas, en ese orden, como alternativa a «grupo».', 'urkunina-5000' ),
+					'canal'       => __( 'Nombre del canal. Por defecto se deriva del grupo; indíquelo para tener dos selectores independientes del mismo grupo en una página.', 'urkunina-5000' ),
+					'view'        => __( 'Vista que arranca seleccionada. Por defecto, la primera de la lista.', 'urkunina-5000' ),
+					'etiqueta'    => __( 'Texto de la etiqueta del control. Por defecto «Vista».', 'urkunina-5000' ),
+					'titulo'      => __( 'Título opcional encima de la lista.', 'urkunina-5000' ),
+					'descripcion' => __( 'si o no. Muestra bajo la lista la descripción corta de la vista elegida.', 'urkunina-5000' ),
+					'tarjeta'     => __( 'si o no. Con «no» se pinta solo el control, sin borde ni fondo.', 'urkunina-5000' ),
+				),
+				'nota'        => __( 'Los mismos atributos «grupo», «views» y «canal» se aceptan en [urkunina_titulo], [urkunina_descripcion], [urkunina_interpretacion], [urkunina_resumen], [urkunina_cifras], [urkunina_fuente], [urkunina_analisis], [urkunina_tabla] y [urkunina_grafico]. Los textos y las tablas llegan ya en el HTML —un panel por vista— de modo que sin JavaScript se lee igualmente la vista activa.', 'urkunina-5000' ),
 			),
 			array(
 				'tag'         => 'urkunina_titulo',

@@ -106,7 +106,7 @@ urkunina-5000/
 
 ## 3. El conjunto de datos
 
-Diecisiete archivos en `data/`: quince JSON del proyecto y dos de cartografía.
+Diecinueve archivos en `data/`: diecisiete JSON del proyecto y dos de cartografía.
 
 | Clave | Archivo | Contenido |
 |---|---|---|
@@ -125,6 +125,8 @@ Diecisiete archivos en `data/`: quince JSON del proyecto y dos de cartografía.
 | `metas` | `12_metas_mga.json` | Los 23 productos de la ficha MGA |
 | `retos` | `13_retos_siguiente_fase.json` | Retos para la siguiente fase |
 | `subregiones` | `14_subregiones_municipios.json` | División subregional oficial de la Gobernación: las 13 subregiones y sus municipios |
+| `mortalidad` | `15_mortalidad_departamental.json` | Fallecimientos anuales por cáncer de estómago, 2019-2022 (IDSN) |
+| `acceso_oncologico` | `16_acceso_servicios_oncologicos.json` | Las seis IPS oncológicas del departamento y la barrera de acceso territorial |
 | `geojson` | `narino_municipios.geojson` | Geometría de los 64 municipios (DANE) |
 | `geojson_subregiones` | `dep-sub-mun.geojson` | Tres capas: departamento, 13 subregiones y los 64 municipios con la subregión de cada uno |
 
@@ -137,12 +139,27 @@ Diecisiete archivos en `data/`: quince JSON del proyecto y dos de cartografía.
 
 ### 3.2 Discrepancias documentadas
 
-El manifiesto registra cinco discrepancias entre las fuentes que **no se han
-resuelto silenciosamente**. La más relevante para quien lea las cifras: el
-biobanco suma 31.190 muestras por tipo, los documentos hablan de «más de
-25.000» y la ficha MGA registra una meta de 45.000 cumplida al 100 %. Las tres
-cifras están en los datos y su conciliación con la Fundación CIEDYN, custodia
-del biobanco, sigue pendiente.
+El manifiesto registra ocho discrepancias entre las fuentes que **no se han
+resuelto silenciosamente**. Tres merecen mención:
+
+- **Tamaño del biobanco.** Suma 31.190 muestras por tipo, los documentos hablan
+  de «más de 25.000», la ficha MGA registra una meta de 45.000 cumplida al 100 %
+  y la presentación de cierre se contradice a sí misma entre diapositivas
+  (25.000 en dos, 45.000 en otra). Las cuatro cifras están en los datos.
+- **Custodio del biobanco.** El informe preliminar dice Fundación CIEDYN; la
+  presentación de cierre dice Instituto Nacional de Cancerología y reparte los
+  demás roles de otra manera. El cuerpo del propio informe sitúa las muestras
+  «en el Instituto Nacional de Cáncer de Colombia», así que custodia física y
+  custodia documental podrían no coincidir. Se conserva el reparto del informe
+  preliminar, que es quien desarrolla la tabla de actores.
+- **Forma de la serie de mortalidad.** El informe habla de «crecimiento
+  constante desde 2019 hasta 2022», pero su propia Gráfica 3 registra una caída
+  en 2020 (77 fallecimientos) antes del repunte. Se publica la serie, que es el
+  dato; el crecimiento total del periodo (+35,64 %) sí es correcto, lo que no se
+  sostiene es que sea constante. **El conjunto no atribuye causa alguna a la
+  caída porque la fuente no la explica.**
+
+Ninguna está conciliada: hacerlo requiere validación con las entidades.
 
 Los dos archivos de cartografía tienen su propio tope de tamaño
 (`UHP_Security::MAX_GEO_BYTES`, 8 MiB) en vez de compartir el de los archivos de
@@ -232,6 +249,35 @@ limitar por limitar: un pastel de veintitrés productos no comunica nada.
 | `temporal` | líneas, área, barras, área apilada |
 | `categorical` | barras, pastel, dona, treemap |
 
+A esa lista se suma **`mapa`** cuando la vista declara `geo`, y solo entonces:
+un mapa necesita una geometría que colorear, y ofrecerlo en una vista que no
+nombra territorios produciría una plancha vacía. Lo decide
+`UHP_Views::compatibles_de( $id )`, que es la que hay que llamar para un
+gráfico concreto; `compatibles( $category )` sigue existiendo pero solo conoce
+la categoría, no la vista.
+
+De las vistas actuales lo ofrecen siete: `contraste_municipal`,
+`prev_lpm_municipios`, `prev_hp_municipios`, `prev_lpm_extremos`,
+`cancer_municipios` (municipales) y `prev_subregion`, `prev_subregion_lpm`,
+`prev_subregion_hp` (subregionales).
+
+El mapa va **al final** de la lista a propósito: es el tipo más caro de dibujar
+—arrastra la topología— y el que menos precisión de lectura da. Como primera
+opción solo cuando el shortcode lo pide:
+
+```
+[urkunina_grafico view="prev_lpm_municipios" type="mapa" teselas="si"]
+```
+
+Lo dibuja el mismo componente de `[urkunina_geomapa]`, montado sobre el lienzo
+del gráfico con `UHPGeomapa.montar()`. No hay dos implementaciones de mapa: hay
+una, con dos contenedores posibles.
+
+Al salir del mapa hay que **desmontarlo** (`UHPGeomapa.destruir()`). Los dos
+motores dibujan DENTRO del lienzo y ninguno lo vacía al soltarlo, de modo que
+sin el desmontaje explícito el gráfico nuevo quedaría encima del mapa anterior.
+Hay una prueba de navegador dedicada a eso.
+
 ### 4.3 Reglas de calidad del renderer
 
 Las que separan un gráfico publicable de uno que confunde:
@@ -303,6 +349,58 @@ El texto accesible del gráfico no se pierde: el lienzo conserva
 `role="img"` con un `aria-label` que reúne el nombre de la vista, su
 descripción y sus cifras, de modo que un lector de pantalla sigue recibiendo la
 lectura completa aunque el texto visible se haya maquetado en otro sitio.
+
+### 4.5.1 Un selector que gobierna varias piezas a la vez
+
+Una pestaña del módulo Gráficos puede publicarse **entera** en una sola pieza de
+página, en vez de copiar un shortcode por vista. Lo hace `[urkunina_selector]`:
+
+```
+[urkunina_selector grupo="Prevalencia"]
+[urkunina_titulo    grupo="Prevalencia" etiqueta="h2"]
+[urkunina_grafico   grupo="Prevalencia" alto="420px" titulo="no"]
+[urkunina_descripcion grupo="Prevalencia"]
+[urkunina_tabla     grupo="Prevalencia"]
+[urkunina_fuente    grupo="Prevalencia"]
+```
+
+Al elegir un nombre en la lista cambian a la vez el título, la descripción, la
+interpretación, el resumen, las cifras, la fuente, la tabla y el gráfico.
+
+**Las piezas no se conocen entre sí.** Cada una declara a qué *canal* pertenece
+con `data-canal` y el selector les habla por ese nombre, a través de un evento
+`uhp:canal` en `document`. Por eso pueden ir en columnas distintas, en otro
+orden, o repartidas por la página, y por eso `uhp-grupo.js` no depende ni de
+D3plus ni de la figura del gráfico: una página con solo textos y tablas
+funciona igual.
+
+Tres atributos, aceptados por todas las piezas:
+
+| Atributo | Qué hace |
+|---|---|
+| `grupo` | Nombre de una pestaña: `Epidemiología`, `Tamizaje`, `Prevalencia`, `Población`, `Biobanco`, `Casos detectados`, `Proyecto`. Ignora mayúsculas y tildes. |
+| `views` | Lista de vistas separadas por comas, en ese orden. Gana sobre `grupo`. |
+| `canal` | Nombre del canal. Por defecto se deriva del grupo; indíquelo para tener dos selectores independientes del mismo grupo en una página. |
+
+Y `view` elige cuál arranca seleccionada, aunque no sea la primera.
+
+**Dos mecanismos distintos, según lo que cuesta cada pieza.** Los textos y las
+tablas se imprimen TODOS, un panel por vista, y cambiar de vista es enseñar uno
+y esconder los demás con el atributo `hidden`: instantáneo, sin petición, y sin
+JavaScript se lee igualmente la vista activa. El gráfico, en cambio, es **uno
+solo** y se recarga: imprimir una figura por vista obligaría a cada una a pedir
+sus datos al arrancar, y ocho vistas serían ocho peticiones para enseñar una.
+
+Al cambiar de vista, el gráfico **no arrastra el tipo**: «dona» no existe en un
+ranking y «mapa» no existe en una vista sin geometría, de modo que se deja que
+el servidor elija el tipo por defecto de la vista nueva.
+
+Se usa `hidden` y no una clase porque es el mecanismo que los lectores de
+pantalla ya entienden: los paneles ocultos quedan fuera del árbol de
+accesibilidad sin depender de que el CSS del plugin haya llegado a cargar. El
+cambio se anuncia además en una región `aria-live`, porque no mueve el foco ni
+altera el orden de lectura y un lector de pantalla no se enteraría por su
+cuenta de que media página acaba de cambiar.
 
 ### 4.6 El geomapa: llevar una vista al territorio
 
@@ -683,21 +781,33 @@ npm run test:datos   # capa de datos, sin WordPress
 npm test             # lo anterior más las pruebas de navegador
 ```
 
-### 8.1 Capa de datos — 354 comprobaciones
+### 8.1 Capa de datos — 417 comprobaciones
 
 `tests/test-datos.php` ejecuta las clases del plugin fuera de WordPress, con
 sustitutos mínimos de sus funciones (`tests/stubs-wordpress.php`). Comprueba
-que los diecisiete archivos se leen y cumplen su contrato, que la topología que
+que los diecinueve archivos se leen y cumplen su contrato, que la topología que
 consume D3plus se construye bien —anillos cerrados, sentido de giro correcto,
 error de cuantización por debajo del 0,03 % y subregiones disueltas—, que el saneador de CSS
 neutraliza lo peligroso **y conserva intacto lo legítimo**, que los 55
-municipios cruzan con la geometría, que las 24 vistas producen filas con la
+municipios cruzan con la geometría, que las 27 vistas producen filas con la
 forma que declaran, que sus textos llegan a los 375 caracteres, y que las
 cifras cuadran entre sí: los positivos y negativos suman 5.000, la distribución
 municipal de casos suma el total declarado, las muestras por tipo suman el
 inventario y las fuentes de financiación suman el presupuesto.
 
-### 8.2 Navegador — 50 pruebas
+Dos comprobaciones nuevas merecen mención porque protegen de un error
+silencioso:
+
+- **El titular de la mortalidad se deriva de su propia serie.** El +35,64 % que
+  destaca el informe no se copia: se recalcula desde los extremos declarados y
+  se comprueba que esos extremos son los años que trae la serie. Si alguien
+  corrige un año y no el titular, la prueba lo delata.
+- **`mapa` solo se ofrece donde hay geometría.** Cada vista comprueba que el
+  tipo `mapa` figura entre sus compatibles **si y solo si** declara `geo`.
+  Ofrecerlo en una vista sin territorio produciría un mapa vacío; no ofrecerlo
+  en una que sí lo tiene esconde la mitad de la lectura.
+
+### 8.2 Navegador — 60 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a
@@ -726,6 +836,20 @@ atribución del mapa—, con la capa base y la tinta de los gráficos siguiendo 
 tema; que las cifras, la ficha y la tabla llegan en el HTML
 **con el JavaScript desactivado**; y que mapa, gráfico y escena 3D funcionan
 juntos en una misma página con una sola instancia de cada librería.
+
+Del tipo `mapa` se comprueba que una vista territorial arranca en él cuando el
+shortcode lo pide, que aparece entre los tipos de la barra solo en esas vistas,
+que el shortcode elige qué serie se colorea y que las teselas se piden cuando
+se encienden. Y sobre todo, que **cambiar de barras a mapa y volver no deja
+restos del dibujo anterior**: los dos motores dibujan dentro del mismo lienzo y
+ninguno lo vacía al soltarlo, de modo que sin el desmontaje explícito el
+gráfico nuevo quedaría encima del mapa.
+
+Del selector se comprueba que elegir en la lista cambia el título, los textos,
+la tabla y el gráfico a la vez; que dos canales en la misma página no se pisan;
+que una lista explícita respeta su orden y su vista inicial; que el cambio se
+anuncia en una región `aria-live` y que el panel oculto sale de verdad del árbol
+de accesibilidad; y que un selector sin grupo avisa en vez de romper la página.
 
 El entorno de pruebas espeja Three.js, D3plus y Leaflet en local
 (`tests/vendor`, no versionado) para no depender de la red, incluida la ruta

@@ -15,7 +15,7 @@ conoce al volcán Galeras.
 
 ## Qué hace
 
-Convierte el conjunto de datos del proyecto —quince archivos JSON más la
+Convierte el conjunto de datos del proyecto —diecisiete archivos JSON más la
 cartografía municipal y subregional— en componentes publicables desde el editor
 de WordPress:
 
@@ -23,7 +23,7 @@ de WordPress:
 |---|---|
 | Tablero interactivo con mapa, controles, filtros y gráficos enlazados | `[urkunina_dashboard tema="oscuro\|claro"]` |
 | Recreación 3D de *Helicobacter pylori* con línea de tiempo | `[urkunina_3d]` |
-| Gráfico de cualquiera de las 24 vistas del catálogo | `[urkunina_grafico view="…"]` |
+| Gráfico de cualquiera de las 27 vistas del catálogo, con el mapa entre sus tipos | `[urkunina_grafico view="…" type="…"]` |
 | Mapa coroplético de los 64 municipios sobre OpenStreetMap | `[urkunina_mapa]` |
 | Geomapa de D3plus de una vista territorial, por municipio o por subregión | `[urkunina_geomapa view="…" teselas="si\|no"]` |
 | Tarjetas con las cifras clave del proyecto | `[urkunina_kpi]` |
@@ -44,9 +44,39 @@ abriendo la sección y el gráfico cerrándola—:
 | Cifras de apoyo redactadas a partir de los datos | `[urkunina_cifras view="…"]` |
 | Atribución de la fuente del dato | `[urkunina_fuente view="…"]` |
 | Varias de las anteriores en un solo bloque | `[urkunina_analisis view="…" modo="completo"]` |
+| Lista que agrupa todas las vistas de una pestaña | `[urkunina_selector grupo="…"]` |
 
 Los siete se renderizan en el servidor: el texto viaja en el HTML, sin petición
 ni parpadeo, y sigue ahí con JavaScript desactivado o para un buscador.
+
+### Una lista que gobierna todas las piezas
+
+Una pestaña entera del catálogo puede publicarse con una sola lista
+desplegable. Al elegir un nombre cambian a la vez el título, la descripción, la
+interpretación, el resumen, las cifras, la fuente, la tabla y el gráfico:
+
+```
+[urkunina_selector    grupo="Prevalencia"]
+[urkunina_titulo      grupo="Prevalencia" etiqueta="h2"]
+[urkunina_grafico     grupo="Prevalencia" alto="420px" titulo="no"]
+[urkunina_descripcion grupo="Prevalencia"]
+[urkunina_tabla       grupo="Prevalencia"]
+[urkunina_fuente      grupo="Prevalencia"]
+```
+
+Las piezas siguen siendo independientes y no se conocen entre sí: pueden ir en
+columnas distintas, en otro orden o repartidas por la página. Lo único que las
+une es el grupo. `views="a,b,c"` sustituye a `grupo` para una lista a mano, y
+`canal="…"` permite dos selectores independientes del mismo grupo en una página.
+
+### El mapa es un tipo de gráfico más
+
+Las vistas que nombran municipios o subregiones ofrecen **Mapa** junto a barras,
+líneas y dona en la barra del gráfico, y el shortcode elige con cuál arranca:
+
+```
+[urkunina_grafico view="prev_lpm_municipios" type="mapa" teselas="si"]
+```
 
 > **La atribución dejó de ser automática.** Como `[urkunina_grafico]` ya no
 > imprime la línea de fuente, publique `[urkunina_fuente view="…"]` junto a cada
@@ -163,8 +193,8 @@ cáncer detectado: esa información no está en los documentos fuente.
 
 ```bash
 npm install          # instala Playwright
-npm run test:datos   # 263 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 20 pruebas de navegador
+npm run test:datos   # 417 comprobaciones de la capa de datos, sin WordPress
+npm test             # lo anterior más 60 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los

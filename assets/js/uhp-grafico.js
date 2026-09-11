@@ -56,11 +56,47 @@
       legendStyle: fig.getAttribute('data-legend-style') || 'text',
       legendPos: fig.getAttribute('data-legend-pos') || 'bottom',
       acciones: parseAcciones(fig.getAttribute('data-acciones')),
+      // Opciones del tipo «mapa». Viajan siempre, aunque el gráfico
+      // arranque en barras: el usuario puede cambiar de tipo en la barra
+      // y el mapa debe salir ya configurado como pide el shortcode.
+      tema: fig.getAttribute('data-tema') === 'oscuro' ? 'oscuro' : 'claro',
+      teselas: fig.getAttribute('data-teselas') === '1',
+      serie: fig.getAttribute('data-serie') || '',
+      etiquetas: fig.getAttribute('data-etiquetas') === '1',
       payload: null,
-      viz: null
+      viz: null,
+      geo: null
     };
 
     cargar(fig, lienzo, titulo, st);
+
+    // Gráfico agrupado: obedece al selector de su canal. Se escucha en
+    // `document` porque el selector puede estar en otra columna o incluso
+    // antes en el documento, y la figura no tiene forma de encontrarlo.
+    var canal = fig.getAttribute('data-canal');
+    if (canal) {
+      document.addEventListener('uhp:canal', function (ev) {
+        var d = ev.detail || {};
+        if (d.canal !== canal || !d.vista || d.vista === st.view) { return; }
+
+        st.view = d.vista;
+        fig.setAttribute('data-view', d.vista);
+
+        // El tipo NO se arrastra entre vistas: «dona» no existe en un
+        // ranking y «mapa» no existe en una vista sin geometría. Se deja
+        // que el servidor elija el tipo por defecto de la vista nueva.
+        st.type = '';
+        fig.setAttribute('data-type', '');
+
+        if (st.geo) {
+          window.UHPGeomapa.destruir(st.geo);
+          st.geo = null;
+        }
+        lienzo.innerHTML = '';
+        lienzo.classList.remove('uhp-g__lienzo--mapa');
+        cargar(fig, lienzo, titulo, st);
+      });
+    }
   }
 
   function parseAcciones(s) {
@@ -88,12 +124,7 @@
           ((p.view && p.view.analisis && p.view.analisis.cuantitativo) || ''));
 
         C.quitarSkeleton(fig);
-        st.viz = window.UHPRenderer.render(lienzo, p, {
-          legend: st.legend,
-          legendStyle: st.legendStyle,
-          legendPos: st.legendPos,
-          reducirMovimiento: reducirMovimiento
-        });
+        dibujar(fig, lienzo, st);
 
         pintarBarra(fig, lienzo, titulo, st);
       }, function () {
@@ -112,6 +143,61 @@
           cargar(fig, lienzo, titulo, st);
         });
       });
+  }
+
+  /* ---------------- Dibujo ---------------- */
+
+  /* Un solo punto de dibujo para los dos motores.
+
+     «mapa» no es un tipo de D3plus como los demás: necesita la topología
+     del departamento y los valores por territorio, que es justo lo que
+     ya sabe hacer [urkunina_geomapa]. En vez de duplicarlo aquí, se monta
+     el mismo componente sobre el lienzo del gráfico.
+
+     Salir del mapa exige desmontarlo antes: los dos motores dibujan
+     DENTRO del lienzo y no lo vacían al soltarlo, de modo que sin el
+     desmontaje el nuevo gráfico quedaría encima del mapa anterior.       */
+  function dibujar(fig, lienzo, st) {
+    if (st.geo) {
+      window.UHPGeomapa.destruir(st.geo);
+      st.geo = null;
+    }
+
+    if (st.type === 'mapa') {
+      if (!window.UHPGeomapa) {
+        C.error(lienzo, 'No se pudo dibujar el mapa: falta el componente de geomapas.');
+        return;
+      }
+      st.viz = null;
+      lienzo.innerHTML = '';
+      lienzo.classList.add('uhp-g__lienzo--mapa');
+
+      var g = (st.payload && st.payload.geo) || {};
+      st.geo = window.UHPGeomapa.montar({
+        fig: fig,
+        lienzo: lienzo,
+        leyendaCaja: fig.querySelector('.uhp-g__leyenda'),
+        view: st.view,
+        nivel: g.nivel,
+        // Con la vista partida en series el mapa solo puede pintar una.
+        // Si el shortcode no eligió, se toma la primera que declara la
+        // vista, que es la misma que elegiría el servidor.
+        serie: st.serie || ((g.series && g.series[0]) || ''),
+        tema: st.tema,
+        teselas: st.teselas,
+        leyenda: st.legend,
+        etiquetas: st.etiquetas
+      });
+      return;
+    }
+
+    lienzo.classList.remove('uhp-g__lienzo--mapa');
+    st.viz = window.UHPRenderer.render(lienzo, st.payload, {
+      legend: st.legend,
+      legendStyle: st.legendStyle,
+      legendPos: st.legendPos,
+      reducirMovimiento: reducirMovimiento
+    });
   }
 
   /* ---------------- Barra de herramientas ---------------- */
@@ -163,12 +249,7 @@
           st.payload = p;
           st.type = (p.chart && p.chart.key) || nuevo;
           fig.setAttribute('data-type', st.type);
-          st.viz = window.UHPRenderer.render(lienzo, p, {
-            legend: st.legend,
-            legendStyle: st.legendStyle,
-            legendPos: st.legendPos,
-            reducirMovimiento: reducirMovimiento
-          });
+          dibujar(fig, lienzo, st);
         })
         .catch(function () {
           C.error(lienzo, 'No se pudo cambiar el tipo de gráfico.', function () {
@@ -186,7 +267,7 @@
   var NOMBRE_TIPO = {
     bar: 'Barras', stacked_bar: 'Barras apiladas', line: 'Líneas', area: 'Área',
     stacked_area: 'Área apilada', pie: 'Pastel', donut: 'Dona',
-    treemap: 'Treemap', box_whisker: 'Caja y bigotes'
+    treemap: 'Treemap', box_whisker: 'Caja y bigotes', mapa: 'Mapa'
   };
   function nombreTipo(t) { return NOMBRE_TIPO[t] || t; }
 

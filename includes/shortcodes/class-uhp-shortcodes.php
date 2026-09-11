@@ -33,6 +33,10 @@ final class UHP_Shortcodes {
 		add_shortcode( 'urkunina_dashboard', array( $this, 'sc_dashboard' ) );
 		add_shortcode( 'urkunina_grafico', array( $this, 'sc_grafico' ) );
 
+		// Agrupa varias vistas en una sola tarjeta: una lista desplegable
+		// gobierna al título, los textos, la tabla y el gráfico del canal.
+		add_shortcode( 'urkunina_selector', array( $this, 'sc_selector' ) );
+
 		// Los textos de una vista van aparte del gráfico: cada uno es su
 		// propio shortcode para poder maquetarlos por libre en la página.
 		add_shortcode( 'urkunina_analisis', array( $this, 'sc_analisis' ) );
@@ -331,6 +335,112 @@ final class UHP_Shortcodes {
 	}
 
 	/* ================================================================= */
+	/* [urkunina_selector]                                               */
+	/* ================================================================= */
+
+	/**
+	 * Lista desplegable que gobierna un canal de piezas.
+	 *
+	 * Es la tarjeta que agrupa todas las vistas de una pestaña: al elegir
+	 * un nombre cambian a la vez el título, la descripción, el análisis,
+	 * las cifras, la tabla y el gráfico que compartan su canal.
+	 *
+	 *   [urkunina_selector grupo="Prevalencia"]
+	 *   [urkunina_titulo   grupo="Prevalencia"]
+	 *   [urkunina_grafico  grupo="Prevalencia" alto="420px"]
+	 *   [urkunina_tabla    grupo="Prevalencia"]
+	 *
+	 * Cada pieza es su propio shortcode y ninguna sabe de las otras, de
+	 * modo que pueden colocarse en columnas distintas, en otro orden o
+	 * repartidas por la página.
+	 *
+	 * @param array $atts Atributos del shortcode.
+	 * @return string
+	 */
+	public function sc_selector( $atts ) {
+		$atts = $this->fusionar(
+			array_merge(
+				$this->atts_canal(),
+				array(
+					'view'      => '',
+					'etiqueta'  => __( 'Vista', 'urkunina-5000' ),
+					'titulo'    => '',
+					'descripcion' => 'si',
+					'tarjeta'   => 'si',
+				)
+			),
+			$atts,
+			'urkunina_selector'
+		);
+
+		$canal = $this->canal( $atts );
+		if ( ! $canal ) {
+			return $this->aviso(
+				__( 'El selector necesita un grupo de vistas: indique grupo="Prevalencia" o views="vista_a,vista_b". Consulte el catálogo en URKUNINA 5000 → Gráficos.', 'urkunina-5000' )
+			);
+		}
+
+		UHP_Estilos::encolar_fuentes();
+		wp_enqueue_style( UHP_Assets::P . 'grafico' );
+		wp_enqueue_script( UHP_Assets::P . 'grupo' );
+
+		$id      = $this->id( 'uhpsel' );
+		$tarjeta = $this->afirmativo( $atts['tarjeta'] );
+		$clases  = 'uhp uhp-sel' . ( $tarjeta ? '' : ' uhp-sel--plano' );
+
+		ob_start();
+		?>
+		<div class="<?php echo esc_attr( $clases ); ?>"
+			style="<?php echo esc_attr( UHP_Estilos::inline( $atts ) ); ?>"
+			data-uhp-selector
+			data-canal="<?php echo esc_attr( $canal['canal'] ); ?>">
+
+			<?php if ( '' !== $atts['titulo'] ) : ?>
+				<h3 class="uhp-sel__titulo"><?php echo esc_html( $atts['titulo'] ); ?></h3>
+			<?php endif; ?>
+
+			<div class="uhp-sel__campo">
+				<label class="uhp-sel__etq" for="<?php echo esc_attr( $id ); ?>">
+					<?php echo esc_html( $atts['etiqueta'] ); ?>
+				</label>
+				<select class="uhp-sel__select" id="<?php echo esc_attr( $id ); ?>"
+					data-uhp-canal-select>
+					<?php foreach ( $canal['vistas'] as $v ) : ?>
+						<?php $m = UHP_Views::meta( $v ); ?>
+						<option value="<?php echo esc_attr( $v ); ?>"
+							<?php selected( $v, $canal['activa'] ); ?>>
+							<?php echo esc_html( $m['name'] ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+			</div>
+
+			<?php if ( $this->afirmativo( $atts['descripcion'] ) ) : ?>
+				<?php
+				/* La descripción corta de la vista elegida vive dentro del
+				   propio selector: dice qué se está mirando sin obligar a
+				   colocar otro shortcode al lado. */
+				?>
+				<div class="uhp-sel__pie">
+					<?php foreach ( $canal['vistas'] as $v ) : ?>
+						<?php $m = UHP_Views::meta( $v ); ?>
+						<p class="uhp-sel__desc" data-uhp-panel
+							data-canal="<?php echo esc_attr( $canal['canal'] ); ?>"
+							data-vista="<?php echo esc_attr( $v ); ?>"
+							<?php echo ( $v === $canal['activa'] ) ? '' : 'hidden'; ?>>
+							<?php echo esc_html( $m['description'] ); ?>
+						</p>
+					<?php endforeach; ?>
+				</div>
+			<?php endif; ?>
+
+			<p class="uhp-sr" role="status" aria-live="polite" data-uhp-canal-estado></p>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	/* ================================================================= */
 	/* [urkunina_grafico]                                                */
 	/* ================================================================= */
 
@@ -342,8 +452,8 @@ final class UHP_Shortcodes {
 	 */
 	public function sc_grafico( $atts ) {
 		$atts = $this->fusionar(
-			array(
-				'view'         => 'tamizaje_hp',
+			array_merge( $this->atts_canal(), array(
+				'view'         => '',
 				'type'         => '',
 				'titulo'       => '',
 				'alto'         => '',
@@ -353,12 +463,27 @@ final class UHP_Shortcodes {
 				'leyenda_estilo' => 'text',
 				'acciones'     => '',
 				'barra'        => 'si',
-			),
+				// Opciones del tipo «mapa». Solo cuentan en las vistas
+				// territoriales, que son las únicas que lo ofrecen.
+				'teselas'      => 'no',
+				'serie'        => '',
+				'etiquetas'    => 'no',
+			) ),
 			$atts,
 			'urkunina_grafico'
 		);
 
-		$vista = UHP_Security::clave( $atts['view'] );
+		// Agrupado: el gráfico es UNO solo y cambia de vista en vivo. No se
+		// imprime uno por vista como con los textos, porque cada figura
+		// pediría sus datos al arrancar: ocho vistas serían ocho peticiones
+		// para enseñar una.
+		$canal = $this->canal( $atts );
+		if ( $canal ) {
+			wp_enqueue_script( UHP_Assets::P . 'grupo' );
+			$atts['view'] = $canal['activa'];
+		}
+
+		$vista = $this->vista_o_defecto( $atts['view'] );
 		if ( ! UHP_Views::existe( $vista ) ) {
 			return $this->aviso(
 				sprintf(
@@ -374,9 +499,28 @@ final class UHP_Shortcodes {
 		UHP_Assets::encolar_libreria( 'd3plus' );
 		wp_enqueue_script( UHP_Assets::P . 'grafico' );
 
+		// Una vista territorial ofrece el tipo «mapa» en la barra, de modo
+		// que el componente de geomapas tiene que estar cargado aunque el
+		// gráfico arranque en barras: el usuario puede cambiar de tipo sin
+		// recargar la página y no habría con qué dibujarlo.
+		$territorial = UHP_Views::es_territorial( $vista );
+		if ( $territorial ) {
+			wp_enqueue_style( UHP_Assets::P . 'geomapa' );
+			wp_enqueue_script( UHP_Assets::P . 'geomapa' );
+		}
+
 		$meta   = UHP_Views::meta( $vista );
 		$id     = $this->id( 'uhpg' );
 		$clases = 'uhp uhp-g' . ( 'oscuro' === $atts['tema'] ? ' uhp-g--oscuro' : '' );
+
+		// La serie solo existe en las vistas partidas en varias; si se pide
+		// una que la vista no declara se ignora, igual que hace el servidor
+		// al resolver /geomapa.
+		$series = $territorial ? UHP_Views::series( $vista ) : array();
+		$serie  = sanitize_text_field( (string) $atts['serie'] );
+		if ( ! in_array( $serie, $series, true ) ) {
+			$serie = '';
+		}
 
 		$estilo = UHP_Estilos::inline( $atts );
 		if ( '' !== $atts['alto'] ) {
@@ -394,7 +538,12 @@ final class UHP_Shortcodes {
 			data-legend="<?php echo 'no' === $atts['leyenda'] ? '0' : '1'; ?>"
 			data-legend-pos="<?php echo esc_attr( UHP_Security::clave( $atts['leyenda_pos'] ) ); ?>"
 			data-legend-style="<?php echo esc_attr( UHP_Security::clave( $atts['leyenda_estilo'] ) ); ?>"
-			data-acciones="<?php echo esc_attr( sanitize_text_field( $atts['acciones'] ) ); ?>">
+			data-acciones="<?php echo esc_attr( sanitize_text_field( $atts['acciones'] ) ); ?>"
+			data-tema="<?php echo 'oscuro' === $atts['tema'] ? 'oscuro' : 'claro'; ?>"
+			data-teselas="<?php echo $this->afirmativo( $atts['teselas'] ) ? '1' : '0'; ?>"
+			data-serie="<?php echo esc_attr( $serie ); ?>"
+			data-etiquetas="<?php echo $this->afirmativo( $atts['etiquetas'] ) ? '1' : '0'; ?>"
+			<?php if ( $canal ) : ?>data-canal="<?php echo esc_attr( $canal['canal'] ); ?>"<?php endif; ?>>
 
 			<?php if ( 'no' !== $atts['titulo'] ) : ?>
 				<figcaption class="uhp-g__titulo">
@@ -408,6 +557,12 @@ final class UHP_Shortcodes {
 			<?php endif; ?>
 
 			<div class="uhp-g__lienzo"></div>
+			<?php if ( $territorial ) : ?>
+				<?php /* La rampa del mapa. D3plus no la dibuja: la pinta el
+				         componente de geomapas, y queda vacía mientras el
+				         gráfico no esté en modo mapa. */ ?>
+				<div class="uhp-g__leyenda" aria-hidden="true"></div>
+			<?php endif; ?>
 			<?php echo $this->skeleton( __( 'Cargando el gráfico…', 'urkunina-5000' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 		</figure>
 		<?php
@@ -426,9 +581,12 @@ final class UHP_Shortcodes {
 	 */
 	public function sc_analisis( $atts ) {
 		$atts = $this->fusionar(
-			array(
-				'view' => 'tamizaje_hp',
-				'modo' => 'ambos',
+			array_merge(
+				$this->atts_canal(),
+				array(
+					'view' => '',
+					'modo' => 'ambos',
+				)
 			),
 			$atts,
 			'urkunina_analisis'
@@ -469,18 +627,16 @@ final class UHP_Shortcodes {
 	 */
 	public function sc_titulo( $atts ) {
 		$atts = $this->fusionar(
-			array(
-				'view'      => 'tamizaje_hp',
-				'etiqueta'  => 'h3',
+			array_merge(
+				$this->atts_canal(),
+				array(
+					'view'      => '',
+					'etiqueta'  => 'h3',
+				)
 			),
 			$atts,
 			'urkunina_titulo'
 		);
-
-		$vista = UHP_Security::clave( $atts['view'] );
-		if ( ! UHP_Views::existe( $vista ) ) {
-			return $this->aviso( __( 'La vista solicitada no existe.', 'urkunina-5000' ) );
-		}
 
 		// Solo encabezados y párrafo: la etiqueta la elige quien maqueta,
 		// pero no puede introducir marcado arbitrario.
@@ -489,17 +645,34 @@ final class UHP_Shortcodes {
 			$etiqueta = 'h3';
 		}
 
-		$meta = UHP_Views::meta( $vista );
+		$canal = $this->canal( $atts );
+		$lista = $canal ? $canal['vistas'] : array( $this->vista_o_defecto( $atts['view'] ) );
+
+		if ( ! $canal && ! UHP_Views::existe( $lista[0] ) ) {
+			return $this->aviso( __( 'La vista solicitada no existe.', 'urkunina-5000' ) );
+		}
 
 		UHP_Estilos::encolar_fuentes();
 		wp_enqueue_style( UHP_Assets::P . 'base' );
+		if ( $canal ) {
+			wp_enqueue_script( UHP_Assets::P . 'grupo' );
+		}
 
-		return sprintf(
-			'<%1$s class="uhp uhp-titulo" style="%2$s">%3$s</%1$s>',
-			$etiqueta,
-			esc_attr( UHP_Estilos::inline( $atts ) ),
-			esc_html( $meta['name'] )
-		);
+		$estilo = esc_attr( UHP_Estilos::inline( $atts ) );
+		$html   = '';
+		foreach ( $lista as $vista ) {
+			$meta = UHP_Views::meta( $vista );
+			$uno  = sprintf(
+				'<%1$s class="uhp uhp-titulo" style="%2$s">%3$s</%1$s>',
+				$etiqueta,
+				$estilo,
+				esc_html( $meta['name'] )
+			);
+			$html .= $canal
+				? $this->panel( $canal['canal'], $vista, $vista === $canal['activa'], $uno )
+				: $uno;
+		}
+		return $html;
 	}
 
 	/**
@@ -563,15 +736,40 @@ final class UHP_Shortcodes {
 	 */
 	private function bloque_texto( $atts, $partes, $clase = '', $tag = 'urkunina_analisis' ) {
 		$atts = $this->fusionar(
-			array(
-				'view' => 'tamizaje_hp',
-				'modo' => '',
+			array_merge(
+				$this->atts_canal(),
+				array(
+					'view' => '',
+					'modo' => '',
+				)
 			),
 			$atts,
 			$tag
 		);
 
-		$vista = UHP_Security::clave( $atts['view'] );
+		// Agrupado: se imprime un panel por vista y el selector enseña el
+		// que toque. Cada panel se compone con esta misma función, sin los
+		// atributos de canal, de modo que hay un solo camino de render.
+		$canal = $this->canal( $atts );
+		if ( $canal ) {
+			wp_enqueue_script( UHP_Assets::P . 'grupo' );
+			$html = '';
+			foreach ( $canal['vistas'] as $vista ) {
+				$suelto         = $atts;
+				$suelto['view'] = $vista;
+				unset( $suelto['grupo'], $suelto['views'], $suelto['canal'] );
+
+				$html .= $this->panel(
+					$canal['canal'],
+					$vista,
+					$vista === $canal['activa'],
+					$this->bloque_texto( $suelto, $partes, $clase, $tag )
+				);
+			}
+			return $html;
+		}
+
+		$vista = $this->vista_o_defecto( $atts['view'] );
 		if ( ! UHP_Views::existe( $vista ) ) {
 			return $this->aviso(
 				sprintf(
@@ -782,7 +980,7 @@ final class UHP_Shortcodes {
 		wp_enqueue_script( UHP_Assets::P . 'geomapa' );
 
 		$id      = $this->id( 'uhpgeo' );
-		$teselas = in_array( strtolower( (string) $atts['teselas'] ), array( 'si', 'sí', '1', 'true' ), true );
+		$teselas = $this->afirmativo( $atts['teselas'] );
 		$capa    = UHP_Security::clave( $atts['capa'] );
 		if ( ! in_array( $capa, array( 'claro', 'oscuro', 'osm' ), true ) ) {
 			$capa = '';
@@ -929,16 +1127,41 @@ final class UHP_Shortcodes {
 	 */
 	public function sc_tabla( $atts ) {
 		$atts = $this->fusionar(
-			array(
-				'view'   => 'prev_subregion_lpm',
-				'titulo' => '',
-				'limite' => 0,
+			array_merge(
+				$this->atts_canal(),
+				array(
+					'view'   => '',
+					'titulo' => '',
+					'limite' => 0,
+				)
 			),
 			$atts,
 			'urkunina_tabla'
 		);
 
-		$vista = UHP_Security::clave( $atts['view'] );
+		// Agrupada: una tabla por vista, y el selector enseña la que toque.
+		// Se compone cada una con esta misma función para no duplicar el
+		// render ni la lógica de columnas.
+		$canal = $this->canal( $atts );
+		if ( $canal ) {
+			wp_enqueue_script( UHP_Assets::P . 'grupo' );
+			$html = '';
+			foreach ( $canal['vistas'] as $v ) {
+				$suelto         = $atts;
+				$suelto['view'] = $v;
+				unset( $suelto['grupo'], $suelto['views'], $suelto['canal'] );
+
+				$html .= $this->panel(
+					$canal['canal'],
+					$v,
+					$v === $canal['activa'],
+					$this->sc_tabla( $suelto )
+				);
+			}
+			return $html;
+		}
+
+		$vista = $this->vista_o_defecto( $atts['view'], 'prev_subregion_lpm' );
 		if ( ! UHP_Views::existe( $vista ) ) {
 			return $this->aviso( __( 'La vista solicitada no existe.', 'urkunina-5000' ) );
 		}
@@ -1135,6 +1358,156 @@ final class UHP_Shortcodes {
 	 * @param string $prefijo Prefijo legible.
 	 * @return string
 	 */
+	/**
+	 * ¿El atributo dice que sí?
+	 *
+	 * Los shortcodes se escriben a mano en el editor y llegan con «si»,
+	 * «sí», «1» o «true» indistintamente. Aceptarlos todos evita que una
+	 * tilde de más apague una capa sin decir por qué.
+	 *
+	 * @param mixed $valor Valor del atributo.
+	 * @return bool
+	 */
+	/**
+	 * Resuelve el canal de un shortcode agrupado.
+	 *
+	 * Un «canal» es un grupo de piezas de la página —título, descripción,
+	 * análisis, tabla, gráfico— que obedecen al mismo selector. Las piezas
+	 * no se conocen entre sí: cada una declara a qué canal pertenece y el
+	 * selector les habla por ese nombre, que es lo que permite maquetarlas
+	 * por libre y en cualquier orden.
+	 *
+	 * Hay dos formas de nombrar el conjunto de vistas:
+	 *
+	 *   grupo="Prevalencia"   — todas las vistas de esa pestaña
+	 *   views="a,b,c"         — una lista a mano, en ese orden
+	 *
+	 * `views` gana sobre `grupo` cuando se dan los dos. Si no se da
+	 * ninguno, el shortcode no está agrupado y devuelve null: sigue
+	 * comportándose como siempre, con su única vista.
+	 *
+	 * @param array $atts Atributos ya fusionados del shortcode.
+	 * @return array{canal:string,vistas:string[],activa:string}|null
+	 */
+	private function canal( $atts ) {
+		$grupo = isset( $atts['grupo'] ) ? trim( (string) $atts['grupo'] ) : '';
+		$lista = isset( $atts['views'] ) ? trim( (string) $atts['views'] ) : '';
+
+		if ( '' === $grupo && '' === $lista ) {
+			return null;
+		}
+
+		$vistas = array();
+		if ( '' !== $lista ) {
+			foreach ( explode( ',', $lista ) as $v ) {
+				$v = UHP_Security::clave( $v );
+				// Una vista inexistente se descarta en silencio aquí, pero
+				// el selector avisa si no queda ninguna: fallar entero por
+				// una errata dejaría la página sin nada que leer.
+				if ( '' !== $v && UHP_Views::existe( $v ) && ! in_array( $v, $vistas, true ) ) {
+					$vistas[] = $v;
+				}
+			}
+		} else {
+			$vistas = UHP_Views::de_grupo( $grupo );
+		}
+
+		if ( ! $vistas ) {
+			return null;
+		}
+
+		// El canal explícito permite dos selectores independientes sobre el
+		// mismo grupo en una misma página. Sin él, el nombre del grupo basta
+		// y evita tener que inventarse uno.
+		$canal = isset( $atts['canal'] ) ? sanitize_title( (string) $atts['canal'] ) : '';
+		if ( '' === $canal ) {
+			$canal = sanitize_title( '' !== $grupo ? $grupo : implode( '-', array_slice( $vistas, 0, 3 ) ) );
+		}
+		if ( '' === $canal ) {
+			$canal = 'uhp';
+		}
+
+		// La vista que arranca visible: la que pida `view` si pertenece al
+		// conjunto, y si no la primera.
+		$activa = isset( $atts['view'] ) ? UHP_Security::clave( $atts['view'] ) : '';
+		if ( ! in_array( $activa, $vistas, true ) ) {
+			$activa = $vistas[0];
+		}
+
+		return array(
+			'canal'  => $canal,
+			'vistas' => $vistas,
+			'activa' => $activa,
+		);
+	}
+
+	/**
+	 * Atributos comunes que hacen agrupable a un shortcode.
+	 *
+	 * @return array<string,string>
+	 */
+	private function atts_canal() {
+		return array(
+			'grupo' => '',
+			'views' => '',
+			'canal' => '',
+		);
+	}
+
+	/**
+	 * Envuelve el HTML de una vista como panel de un canal.
+	 *
+	 * Se imprimen TODOS los paneles y se ocultan los que no están
+	 * seleccionados, en vez de pedirlos al cambiar. Son párrafos y tablas,
+	 * no consultas: llegan ya en el HTML, el cambio es instantáneo y sin
+	 * JavaScript se lee igualmente la vista activa.
+	 *
+	 * @param string $canal  Nombre del canal.
+	 * @param string $vista  Identificador de la vista.
+	 * @param bool   $activa Si es la vista que arranca visible.
+	 * @param string $html   Contenido ya escapado del panel.
+	 * @return string
+	 */
+	private function panel( $canal, $vista, $activa, $html ) {
+		if ( '' === $html ) {
+			return '';
+		}
+		return sprintf(
+			'<div class="uhp-panel" data-uhp-panel data-canal="%1$s" data-vista="%2$s"%3$s>%4$s</div>',
+			esc_attr( $canal ),
+			esc_attr( $vista ),
+			$activa ? '' : ' hidden',
+			$html
+		);
+	}
+
+	/**
+	 * Vista pedida, o la de ejemplo si el shortcode no nombró ninguna.
+	 *
+	 * El valor por defecto de `view` se resuelve AQUÍ y no en la lista de
+	 * atributos por una razón concreta: en un shortcode agrupado, `view`
+	 * elige cuál de las vistas del grupo arranca visible. Si el valor por
+	 * defecto viviera en la lista de atributos, una vista que casualmente
+	 * perteneciera al grupo actuaría como si el autor la hubiera elegido,
+	 * y el grupo arrancaría por una vista que nadie pidió.
+	 *
+	 * @param string $valor   Valor del atributo `view`, ya saneado.
+	 * @param string $defecto Vista a usar cuando no se nombró ninguna.
+	 * @return string
+	 */
+	private function vista_o_defecto( $valor, $defecto = 'tamizaje_hp' ) {
+		$v = UHP_Security::clave( $valor );
+		return '' !== $v ? $v : $defecto;
+	}
+
+	private function afirmativo( $valor ) {
+		return in_array(
+			strtolower( trim( (string) $valor ) ),
+			array( 'si', 'sí', '1', 'true', 'on', 'yes' ),
+			true
+		);
+	}
+
 	private function id( $prefijo ) {
 		self::$contador++;
 		return $prefijo . '-' . self::$contador;

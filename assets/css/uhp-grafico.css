@@ -15,6 +15,10 @@
   --uhp-g-acento: var(--uhp-verde, #10A13B);
   --uhp-g-acento-2: var(--uhp-azul, #003366);
 
+  /* Posicionada para que la leyenda del tipo «mapa», que es hermana del
+     lienzo, se ancle a la tarjeta y no al primer ancestro que resulte
+     tener posición en la plantilla del sitio. */
+  position: relative;
   margin: 18px 0;
   background: var(--uhp-g-bg);
   color: var(--uhp-g-tinta);
@@ -123,6 +127,50 @@
 .uhp-g__lienzo svg { display: block; width: 100%; height: 100%; }
 .uhp-g.is-cargando .uhp-g__lienzo { opacity: .55; }
 
+/* ---------- Tipo «mapa» ----------
+   Las vistas territoriales ofrecen el mapa como un tipo más de la barra.
+   Lo dibuja el mismo componente de [urkunina_geomapa] sobre este lienzo,
+   de modo que aquí solo hace falta lo que cambia: el lienzo pasa a ser
+   contenedor posicionado para que la leyenda se ancle dentro, y los
+   márgenes desaparecen para que la geometría ocupe toda la tarjeta. */
+.uhp-g__lienzo--mapa { padding: 0; }
+.uhp-g__lienzo--mapa image.d3plus-geomap-tile { image-rendering: auto; }
+
+/* La leyenda de rampa reutiliza las piezas de uhp-geomapa.css
+   (.uhp-geo__escala, .uhp-geo__rango, .uhp-geo__sindato), que se leen en
+   tokens --uhp-geo-*. Aquí se traducen desde los del gráfico para que la
+   leyenda herede el tema de la tarjeta —claro u oscuro— sin repetir un
+   solo color. */
+.uhp-g__leyenda {
+  --uhp-geo-bg: var(--uhp-g-bg);
+  --uhp-geo-borde: var(--uhp-g-borde);
+  --uhp-geo-tinta: var(--uhp-g-tinta);
+  --uhp-geo-suave: var(--uhp-g-suave);
+  --uhp-geo-acento-2: var(--uhp-g-acento-2);
+
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 2;
+  min-width: 160px;
+  padding: 9px 11px;
+  font-size: .76rem;
+  color: var(--uhp-geo-tinta);
+  background: var(--uhp-geo-bg);
+  border: 1px solid var(--uhp-geo-borde);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .12);
+}
+/* Vacía mientras el gráfico no esté en modo mapa: sin esto quedaría una
+   tarjeta en blanco flotando sobre las barras. */
+.uhp-g__leyenda:empty { display: none; }
+.uhp-g__leyenda strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: .8rem;
+  color: var(--uhp-geo-acento-2);
+}
+
 .uhp-g__vacio {
   padding: 40px 20px;
   margin: 0;
@@ -222,3 +270,95 @@
   .uhp-g__lienzo { height: var(--uhp-g-alto-movil, 340px); }
   .uhp-modal__panel { max-height: 92vh; }
 }
+
+/* =====================================================================
+   [urkunina_selector] — tarjeta que agrupa las vistas de una pestaña.
+
+   Comparte los tokens --uhp-g-* con la tarjeta de gráfico porque es la
+   misma familia de componentes: la lista va encima de las tarjetas
+   individuales y debe leerse como parte del mismo módulo.
+   ===================================================================== */
+
+.uhp-sel {
+  --uhp-g-bg: var(--uhp-fondo, #ffffff);
+  --uhp-g-superficie: var(--uhp-superficie, #f8fafc);
+  --uhp-g-borde: var(--uhp-linea, #e2e8f0);
+  --uhp-g-tinta: var(--uhp-tinta, #0f172a);
+  --uhp-g-suave: var(--uhp-suave, #5b6773);
+  --uhp-g-acento-2: var(--uhp-azul, #003366);
+
+  margin: 18px 0;
+  padding: 16px 18px;
+  background: var(--uhp-g-bg);
+  color: var(--uhp-g-tinta);
+  border: 1px solid var(--uhp-g-borde);
+  border-radius: var(--uhp-radio, 14px);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 6px 18px rgba(15, 23, 42, .06);
+}
+
+/* Sin tarjeta: para quien ya tiene su propio contenedor y solo quiere el
+   control, sin un borde dentro de otro. */
+.uhp-sel--plano {
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+.uhp-sel__titulo {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--uhp-g-acento-2);
+}
+
+.uhp-sel__campo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.uhp-sel__etq {
+  font-size: .78rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  color: var(--uhp-g-suave);
+}
+
+.uhp-sel__select {
+  flex: 1 1 240px;
+  /* Sin mínimo mayor que la pantalla: en un móvil estrecho el control
+     debe encoger, no empujar la página a desbordarse en horizontal. */
+  min-width: 0;
+  max-width: 100%;
+  padding: 9px 11px;
+  font: inherit;
+  font-size: .92rem;
+  color: var(--uhp-g-tinta);
+  background: var(--uhp-g-superficie);
+  border: 1px solid var(--uhp-g-borde);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.uhp-sel__select:focus-visible {
+  outline: 2px solid var(--uhp-g-acento-2);
+  outline-offset: 2px;
+}
+
+.uhp-sel__pie { margin-top: 10px; }
+
+.uhp-sel__desc {
+  margin: 0;
+  font-size: .86rem;
+  line-height: 1.5;
+  color: var(--uhp-g-suave);
+}
+
+/* Los paneles de un canal se esconden con el atributo `hidden`. Se
+   refuerza aquí porque algunos temas de WordPress declaran `display` en
+   selectores de elemento y ganarían al valor por defecto del navegador,
+   dejando visibles a la vez todas las vistas del canal. */
+.uhp-panel[hidden] { display: none !important; }

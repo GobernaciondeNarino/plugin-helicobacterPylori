@@ -51,24 +51,16 @@ escribir(
 	)
 );
 
-/* ---- /render por vista y por tipo compatible ---- */
-$tipos = UHP_Views::tipos();
+/* ---- /render por vista y por tipo compatible ----
+   Se pide a UHP_Rest::carga_render(), el mismo constructor que usa la
+   ruta: rehacer aquí la forma del payload dejaría a las pruebas de
+   navegador validando contra algo que el servidor no sirve. */
 foreach ( UHP_Views::lista() as $v ) {
-	$vista = UHP_Views::obtener( $v['id'] );
 	foreach ( $v['compatible'] as $tipo ) {
 		escribir(
 			$destino,
 			'render--' . $v['id'] . '--' . $tipo,
-			array(
-				'chart'      => array(
-					'key'   => $tipo,
-					'class' => $tipos[ $tipo ]['class'],
-					'label' => $tipos[ $tipo ]['label'],
-				),
-				'view'       => $vista,
-				'data'       => $vista['data'],
-				'compatible' => $v['compatible'],
-			)
+			UHP_Rest::carga_render( $v['id'], $tipo )
 		);
 	}
 	// Alias sin tipo: el que pide el shortcode cuando no lo especifica.

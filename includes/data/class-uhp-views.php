@@ -70,11 +70,48 @@ final class UHP_Views {
 				'class' => 'BoxWhisker',
 				'label' => 'Caja y bigotes',
 			),
+			// El mapa es un tipo de gráfico más, pero no lo admite
+			// cualquier vista: solo las que declaran `geo`, porque hace
+			// falta una geometría que colorear. Lo decide compatibles().
+			'mapa'         => array(
+				'class' => 'Geomap',
+				'label' => 'Mapa',
+			),
 		);
 	}
 
 	/**
+	 * Tipos que admite una vista concreta.
+	 *
+	 * A los de su categoría se suma `mapa` cuando la vista declara `geo`:
+	 * es el mismo dato visto sobre el territorio, y el usuario elige desde
+	 * la barra del gráfico si prefiere leerlo en barras o en el mapa.
+	 *
+	 * El mapa va al final de la lista a propósito. Es el tipo más caro de
+	 * dibujar —arrastra la topología— y el que menos precisión de lectura
+	 * da: como primera opción solo cuando el shortcode lo pide.
+	 *
+	 * @param string $id Identificador de la vista.
+	 * @return string[]
+	 */
+	public static function compatibles_de( $id ) {
+		if ( ! self::existe( $id ) ) {
+			return array();
+		}
+		$m     = self::registro()[ $id ];
+		$tipos = self::compatibles( $m['category'] );
+
+		if ( ! empty( $m['geo'] ) && ! in_array( 'mapa', $tipos, true ) ) {
+			$tipos[] = 'mapa';
+		}
+		return $tipos;
+	}
+
+	/**
 	 * Tipos compatibles con cada categoría de vista.
+	 *
+	 * No incluye `mapa`: eso depende de la vista, no de su categoría.
+	 * Para decidir qué ofrecer a un gráfico concreto, use compatibles_de().
 	 *
 	 * @param string $category Categoría de la vista.
 	 * @return string[]
@@ -476,11 +513,64 @@ final class UHP_Views {
 				'category'    => $m['category'],
 				'grupo'       => $m['grupo'],
 				'default'     => $m['default'],
-				'compatible'  => self::compatibles( $m['category'] ),
+				'compatible'  => self::compatibles_de( $id ),
 				'geo'         => isset( $m['geo'] ) ? $m['geo'] : null,
 			);
 		}
 		return $salida;
+	}
+
+	/**
+	 * Grupos de vistas, en el orden en que aparecen en el registro.
+	 *
+	 * El grupo es la pestaña del módulo de gráficos: «Epidemiología»,
+	 * «Tamizaje», «Prevalencia»… Se usa para armar el selector que agrupa
+	 * todas las vistas de una pestaña en una sola tarjeta.
+	 *
+	 * @return string[]
+	 */
+	public static function grupos() {
+		$vistos = array();
+		foreach ( self::registro() as $m ) {
+			$vistos[ $m['grupo'] ] = true;
+		}
+		return array_keys( $vistos );
+	}
+
+	/**
+	 * Vistas de un grupo, en el orden del registro.
+	 *
+	 * La comparación ignora mayúsculas, tildes y espacios sobrantes: el
+	 * grupo se escribe a mano en el shortcode y «prevalencia» debe
+	 * encontrar «Prevalencia» sin obligar a copiar la tilde exacta.
+	 *
+	 * @param string $grupo Nombre del grupo.
+	 * @return string[] Identificadores de vista.
+	 */
+	public static function de_grupo( $grupo ) {
+		$buscado = self::normalizar_grupo( $grupo );
+		if ( '' === $buscado ) {
+			return array();
+		}
+		$salida = array();
+		foreach ( self::registro() as $id => $m ) {
+			if ( self::normalizar_grupo( $m['grupo'] ) === $buscado ) {
+				$salida[] = $id;
+			}
+		}
+		return $salida;
+	}
+
+	/**
+	 * Forma comparable del nombre de un grupo.
+	 *
+	 * @param string $grupo Nombre tal como se escribió.
+	 * @return string
+	 */
+	private static function normalizar_grupo( $grupo ) {
+		$g = remove_accents( (string) $grupo );
+		$g = strtolower( trim( $g ) );
+		return preg_replace( '/[^a-z0-9]+/', '', $g );
 	}
 
 	/**

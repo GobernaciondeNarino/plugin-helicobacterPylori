@@ -75,27 +75,75 @@
     var lienzo = fig.querySelector('.uhp-geo__lienzo');
     if (!lienzo) { return; }
 
-    var st = {
+    return montar({
       fig: fig,
       lienzo: lienzo,
       titulo: fig.querySelector('.uhp-geo__titulo'),
+      leyendaCaja: fig.querySelector('.uhp-geo__leyenda'),
       view: fig.getAttribute('data-view') || '',
       indicador: fig.getAttribute('data-indicador') || '',
-      nivel: fig.getAttribute('data-nivel') === 'subregion' ? 'subregion' : 'municipio',
+      nivel: fig.getAttribute('data-nivel'),
       // Serie a dibujar cuando la vista trae más de una por territorio.
       serie: fig.getAttribute('data-serie') || '',
-      tema: fig.getAttribute('data-tema') === 'oscuro' ? 'oscuro' : 'claro',
+      tema: fig.getAttribute('data-tema'),
       teselas: fig.getAttribute('data-teselas') === '1',
       capa: fig.getAttribute('data-capa') || '',
       zoom: fig.getAttribute('data-zoom') !== '0',
       leyenda: fig.getAttribute('data-leyenda') !== '0',
-      etiquetas: fig.getAttribute('data-etiquetas') === '1',
+      etiquetas: fig.getAttribute('data-etiquetas') === '1'
+    });
+  }
+
+  /* Monta un geomapa sobre un lienzo cualquiera.
+
+     [urkunina_geomapa] llega aquí desde sus data-*, y [urkunina_grafico]
+     cuando el usuario elige el tipo «mapa» en la barra: es el mismo mapa,
+     con la misma topología cacheada y la misma leyenda, montado en otro
+     contenedor. Devuelve el estado para poder desmontarlo después.       */
+  function montar(o) {
+    if (!o || !o.lienzo) { return null; }
+
+    var st = {
+      fig: o.fig || o.lienzo,
+      lienzo: o.lienzo,
+      titulo: o.titulo || null,
+      leyendaCaja: o.leyendaCaja || null,
+      view: o.view || '',
+      indicador: o.indicador || '',
+      nivel: o.nivel === 'subregion' ? 'subregion' : 'municipio',
+      serie: o.serie || '',
+      tema: o.tema === 'oscuro' ? 'oscuro' : 'claro',
+      teselas: o.teselas === true,
+      capa: o.capa || '',
+      zoom: o.zoom !== false,
+      leyenda: o.leyenda !== false,
+      etiquetas: o.etiquetas === true,
       topo: null,
       datos: null,
       viz: null
     };
 
     cargar(st);
+    return st;
+  }
+
+  /* Desmonta un geomapa y deja el lienzo limpio para otro dibujo.
+
+     Sin esto, cambiar de «mapa» a «barras» en la barra del gráfico
+     dejaría el SVG del mapa debajo del nuevo: D3plus dibuja dentro del
+     contenedor que le dan, no lo vacía al soltarlo.                      */
+  function destruir(st) {
+    if (!st) { return; }
+    try {
+      if (st.viz && typeof st.viz.delete === 'function') { st.viz.delete(); }
+    } catch (e) {
+      // Un fallo al soltar la instancia no debe impedir vaciar el lienzo:
+      // lo que importa es que no quede el mapa anterior por debajo.
+      if (window.console && console.warn) { console.warn('[URKUNINA 5000] no se pudo soltar el geomapa', e); }
+    }
+    st.viz = null;
+    if (st.lienzo) { st.lienzo.innerHTML = ''; }
+    if (st.leyendaCaja) { st.leyendaCaja.innerHTML = ''; }
   }
 
   /* ------------------------------------------------------------------ */
@@ -325,7 +373,7 @@
   /* ------------------------------------------------------------------ */
 
   function pintarLeyenda(st, escala, min, max, meta) {
-    var caja = st.fig.querySelector('.uhp-geo__leyenda');
+    var caja = st.leyendaCaja || st.fig.querySelector('.uhp-geo__leyenda');
     if (!caja) { return; }
     caja.innerHTML = '';
 
@@ -354,5 +402,5 @@
     caja.appendChild(sin);
   }
 
-  window.UHPGeomapa = { iniciar: iniciar };
+  window.UHPGeomapa = { iniciar: iniciar, montar: montar, destruir: destruir };
 }());

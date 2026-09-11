@@ -831,6 +831,19 @@ foreach ( $vistas as $v ) {
 	}
 	comprobar( $clases_ok, sprintf( '[%s] todos sus tipos compatibles existen', $v['id'] ) );
 
+	// `mapa` es un tipo más de la barra, pero solo para quien tiene
+	// geometría que colorear: ofrecerlo en una vista sin `geo` produciría
+	// un mapa vacío, y no ofrecerlo en una que sí la tiene esconde la
+	// mitad de la lectura.
+	comprobar(
+		in_array( 'mapa', $v['compatible'], true ) === ! empty( $v['geo'] ),
+		sprintf(
+			'[%s] ofrece el tipo mapa solo si declara geometría (%s)',
+			$v['id'],
+			empty( $v['geo'] ) ? 'sin geo' : 'nivel ' . $v['geo']['nivel']
+		)
+	);
+
 	comprobar(
 		strlen( $completa['descripcion_larga'] ) >= 375,
 		sprintf( '[%s] su descripción publicada llega a 375 caracteres', $v['id'] )
