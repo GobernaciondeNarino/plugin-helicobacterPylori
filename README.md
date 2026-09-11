@@ -114,7 +114,7 @@ demás se recoloca a su alrededor. Se selecciona pulsando en el mapa, en una
 barra del gráfico, en el selector o navegando por la ficha. El mapa dibuja las
 tres capas territoriales y sigue a la vista que se elija en el panel.
 
-Y **lo que no se puede filtrar, lo dice**: 17 de las 24 vistas y 2 de los 6
+Y **lo que no se puede filtrar, lo dice**: 19 de las 27 vistas y 2 de los 6
 indicadores solo existen para el conjunto del departamento, así que cuando una
 pieza no puede responder por el territorio elegido lo anuncia en vez de enseñar
 la cifra departamental como si fuera local.
@@ -194,7 +194,7 @@ cáncer detectado: esa información no está en los documentos fuente.
 ```bash
 npm install          # instala Playwright
 npm run test:datos   # 417 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 66 pruebas de navegador
+npm test             # lo anterior más 62 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los

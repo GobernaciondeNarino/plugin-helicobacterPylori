@@ -256,10 +256,10 @@ nombra territorios produciría una plancha vacía. Lo decide
 gráfico concreto; `compatibles( $category )` sigue existiendo pero solo conoce
 la categoría, no la vista.
 
-De las vistas actuales lo ofrecen siete: `contraste_municipal`,
-`prev_lpm_municipios`, `prev_hp_municipios`, `prev_lpm_extremos`,
-`cancer_municipios` (municipales) y `prev_subregion`, `prev_subregion_lpm`,
-`prev_subregion_hp` (subregionales).
+De las vistas actuales lo ofrecen ocho: cinco municipales
+—`contraste_municipal`, `prev_lpm_municipios`, `prev_hp_municipios`,
+`prev_lpm_extremos` y `cancer_municipios`— y tres subregionales
+—`prev_subregion`, `prev_subregion_lpm` y `prev_subregion_hp`.
 
 El mapa va **al final** de la lista a propósito: es el tipo más caro de dibujar
 —arrastra la topología— y el que menos precisión de lectura da. Como primera
@@ -588,8 +588,8 @@ departamentales no mueven la capa, porque no tienen un nivel al que llevarla.
 
 #### 4.8.4 Lo que no se puede filtrar se dice
 
-Es la regla que sostiene la honestidad del tablero. De las 24 vistas del
-catálogo, 4 nombran municipios y 3 subregiones: **las otras 17 solo existen para
+Es la regla que sostiene la honestidad del tablero. De las 27 vistas del
+catálogo, 5 nombran municipios y 3 subregiones: **las otras 19 solo existen para
 el conjunto del departamento**. De los 6 indicadores del cintillo, 2 no están
 desagregados en ninguna fuente.
 
@@ -807,7 +807,7 @@ silencioso:
   Ofrecerlo en una vista sin territorio produciría un mapa vacío; no ofrecerlo
   en una que sí lo tiene esconde la mitad de la lectura.
 
-### 8.2 Navegador — 66 pruebas
+### 8.2 Navegador — 62 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a
