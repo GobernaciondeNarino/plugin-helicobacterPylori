@@ -21,6 +21,7 @@
     copiar();
     editor();
     confirmar();
+    grupoVistas();
   });
 
   /* ------------------------------------------------------------------ */
@@ -134,6 +135,30 @@
       if (mensaje && !window.confirm(mensaje)) {
         e.preventDefault();
       }
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Tarjeta que agrupa las vistas de una pestaña                       */
+  /* ------------------------------------------------------------------ */
+
+  /* La lista de la tarjeta de grupo es una vista previa del selector
+     público: al elegir una vista, los shortcodes de ejemplo pasan a
+     nombrarla. Así se ve a qué vista corresponde cada uno antes de
+     copiarlo, sin salir del panel. */
+  function grupoVistas() {
+    var tarjetas = document.querySelectorAll('[data-uhpa-grupo]');
+    for (var i = 0; i < tarjetas.length; i++) { armar(tarjetas[i]); }
+  }
+
+  function armar(tarjeta) {
+    var sel = tarjeta.querySelector('[data-uhpa-grupo-select]');
+    var desc = tarjeta.querySelector('[data-uhpa-grupo-desc]');
+    if (!sel) { return; }
+
+    sel.addEventListener('change', function () {
+      var op = sel.options[sel.selectedIndex];
+      if (desc && op) { desc.textContent = op.getAttribute('data-descripcion') || ''; }
     });
   }
 })();

@@ -12,7 +12,10 @@
     "unidad": "porcentaje sobre el total de participantes evaluados en cada municipio",
     "notas": [
       "Solo se documentan los 10 municipios con mayor prevalencia en cada indicador.",
-      "Consacá y San Bernardo aparecen en ambos listados."
+      "Consacá y San Bernardo aparecen en ambos listados.",
+      "La fuente publica también los cinco municipios con MENOR prevalencia de LPM; van en `menor_prevalencia_lesion_precursora_malignidad`, ordenados de menor a mayor.",
+      "No se publica el listado equivalente de menor prevalencia de H. pylori: ese extremo de la distribución queda sin dato.",
+      "Los listados son extremos de la distribución, no la serie completa de los 55 municipios: entre el 26,6% de Yacuanquer y el 43,3% de San Bernardo hay 45 municipios sin cifra publicada."
     ]
   },
   "top10_lesion_precursora_malignidad": [
@@ -122,5 +125,32 @@
   "municipios_en_ambos_listados": [
     "Consacá",
     "San Bernardo"
+  ],
+  "menor_prevalencia_lesion_precursora_malignidad": [
+    {
+      "posicion": 1,
+      "municipio": "Mallama",
+      "prevalencia_lpm_porcentaje": 11.4
+    },
+    {
+      "posicion": 2,
+      "municipio": "Gualmatán",
+      "prevalencia_lpm_porcentaje": 17.1
+    },
+    {
+      "posicion": 3,
+      "municipio": "Pupiales",
+      "prevalencia_lpm_porcentaje": 21.3
+    },
+    {
+      "posicion": 4,
+      "municipio": "Pasto",
+      "prevalencia_lpm_porcentaje": 26.0
+    },
+    {
+      "posicion": 5,
+      "municipio": "Yacuanquer",
+      "prevalencia_lpm_porcentaje": 26.6
+    }
   ]
 }

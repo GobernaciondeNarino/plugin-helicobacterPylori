@@ -350,6 +350,140 @@ $paginas['geomapa'] = construir(
 	}
 );
 
+$paginas['selector'] = construir(
+	'selector',
+	'Una lista que gobierna título, textos, tabla y gráfico',
+	function ( $sc ) {
+		// El caso del enunciado: la tarjeta que agrupa toda una pestaña,
+		// repartida en piezas sueltas para poder maquetarla.
+		$g = array( 'grupo' => 'Prevalencia' );
+
+		return '<div class="pagina">' .
+			'<div data-zona="selector">' .
+			$sc->sc_selector( array_merge( $g, array( 'titulo' => 'Vistas de prevalencia' ) ) ) .
+			'</div>' .
+			'<div data-zona="titulo">' . $sc->sc_titulo( array_merge( $g, array( 'etiqueta' => 'h2' ) ) ) . '</div>' .
+			'<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">' .
+			'<div data-zona="grafico">' .
+			$sc->sc_grafico( array_merge( $g, array( 'alto' => '360px', 'titulo' => 'no' ) ) ) .
+			'</div>' .
+			'<div data-zona="textos">' .
+			$sc->sc_descripcion( $g ) .
+			$sc->sc_interpretacion( $g ) .
+			$sc->sc_resumen( $g ) .
+			$sc->sc_cifras( $g ) .
+			$sc->sc_fuente( $g ) .
+			'</div></div>' .
+			'<div data-zona="tabla">' . $sc->sc_tabla( $g ) . '</div>' .
+
+			// Un segundo canal en la misma página: no debe interferir.
+			'<hr>' .
+			'<div data-zona="otro-canal">' .
+			$sc->sc_selector( array( 'grupo' => 'Tamizaje' ) ) .
+			$sc->sc_titulo( array( 'grupo' => 'Tamizaje', 'etiqueta' => 'h2' ) ) .
+			$sc->sc_descripcion( array( 'grupo' => 'Tamizaje' ) ) .
+			'</div>' .
+
+			// Lista explícita y canal propio, con la vista inicial elegida.
+			'<div data-zona="lista">' .
+			$sc->sc_selector(
+				array(
+					'views' => 'mortalidad_anio,acceso_oncologico,zonas_riesgo',
+					'canal' => 'contexto',
+					'view'  => 'acceso_oncologico',
+				)
+			) .
+			$sc->sc_titulo( array( 'views' => 'mortalidad_anio,acceso_oncologico,zonas_riesgo', 'canal' => 'contexto', 'view' => 'acceso_oncologico' ) ) .
+			'</div>' .
+
+			// Un canal de SOLO selector y gráfico, sin paneles de texto con
+			// los que comparar, y con el selector delante: es el orden que
+			// hace que el script del selector se imprima antes que el del
+			// gráfico y que un aviso inmediato se perdiera.
+			'<div data-zona="solo-grafico">' .
+			$sc->sc_selector(
+				array(
+					'views'       => 'cancer_municipios,cancer_desenlace',
+					'canal'       => 'casos',
+					'descripcion' => 'no',
+				)
+			) .
+			$sc->sc_grafico(
+				array(
+					'views' => 'cancer_municipios,cancer_desenlace',
+					'canal' => 'casos',
+					'alto'  => '320px',
+				)
+			) .
+			'</div>' .
+
+			// Un selector sin grupo: avisa, no rompe la página.
+			'<div data-zona="sin-grupo">' . $sc->sc_selector( array() ) . '</div>' .
+			'</div>';
+	}
+);
+
+$paginas['grafico-mapa'] = construir(
+	'grafico-mapa',
+	'El mapa como un tipo de gráfico más',
+	function ( $sc ) {
+		return '<div class="pagina">' .
+			// Arranca en mapa: el shortcode elige qué tipo se ve primero.
+			'<div data-caso="arranca-en-mapa">' .
+			$sc->sc_grafico(
+				array(
+					'view' => 'prev_lpm_municipios',
+					'type' => 'mapa',
+					'alto' => '420px',
+				)
+			) .
+			'</div>' .
+			// Arranca en barras, pero el mapa está en la barra de tipos.
+			'<div data-caso="arranca-en-barras">' .
+			$sc->sc_grafico(
+				array(
+					'view' => 'cancer_municipios',
+					'type' => 'bar',
+					'alto' => '360px',
+				)
+			) .
+			'</div>' .
+			// Subregional, con teselas y en oscuro.
+			'<div data-caso="subregion-teselas">' .
+			$sc->sc_grafico(
+				array(
+					'view'    => 'prev_subregion_lpm',
+					'type'    => 'mapa',
+					'tema'    => 'oscuro',
+					'teselas' => 'si',
+					'alto'    => '420px',
+				)
+			) .
+			'</div>' .
+			// Vista partida en series: el shortcode elige cuál se pinta.
+			'<div data-caso="serie">' .
+			$sc->sc_grafico(
+				array(
+					'view'  => 'prev_subregion',
+					'type'  => 'mapa',
+					'serie' => 'Infección por H. pylori',
+					'alto'  => '360px',
+				)
+			) .
+			'</div>' .
+			// Vista sin geometría: el mapa NO debe aparecer entre los tipos.
+			'<div data-caso="sin-geo">' .
+			$sc->sc_grafico(
+				array(
+					'view' => 'perfil_etnia',
+					'type' => 'pie',
+					'alto' => '320px',
+				)
+			) .
+			'</div></div>';
+	}
+);
+
 $paginas['mapa'] = construir(
 	'mapa',
 	'Mapa',

@@ -1,0 +1,54 @@
+{
+  "_meta": {
+    "conjunto": "Mortalidad anual por cáncer de estómago en el departamento de Nariño",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf (Gráfica 3)",
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx (diapositiva 7)"
+    ],
+    "fuente_primaria": "Instituto Departamental de Salud de Nariño (IDSN), 2022",
+    "fecha_extraccion": "2026-09-11",
+    "codificacion": "UTF-8",
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "unidad": "número de fallecimientos anuales",
+    "ambito": "Departamento de Nariño",
+    "periodo": "2019-2022",
+    "n": 4,
+    "notas": [
+      "Serie completa tomada de las etiquetas de la Gráfica 3 del informe preliminar; el cuerpo del informe solo cita los extremos (101 en 2019 y 137 en 2022).",
+      "La variación 2019→2022 es +35,64%, la cifra que el informe destaca: 137 / 101 - 1 = 0,3564.",
+      "Son fallecimientos registrados, no casos nuevos ni tasas por 100.000 habitantes: no se deben comparar con las cifras de incidencia del conjunto 02."
+    ],
+    "discrepancias": [
+      "El texto del informe describe un «crecimiento constante desde 2019 hasta 2022», pero su propia Gráfica 3 registra una caída en 2020 (77 fallecimientos) antes del repunte. Se conserva la serie tal como la publica la gráfica; el informe no explica la caída y este conjunto no le atribuye ninguna causa."
+    ]
+  },
+  "descripcion": "Fallecimientos anuales por cáncer de estómago registrados en el departamento de Nariño entre 2019 y 2022.",
+  "variacion_periodo": {
+    "anio_inicial": 2019,
+    "anio_final": 2022,
+    "valor_inicial": 101,
+    "valor_final": 137,
+    "variacion_porcentaje": 35.64,
+    "sentido": "aumento"
+  },
+  "serie": [
+    {
+      "anio": 2019,
+      "fallecimientos": 101
+    },
+    {
+      "anio": 2020,
+      "fallecimientos": 77
+    },
+    {
+      "anio": 2021,
+      "fallecimientos": 118
+    },
+    {
+      "anio": 2022,
+      "fallecimientos": 137
+    }
+  ]
+}

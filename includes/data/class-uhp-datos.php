@@ -164,6 +164,22 @@ final class UHP_Datos {
 				'lista'       => 'retos',
 				'grupo'       => 'gobernanza',
 			),
+			'mortalidad'      => array(
+				'archivo'     => '15_mortalidad_departamental.json',
+				'titulo'      => 'Mortalidad departamental',
+				'descripcion' => 'Fallecimientos anuales por cáncer de estómago en Nariño entre 2019 y 2022, según el Instituto Departamental de Salud. Son muertes registradas, no casos nuevos ni tasas: no se comparan con las cifras de incidencia del contexto epidemiológico.',
+				'claves'      => array( 'variacion_periodo', 'serie' ),
+				'lista'       => 'serie',
+				'grupo'       => 'epidemiologia',
+			),
+			'acceso_oncologico' => array(
+				'archivo'     => '16_acceso_servicios_oncologicos.json',
+				'titulo'      => 'Acceso a servicios oncológicos',
+				'descripcion' => 'Las seis IPS del departamento con servicios oncológicos habilitados —las seis en Pasto— y la barrera de acceso territorial que eso supone para los otros 63 municipios.',
+				'claves'      => array( 'resumen', 'instituciones', 'barrera_de_acceso_documentada' ),
+				'lista'       => 'instituciones',
+				'grupo'       => 'epidemiologia',
+			),
 			'subregiones'     => array(
 				'archivo'     => '14_subregiones_municipios.json',
 				'titulo'      => 'Subregiones y sus municipios',

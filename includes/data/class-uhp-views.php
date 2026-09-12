@@ -70,11 +70,48 @@ final class UHP_Views {
 				'class' => 'BoxWhisker',
 				'label' => 'Caja y bigotes',
 			),
+			// El mapa es un tipo de gráfico más, pero no lo admite
+			// cualquier vista: solo las que declaran `geo`, porque hace
+			// falta una geometría que colorear. Lo decide compatibles().
+			'mapa'         => array(
+				'class' => 'Geomap',
+				'label' => 'Mapa',
+			),
 		);
 	}
 
 	/**
+	 * Tipos que admite una vista concreta.
+	 *
+	 * A los de su categoría se suma `mapa` cuando la vista declara `geo`:
+	 * es el mismo dato visto sobre el territorio, y el usuario elige desde
+	 * la barra del gráfico si prefiere leerlo en barras o en el mapa.
+	 *
+	 * El mapa va al final de la lista a propósito. Es el tipo más caro de
+	 * dibujar —arrastra la topología— y el que menos precisión de lectura
+	 * da: como primera opción solo cuando el shortcode lo pide.
+	 *
+	 * @param string $id Identificador de la vista.
+	 * @return string[]
+	 */
+	public static function compatibles_de( $id ) {
+		if ( ! self::existe( $id ) ) {
+			return array();
+		}
+		$m     = self::registro()[ $id ];
+		$tipos = self::compatibles( $m['category'] );
+
+		if ( ! empty( $m['geo'] ) && ! in_array( 'mapa', $tipos, true ) ) {
+			$tipos[] = 'mapa';
+		}
+		return $tipos;
+	}
+
+	/**
 	 * Tipos compatibles con cada categoría de vista.
+	 *
+	 * No incluye `mapa`: eso depende de la vista, no de su categoría.
+	 * Para decidir qué ofrecer a un gráfico concreto, use compatibles_de().
 	 *
 	 * @param string $category Categoría de la vista.
 	 * @return string[]
@@ -152,6 +189,27 @@ final class UHP_Views {
 				'fuente'      => 'Artículo derivado del proyecto — microbiota gástrica',
 			),
 
+			'mortalidad_anio'      => array(
+				'name'        => 'Mortalidad por cáncer de estómago en Nariño',
+				'description' => 'Fallecimientos registrados cada año en el departamento entre 2019 y 2022.',
+				'category'    => 'temporal',
+				'dimensions'  => array( 'anio' ),
+				'measures'    => array( 'fallecimientos' ),
+				'default'     => 'line',
+				'grupo'       => 'Epidemiología',
+				'fuente'      => 'Instituto Departamental de Salud de Nariño (IDSN), 2022',
+			),
+			'acceso_oncologico'    => array(
+				'name'        => 'Municipios con oferta de servicios oncológicos',
+				'description' => 'Las seis IPS habilitadas del departamento están en un solo municipio: los otros 63 no tienen oferta propia.',
+				'category'    => 'parte_todo',
+				'dimensions'  => array( 'categoria' ),
+				'measures'    => array( 'municipios' ),
+				'default'     => 'donut',
+				'grupo'       => 'Epidemiología',
+				'fuente'      => 'Instituto Departamental de Salud de Nariño (IDSN), 2022',
+			),
+
 			/* ---------- Resultados del tamizaje ---------- */
 			'tamizaje_hp'          => array(
 				'name'        => 'Infección por Helicobacter pylori',
@@ -209,6 +267,23 @@ final class UHP_Views {
 				'measures'    => array( 'prevalencia' ),
 				'default'     => 'bar',
 				'heatmap'     => true,
+				'geo'         => array(
+					'nivel'  => 'municipio',
+					'campo'  => 'municipio',
+					'medida' => 'prevalencia',
+				),
+				'grupo'       => 'Prevalencia',
+				'fuente'      => 'Informe preliminar URKUNINA 5000',
+			),
+			'prev_lpm_extremos'    => array(
+				'name'        => 'Lesión precursora: los extremos publicados',
+				'description' => 'Los diez municipios con mayor prevalencia de lesión precursora y los cinco con menor, los dos extremos que publica el informe.',
+				'category'    => 'comparativa',
+				'dimensions'  => array( 'municipio', 'extremo' ),
+				'measures'    => array( 'prevalencia' ),
+				'default'     => 'bar',
+				// Cada municipio aparece una sola vez, de modo que el mapa
+				// puede colorear los quince sin partir la vista en series.
 				'geo'         => array(
 					'nivel'  => 'municipio',
 					'campo'  => 'municipio',
@@ -438,11 +513,64 @@ final class UHP_Views {
 				'category'    => $m['category'],
 				'grupo'       => $m['grupo'],
 				'default'     => $m['default'],
-				'compatible'  => self::compatibles( $m['category'] ),
+				'compatible'  => self::compatibles_de( $id ),
 				'geo'         => isset( $m['geo'] ) ? $m['geo'] : null,
 			);
 		}
 		return $salida;
+	}
+
+	/**
+	 * Grupos de vistas, en el orden en que aparecen en el registro.
+	 *
+	 * El grupo es la pestaña del módulo de gráficos: «Epidemiología»,
+	 * «Tamizaje», «Prevalencia»… Se usa para armar el selector que agrupa
+	 * todas las vistas de una pestaña en una sola tarjeta.
+	 *
+	 * @return string[]
+	 */
+	public static function grupos() {
+		$vistos = array();
+		foreach ( self::registro() as $m ) {
+			$vistos[ $m['grupo'] ] = true;
+		}
+		return array_keys( $vistos );
+	}
+
+	/**
+	 * Vistas de un grupo, en el orden del registro.
+	 *
+	 * La comparación ignora mayúsculas, tildes y espacios sobrantes: el
+	 * grupo se escribe a mano en el shortcode y «prevalencia» debe
+	 * encontrar «Prevalencia» sin obligar a copiar la tilde exacta.
+	 *
+	 * @param string $grupo Nombre del grupo.
+	 * @return string[] Identificadores de vista.
+	 */
+	public static function de_grupo( $grupo ) {
+		$buscado = self::normalizar_grupo( $grupo );
+		if ( '' === $buscado ) {
+			return array();
+		}
+		$salida = array();
+		foreach ( self::registro() as $id => $m ) {
+			if ( self::normalizar_grupo( $m['grupo'] ) === $buscado ) {
+				$salida[] = $id;
+			}
+		}
+		return $salida;
+	}
+
+	/**
+	 * Forma comparable del nombre de un grupo.
+	 *
+	 * @param string $grupo Nombre tal como se escribió.
+	 * @return string
+	 */
+	private static function normalizar_grupo( $grupo ) {
+		$g = remove_accents( (string) $grupo );
+		$g = strtolower( trim( $g ) );
+		return preg_replace( '/[^a-z0-9]+/', '', $g );
 	}
 
 	/**
@@ -678,6 +806,43 @@ final class UHP_Views {
 				}
 				return $filas;
 
+			case 'mortalidad_anio':
+				$filas = array();
+				foreach ( (array) UHP_Datos::valor( 'mortalidad', 'serie', array() ) as $a ) {
+					if ( ! isset( $a['anio'] ) ) {
+						continue;
+					}
+					$filas[] = array(
+						// El año viaja como texto: es una categoría del eje,
+						// no una magnitud que deba escalarse.
+						'anio'           => (string) (int) $a['anio'],
+						'fallecimientos' => isset( $a['fallecimientos'] ) ? (int) $a['fallecimientos'] : 0,
+					);
+				}
+				return $filas;
+
+			case 'acceso_oncologico':
+				$total = (int) UHP_Datos::valor( 'acceso_oncologico', 'resumen.municipios_del_departamento', 0 );
+				$con   = (int) UHP_Datos::valor( 'acceso_oncologico', 'resumen.municipios_con_oferta', 0 );
+				$sin   = (int) UHP_Datos::valor( 'acceso_oncologico', 'resumen.municipios_sin_oferta', 0 );
+				// El complemento se recalcula solo si el archivo no lo trae:
+				// una resta en silencio escondería un dato que falta.
+				if ( 0 === $sin && $total > 0 ) {
+					$sin = $total - $con;
+				}
+				return array(
+					array(
+						'categoria'  => 'Con oferta oncológica',
+						'municipios' => $con,
+						'detalle'    => 'Pasto, con las seis IPS habilitadas del departamento',
+					),
+					array(
+						'categoria'  => 'Sin oferta oncológica',
+						'municipios' => $sin,
+						'detalle'    => 'Deben remitir a sus pacientes a Pasto',
+					),
+				);
+
 			/* ---------- Tamizaje ---------- */
 			case 'tamizaje_hp':
 				return self::filas_tamizaje( 'infeccion_h_pylori', 'Infectados', 'No infectados' );
@@ -706,6 +871,26 @@ final class UHP_Views {
 
 			case 'prev_hp_municipios':
 				return self::filas_top( 'top10_infeccion_h_pylori', 'prevalencia_h_pylori_porcentaje' );
+
+			case 'prev_lpm_extremos':
+				$filas  = array();
+				$bloque = array(
+					'top10_lesion_precursora_malignidad'              => 'Mayor prevalencia',
+					'menor_prevalencia_lesion_precursora_malignidad'  => 'Menor prevalencia',
+				);
+				foreach ( $bloque as $clave => $extremo ) {
+					foreach ( (array) UHP_Datos::valor( 'prev_municipal', $clave, array() ) as $m ) {
+						if ( empty( $m['municipio'] ) ) {
+							continue;
+						}
+						$filas[] = array(
+							'municipio'   => (string) $m['municipio'],
+							'extremo'     => $extremo,
+							'prevalencia' => isset( $m['prevalencia_lpm_porcentaje'] ) ? (float) $m['prevalencia_lpm_porcentaje'] : 0.0,
+						);
+					}
+				}
+				return $filas;
 
 			case 'prev_subregion':
 				$filas = array();

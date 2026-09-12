@@ -148,6 +148,11 @@ final class UHP_Assets {
 			true
 		);
 		wp_register_script( self::P . 'grafico', $js . 'uhp-grafico.js', array( self::P . 'renderer', self::P . 'core' ), UHP_VERSION, true );
+		// El controlador de canales solo necesita el núcleo: mueve paneles
+		// ya impresos y pide a la figura del gráfico que se recargue. No
+		// depende de D3plus ni de la figura, que pueden no estar en la
+		// página si alguien maqueta solo textos y tablas.
+		wp_register_script( self::P . 'grupo', $js . 'uhp-grupo.js', array( self::P . 'core' ), UHP_VERSION, true );
 		wp_register_script( self::P . 'mapa', $js . 'uhp-mapa.js', array( self::handle( 'leaflet' ), self::P . 'core' ), UHP_VERSION, true );
 		// Declarar aquí d3plus Y core no es redundante: el geomapa usa las
 		// dos, y omitir una deja que WordPress imprima este archivo antes

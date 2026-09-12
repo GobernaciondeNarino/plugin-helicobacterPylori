@@ -250,29 +250,58 @@ final class UHP_Rest {
 			);
 		}
 
+		return self::respuesta( self::carga_render( $id, (string) $req->get_param( 'type' ) ) );
+	}
+
+	/**
+	 * Payload de /render para una vista y un tipo.
+	 *
+	 * Vive aparte de la ruta para que el generador de fixtures produzca
+	 * exactamente lo que produce el servidor: si el generador rehiciera el
+	 * payload por su cuenta, las pruebas de navegador validarían contra una
+	 * forma que nadie sirve.
+	 *
+	 * @param string $id   Identificador de la vista (debe existir).
+	 * @param string $tipo Tipo pedido; si no es compatible se usa el de la vista.
+	 * @return array
+	 */
+	public static function carga_render( $id, $tipo = '' ) {
 		$vista = UHP_Views::obtener( $id );
 		$tipos = UHP_Views::tipos();
 
-		// El tipo pedido solo se acepta si es compatible con la categoría de
-		// la vista; en caso contrario se cae al tipo por defecto.
-		$compatible = UHP_Views::compatibles( $vista['category'] );
-		$tipo       = (string) $req->get_param( 'type' );
+		// El tipo pedido solo se acepta si la vista lo admite; en caso
+		// contrario se cae al tipo por defecto. `mapa` entra aquí solo
+		// para las vistas territoriales: lo decide compatibles_de().
+		$compatible = UHP_Views::compatibles_de( $id );
+		$tipo       = (string) $tipo;
 		if ( '' === $tipo || ! in_array( $tipo, $compatible, true ) ) {
 			$tipo = UHP_Views::default_tipo( $id );
 		}
 
-		return self::respuesta(
-			array(
-				'chart'      => array(
-					'key'   => $tipo,
-					'class' => $tipos[ $tipo ]['class'],
-					'label' => $tipos[ $tipo ]['label'],
-				),
-				'view'       => $vista,
-				'data'       => $vista['data'],
-				'compatible' => $compatible,
-			)
+		$carga = array(
+			'chart'      => array(
+				'key'   => $tipo,
+				'class' => $tipos[ $tipo ]['class'],
+				'label' => $tipos[ $tipo ]['label'],
+			),
+			'view'       => $vista,
+			'data'       => $vista['data'],
+			'compatible' => $compatible,
 		);
+
+		// Una vista territorial dice a qué nivel se dibuja y en qué series
+		// se parte, para que el cliente pueda montar el mapa sin tener que
+		// deducirlo ni pedir antes /geomapa solo para averiguarlo.
+		if ( UHP_Views::es_territorial( $id ) ) {
+			$meta         = UHP_Views::meta( $id );
+			$carga['geo'] = array(
+				'nivel'  => $meta['geo']['nivel'],
+				'medida' => $meta['geo']['medida'],
+				'series' => UHP_Views::series( $id ),
+			);
+		}
+
+		return $carga;
 	}
 
 	/**

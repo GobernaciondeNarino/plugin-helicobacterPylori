@@ -108,6 +108,17 @@ function sanitize_file_name( $nombre ) {
 	return preg_replace( '/[^A-Za-z0-9._\-]/', '', $nombre );
 }
 
+function remove_accents( $texto ) {
+	return strtr(
+		(string) $texto,
+		array(
+			'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u',
+			'ü' => 'u', 'ñ' => 'n', 'Á' => 'A', 'É' => 'E', 'Í' => 'I',
+			'Ó' => 'O', 'Ú' => 'U', 'Ü' => 'U', 'Ñ' => 'N',
+		)
+	);
+}
+
 function sanitize_title( $texto ) {
 	$texto = strtolower( (string) $texto );
 	$texto = str_replace(

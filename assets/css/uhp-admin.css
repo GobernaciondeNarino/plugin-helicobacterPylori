@@ -438,3 +438,35 @@
   .uhpa-esquema__izq,
   .uhpa-esquema__centro { border-right: 0; border-bottom: 1px solid var(--uhpa-linea); }
 }
+
+/* ---------- Tarjeta que agrupa las vistas de una pestaña ----------
+   Va delante de la retícula de tarjetas individuales y ocupa todo el
+   ancho: es la entrada a la pestaña, no una más de la lista. */
+.uhpa-card--grupo {
+  margin-bottom: 18px;
+  border-left: 4px solid var(--uhpa-azul);
+}
+
+.uhpa-campo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.uhpa-etq {
+  font-size: .76rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  color: var(--uhpa-suave);
+}
+
+/* El selector de la tarjeta de grupo comparte la regla general
+   `.uhpa-select` pero no debe estirarse a todo el ancho dentro de una
+   fila con su etiqueta: encoge sin bajar de lo legible. */
+.uhpa-card--grupo .uhpa-select {
+  flex: 1 1 260px;
+  min-width: 0;
+  width: auto;
+}

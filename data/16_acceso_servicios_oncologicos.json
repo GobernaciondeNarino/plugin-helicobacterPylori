@@ -1,0 +1,69 @@
+{
+  "_meta": {
+    "conjunto": "Oferta de servicios oncológicos habilitados en el departamento de Nariño",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "Informe_Preliminar_URKUNINA_5000.pdf (sección 2)",
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx (diapositiva 7)"
+    ],
+    "fuente_primaria": "Instituto Departamental de Salud de Nariño (IDSN), 2022",
+    "fecha_extraccion": "2026-09-11",
+    "codificacion": "UTF-8",
+    "unidad": "número de instituciones prestadoras de salud (IPS)",
+    "n": 6,
+    "notas": [
+      "Las seis IPS habilitadas del departamento están en un único municipio, Pasto: la concentración es total (100%).",
+      "Servicios que comprende la habilitación: diagnóstico, quimioterapia, cirugía oncológica y consulta externa.",
+      "El informe no publica la distancia desde cada municipio a Pasto: solo documenta el caso de Belén (90 km) como ejemplo de la barrera de acceso territorial."
+    ]
+  },
+  "descripcion": "El departamento cuenta con seis IPS habilitadas en servicios oncológicos y las seis están en Pasto, de modo que toda la población de los otros 63 municipios debe desplazarse para diagnóstico y tratamiento.",
+  "resumen": {
+    "ips_habilitadas_departamento": 6,
+    "municipios_con_oferta": 1,
+    "municipios_del_departamento": 64,
+    "municipios_sin_oferta": 63,
+    "concentracion_en_pasto_porcentaje": 100.0
+  },
+  "instituciones": [
+    {
+      "institucion": "Hospital Universitario Departamental de Nariño",
+      "municipio": "Pasto",
+      "naturaleza": "pública"
+    },
+    {
+      "institucion": "Hospital San Pedro",
+      "municipio": "Pasto",
+      "naturaleza": "pública"
+    },
+    {
+      "institucion": "Hospital Infantil Los Ángeles",
+      "municipio": "Pasto",
+      "naturaleza": "pública"
+    },
+    {
+      "institucion": "Instituto Cancerológico de Nariño",
+      "municipio": "Pasto",
+      "naturaleza": "no documentada"
+    },
+    {
+      "institucion": "Clínica Pabón",
+      "municipio": "Pasto",
+      "naturaleza": "privada"
+    },
+    {
+      "institucion": "Clínica La Aurora",
+      "municipio": "Pasto",
+      "naturaleza": "privada"
+    }
+  ],
+  "barrera_de_acceso_documentada": {
+    "municipio_origen": "Belén",
+    "ubicacion": "Norte del departamento",
+    "municipio_destino": "Pasto",
+    "distancia_km": 90,
+    "motivo_del_desplazamiento": "Cada tratamiento y cada examen diagnóstico",
+    "observacion": "Belén es además el municipio que concentra 2 de los 8 casos de cáncer gástrico detectados por el tamizaje."
+  }
+}

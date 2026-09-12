@@ -1224,3 +1224,279 @@ test.describe('Convivencia', () => {
     expect(h1.familia.toLowerCase()).not.toContain('hind madurai');
   });
 });
+
+/* ================================================================== */
+test.describe('El mapa como tipo de gráfico', () => {
+
+  /* Un PNG de un píxel en lugar de las teselas reales: igual que en el
+     bloque del geomapa, la suite no debe depender de la red. */
+  const TESELA = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mM8w8DwHwAExAIsF7hMWQAAAABJRU5ErkJggg==',
+    'base64'
+  );
+  async function sinRed(page) {
+    await page.route(/basemaps\.cartocdn\.com|tile\.openstreetmap\.org/, (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: TESELA })
+    );
+  }
+
+  test('una vista territorial arranca en mapa cuando el shortcode lo pide', async ({ page }) => {
+    const errores = vigilar(page);
+    await sinRed(page);
+    await page.goto(BASE + '/paginas/grafico-mapa.html');
+
+    const fig = page.locator('[data-caso="arranca-en-mapa"] [data-uhp-grafico]');
+    await expect(fig).toHaveAttribute('data-type', 'mapa');
+    await expect(fig.locator('.uhp-skeleton')).toHaveCount(0, { timeout: 25000 });
+
+    // Es un mapa de verdad: la geometría del departamento, no unas barras.
+    const caminos = fig.locator('.uhp-g__lienzo path.d3plus-Path');
+    await expect(caminos.first()).toBeVisible({ timeout: 25000 });
+    expect(await caminos.count()).toBeGreaterThan(50);
+
+    // Con su leyenda de rampa, que solo pinta el componente de geomapas.
+    await expect(fig.locator('.uhp-g__leyenda .uhp-geo__escala')).toBeVisible();
+    await expect(fig.locator('.uhp-g__leyenda')).toContainText('Sin dato publicado');
+
+    expect(errores).toEqual([]);
+  });
+
+  test('el mapa está entre los tipos de una vista territorial y no de las demás', async ({ page }) => {
+    await sinRed(page);
+    await page.goto(BASE + '/paginas/grafico-mapa.html');
+
+    const conGeo = page.locator('[data-caso="arranca-en-barras"] [data-uhp-grafico]');
+    await expect(conGeo.locator('.uhp-skeleton')).toHaveCount(0, { timeout: 25000 });
+    const tiposGeo = await conGeo.locator('.uhp-g__select option').allTextContents();
+    expect(tiposGeo).toContain('Mapa');
+
+    const sinGeo = page.locator('[data-caso="sin-geo"] [data-uhp-grafico]');
+    await expect(sinGeo.locator('.uhp-skeleton')).toHaveCount(0, { timeout: 25000 });
+    const tiposSinGeo = await sinGeo.locator('.uhp-g__select option').allTextContents();
+    expect(tiposSinGeo.length).toBeGreaterThan(1);
+    expect(tiposSinGeo).not.toContain('Mapa');
+  });
+
+  test('cambiar de barras a mapa y volver no deja restos del dibujo anterior', async ({ page }) => {
+    const errores = vigilar(page);
+    await sinRed(page);
+    await page.goto(BASE + '/paginas/grafico-mapa.html');
+
+    const fig = page.locator('[data-caso="arranca-en-barras"] [data-uhp-grafico]');
+    await expect(fig.locator('.uhp-skeleton')).toHaveCount(0, { timeout: 25000 });
+
+    const lienzo = fig.locator('.uhp-g__lienzo');
+    await expect(lienzo.locator('rect.d3plus-Rect').first()).toBeVisible({ timeout: 25000 });
+
+    // A mapa: aparece la geometría y desaparecen las barras.
+    await fig.locator('.uhp-g__select').selectOption('mapa');
+    await expect(lienzo.locator('path.d3plus-Path').first()).toBeVisible({ timeout: 25000 });
+    await expect(lienzo).toHaveClass(/uhp-g__lienzo--mapa/);
+    expect(await lienzo.locator('rect.d3plus-Rect').count()).toBe(0);
+
+    // Y de vuelta a barras: el mapa no puede quedarse debajo. Es el fallo
+    // que motiva el desmontaje explícito: los dos motores dibujan DENTRO
+    // del lienzo y ninguno lo vacía al soltarlo.
+    await fig.locator('.uhp-g__select').selectOption('bar');
+    await expect(lienzo.locator('rect.d3plus-Rect').first()).toBeVisible({ timeout: 25000 });
+    expect(await lienzo.locator('path.d3plus-Path').count()).toBe(0);
+    await expect(lienzo).not.toHaveClass(/uhp-g__lienzo--mapa/);
+    await expect(fig.locator('.uhp-g__leyenda')).toBeHidden();
+
+    expect(errores).toEqual([]);
+  });
+
+  test('el shortcode elige qué serie pinta el mapa de una vista partida', async ({ page }) => {
+    await sinRed(page);
+    await page.goto(BASE + '/paginas/grafico-mapa.html');
+
+    const fig = page.locator('[data-caso="serie"] [data-uhp-grafico]');
+    await expect(fig).toHaveAttribute('data-serie', 'Infección por H. pylori');
+    await expect(fig.locator('.uhp-skeleton')).toHaveCount(0, { timeout: 25000 });
+
+    // El rótulo de la leyenda dice qué indicador se está viendo: un mapa
+    // de «Prevalencia por subregión» sin decir de cuál de los dos no se
+    // puede leer.
+    await expect(fig.locator('.uhp-g__leyenda')).toContainText('Infección por H. pylori');
+  });
+
+  test('el mapa subregional con teselas las pide y dibuja sus subregiones', async ({ page }) => {
+    const pedidas = [];
+    await page.route(/basemaps\.cartocdn\.com|tile\.openstreetmap\.org/, (route) => {
+      pedidas.push(route.request().url());
+      return route.fulfill({ status: 200, contentType: 'image/png', body: TESELA });
+    });
+    await page.goto(BASE + '/paginas/grafico-mapa.html');
+
+    const fig = page.locator('[data-caso="subregion-teselas"] [data-uhp-grafico]');
+    await expect(fig.locator('.uhp-skeleton')).toHaveCount(0, { timeout: 25000 });
+
+    // Trece subregiones, no sesenta y cuatro municipios.
+    const caminos = fig.locator('.uhp-g__lienzo path.d3plus-Path');
+    await expect(caminos.first()).toBeVisible({ timeout: 25000 });
+    const n = await caminos.count();
+    expect(n).toBeGreaterThan(5);
+    expect(n).toBeLessThan(30);
+
+    expect(pedidas.length).toBeGreaterThan(0);
+  });
+});
+
+/* ================================================================== */
+test.describe('Selector de vistas', () => {
+
+  test('elegir en la lista cambia título, textos, tabla y gráfico a la vez', async ({ page }) => {
+    const errores = vigilar(page);
+    await page.goto(BASE + '/paginas/selector.html');
+
+    const fig = page.locator('[data-zona="grafico"] [data-uhp-grafico]');
+    await expect(fig.locator('.uhp-skeleton')).toHaveCount(0, { timeout: 25000 });
+
+    // Estado inicial: la primera vista del grupo «Prevalencia».
+    await expect(fig).toHaveAttribute('data-view', 'prev_lpm_municipios');
+    const titulo = page.locator('[data-zona="titulo"] [data-uhp-panel]:not([hidden]) .uhp-titulo');
+    await expect(titulo).toHaveCount(1);
+    await expect(titulo).toContainText('Municipios con mayor lesión precursora');
+
+    // Solo un panel visible por pieza, nunca dos a la vez.
+    const visiblesTexto = page.locator('[data-zona="textos"] [data-uhp-panel]:not([hidden])');
+    const antes = await visiblesTexto.count();
+    expect(antes).toBe(5); // descripción, interpretación, resumen, cifras y fuente
+
+    const textoAntes = await visiblesTexto.first().textContent();
+    const tablaAntes = await page.locator('[data-zona="tabla"] [data-uhp-panel]:not([hidden]) table').textContent();
+
+    // Se elige otra vista del mismo canal.
+    await page.locator('[data-zona="selector"] .uhp-sel__select').selectOption('prev_subregion_hp');
+
+    await expect(titulo).toContainText('Infección por H. pylori por subregión');
+    await expect(visiblesTexto).toHaveCount(5);
+    expect(await visiblesTexto.first().textContent()).not.toBe(textoAntes);
+    expect(
+      await page.locator('[data-zona="tabla"] [data-uhp-panel]:not([hidden]) table').textContent()
+    ).not.toBe(tablaAntes);
+
+    // Y el gráfico, que no es un panel escondido sino una figura que se
+    // recarga, sigue a la misma lista.
+    await expect(fig).toHaveAttribute('data-view', 'prev_subregion_hp');
+    await expect(fig.locator('.uhp-g__lienzo svg')).toHaveCount(1, { timeout: 25000 });
+
+    expect(errores).toEqual([]);
+  });
+
+  test('dos canales en la misma página no se pisan', async ({ page }) => {
+    await page.goto(BASE + '/paginas/selector.html');
+
+    const tituloPrev = page.locator('[data-zona="titulo"] [data-uhp-panel]:not([hidden]) .uhp-titulo');
+    const tituloTam = page.locator('[data-zona="otro-canal"] [data-uhp-panel]:not([hidden]) .uhp-titulo');
+    await expect(tituloPrev).toHaveCount(1);
+    await expect(tituloTam).toHaveCount(1);
+
+    const antesPrev = await tituloPrev.textContent();
+
+    // Se cambia el canal «tamizaje»: el de «prevalencia» no debe moverse.
+    await page.locator('[data-zona="otro-canal"] .uhp-sel__select').selectOption('tamizaje_lpm');
+    await expect(tituloTam).toContainText('Lesión precursora de malignidad');
+    expect(await tituloPrev.textContent()).toBe(antesPrev);
+  });
+
+  test('una lista explícita respeta su orden y su vista inicial', async ({ page }) => {
+    await page.goto(BASE + '/paginas/selector.html');
+
+    const sel = page.locator('[data-zona="lista"] .uhp-sel__select');
+    const opciones = await sel.locator('option').evaluateAll((os) => os.map((o) => o.value));
+    expect(opciones).toEqual(['mortalidad_anio', 'acceso_oncologico', 'zonas_riesgo']);
+
+    // `view` elige cuál arranca, aunque no sea la primera de la lista.
+    await expect(sel).toHaveValue('acceso_oncologico');
+    await expect(
+      page.locator('[data-zona="lista"] [data-uhp-panel]:not([hidden]) .uhp-titulo')
+    ).toContainText('Municipios con oferta de servicios oncológicos');
+  });
+
+  test('el cambio se anuncia y el panel oculto sale del árbol de accesibilidad', async ({ page }) => {
+    await page.goto(BASE + '/paginas/selector.html');
+
+    const estado = page.locator('[data-zona="selector"] [data-uhp-canal-estado]');
+    await expect(estado).toHaveAttribute('aria-live', 'polite');
+
+    await page.locator('[data-zona="selector"] .uhp-sel__select').selectOption('prev_subregion_lpm');
+    await expect(estado).toContainText('Lesión precursora por subregión');
+
+    // Un panel con `hidden` no lo lee un lector de pantalla. Se comprueba
+    // que realmente está oculto y no solo transparente: algunos temas
+    // declaran `display` en selectores de elemento y ganarían al valor por
+    // defecto del navegador.
+    //
+    // Se prueban las DOS formas de panel: el <div> envolvente que lleva la
+    // clase .uhp-panel y el <p> de la descripción dentro del propio
+    // selector, que no la lleva. Lo que define a un panel es el atributo,
+    // y la defensa del CSS tiene que ir contra el atributo.
+    await expect(page.locator('[data-zona="titulo"] [data-uhp-panel][hidden]').first()).toBeHidden();
+    await expect(page.locator('[data-zona="selector"] p[data-uhp-panel][hidden]').first()).toBeHidden();
+
+    // Y exactamente una descripción visible dentro del selector.
+    await expect(page.locator('[data-zona="selector"] p[data-uhp-panel]:not([hidden])')).toHaveCount(1);
+  });
+
+  test('un canal de solo selector y gráfico funciona con el selector delante', async ({ page }) => {
+    const errores = vigilar(page);
+    await page.goto(BASE + '/paginas/selector.html');
+
+    const zona = page.locator('[data-zona="solo-grafico"]');
+    const fig = zona.locator('[data-uhp-grafico]');
+    await expect(fig.locator('.uhp-skeleton')).toHaveCount(0, { timeout: 25000 });
+    await expect(fig).toHaveAttribute('data-view', 'cancer_municipios');
+
+    // Con el selector delante del gráfico, su script se imprime antes: un
+    // aviso inmediato al arrancar se perdería porque la figura todavía no
+    // tendría puesto su oyente. Aquí se comprueba el camino normal, que es
+    // que el cambio del usuario sí llega.
+    await zona.locator('.uhp-sel__select').selectOption('cancer_desenlace');
+    await expect(fig).toHaveAttribute('data-view', 'cancer_desenlace');
+    await expect(fig.locator('.uhp-g__lienzo svg')).toHaveCount(1, { timeout: 25000 });
+
+    expect(errores).toEqual([]);
+  });
+
+  test('el borde del control se distingue de su fondo, como exige la norma', async ({ page }) => {
+    await page.goto(BASE + '/paginas/selector.html');
+
+    // WCAG 2.1 §1.4.11, que la Resolución 1519 de 2020 adopta: la línea
+    // que separa un control de su fondo es información visual necesaria
+    // para identificarlo y pide 3:1. El borde decorativo de una tarjeta
+    // no tiene esa obligación; el de un <select>, sí.
+    const medida = await page.locator('[data-zona="selector"] .uhp-sel__select').evaluate((n) => {
+      const s = getComputedStyle(n);
+      return { borde: s.borderTopColor, fondo: s.backgroundColor };
+    });
+
+    const lum = (css) => {
+      const [r, g, b] = css.match(/[\d.]+/g).slice(0, 3).map(Number);
+      const f = (v) => {
+        const x = v / 255;
+        return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const a = lum(medida.borde);
+    const b = lum(medida.fondo);
+    const razon = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+    expect(razon, `borde ${medida.borde} sobre ${medida.fondo}`).toBeGreaterThanOrEqual(3);
+  });
+
+  test('un selector sin grupo avisa en vez de romper la página', async ({ page }) => {
+    const errores = vigilar(page);
+    await page.goto(BASE + '/paginas/selector.html');
+
+    const aviso = page.locator('[data-zona="sin-grupo"] .uhp-error');
+    await expect(aviso).toContainText('necesita un grupo de vistas');
+    // Es un aviso anunciado, no un párrafo mudo: quien use lector de
+    // pantalla debe enterarse de que ese hueco no se va a llenar.
+    await expect(aviso).toHaveAttribute('role', 'alert');
+    // El resto de la página sigue viva.
+    await expect(page.locator('[data-zona="selector"] .uhp-sel__select')).toBeVisible();
+    expect(errores).toEqual([]);
+  });
+});

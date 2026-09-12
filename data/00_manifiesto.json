@@ -4,20 +4,34 @@
     "proyecto": "URKUNINA 5000",
     "bpin": "2015000100064",
     "entidad": "Gobernación de Nariño — Secretaría TIC, Innovación y Gobierno Abierto",
-    "fecha_generacion": "2026-09-09",
+    "fecha_generacion": "2026-09-11",
     "codificacion": "UTF-8",
-    "licencia_sugerida": "Datos abiertos institucionales — verificar con el custodio antes de publicar"
+    "licencia_sugerida": "Datos abiertos institucionales — verificar con el custodio antes de publicar",
+    "cobertura_del_listado": "Todos los archivos del conjunto salvo el propio manifiesto, que no puede declarar su propio hash."
   },
   "documentos_fuente": [
     {
       "archivo": "Informe_Preliminar_URKUNINA_5000.pdf",
       "tipo": "PDF",
-      "titulo": "Informe preliminar de mapeo de actores y avance"
+      "titulo": "Informe preliminar de mapeo de actores y avance",
+      "version": "Revisión ampliada recibida el 11 de septiembre de 2026 (17 páginas; la anterior tenía 14).",
+      "novedades": [
+        "Mortalidad departamental 2019-2022 (Gráfica 3)",
+        "Oferta de servicios oncológicos del departamento y barrera de acceso de Belén",
+        "Municipios con menor prevalencia de LPM"
+      ]
     },
     {
       "archivo": "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx",
       "tipo": "PPTX",
-      "titulo": "URKUNINA 5000 — Presentación Informe Final"
+      "titulo": "URKUNINA 5000 — Presentación Informe Final",
+      "version": "Revisión ampliada recibida el 11 de septiembre de 2026 (18 diapositivas; la anterior tenía 16).",
+      "novedades": [
+        "Municipios de referencia por zona de riesgo (diapositiva 5)",
+        "Mortalidad y acceso a servicios oncológicos (diapositiva 7)",
+        "National Cancer Institute (EE. UU.) en la red de aliados",
+        "Tres pasos de la próxima fase hacia la plataforma de datos"
+      ]
     }
   ],
   "archivos": [
@@ -30,8 +44,8 @@
     {
       "archivo": "02_contexto_epidemiologico.json",
       "contenido": "Incidencia de cáncer gástrico por zona de riesgo y comparación nacional",
-      "bytes": 3323,
-      "sha256_16": "b2781666ac284478"
+      "bytes": 5670,
+      "sha256_16": "4b635b26bfa5f6fd"
     },
     {
       "archivo": "03_municipios_cobertura.json",
@@ -42,8 +56,8 @@
     {
       "archivo": "04_prevalencia_municipal.json",
       "contenido": "Municipios con mayor prevalencia de lesión precursora de malignidad (LPM) e infección por H. pylori",
-      "bytes": 3064,
-      "sha256_16": "20b1c2f81e521181"
+      "bytes": 4147,
+      "sha256_16": "70d5d96b52adf220"
     },
     {
       "archivo": "05_prevalencia_subregional.json",
@@ -78,8 +92,8 @@
     {
       "archivo": "10_actores_institucionales.json",
       "contenido": "Mapeo de actores institucionales del proyecto",
-      "bytes": 4007,
-      "sha256_16": "223952657b6c3387"
+      "bytes": 4874,
+      "sha256_16": "df2da51368c8fef4"
     },
     {
       "archivo": "11_produccion_cientifica.json",
@@ -98,6 +112,36 @@
       "contenido": "Retos técnicos identificados para la siguiente fase del proyecto",
       "bytes": 2435,
       "sha256_16": "9399e6b930fa7646"
+    },
+    {
+      "archivo": "14_subregiones_municipios.json",
+      "contenido": "Composición oficial de las 13 subregiones de Nariño: qué municipios integra cada una",
+      "bytes": 3375,
+      "sha256_16": "6958878708b0f4ce"
+    },
+    {
+      "archivo": "15_mortalidad_departamental.json",
+      "contenido": "Fallecimientos anuales por cáncer de estómago en Nariño, 2019-2022 (IDSN)",
+      "bytes": 2054,
+      "sha256_16": "2e4d5e2e4a9e7eea"
+    },
+    {
+      "archivo": "16_acceso_servicios_oncologicos.json",
+      "contenido": "IPS con servicios oncológicos habilitados en el departamento y barrera de acceso territorial",
+      "bytes": 2597,
+      "sha256_16": "cec35c4023a57631"
+    },
+    {
+      "archivo": "dep-sub-mun.geojson",
+      "contenido": "Cartografía de Nariño con departamento, subregión y municipio, base de la topología subregional",
+      "bytes": 3249617,
+      "sha256_16": "b33209b787f2a32f"
+    },
+    {
+      "archivo": "narino_municipios.geojson",
+      "contenido": "Cartografía municipal de Nariño (GeoJSON), base de los mapas y de la topología municipal",
+      "bytes": 354120,
+      "sha256_16": "247fe4a68e522aeb"
     }
   ],
   "convenciones": {
@@ -112,7 +156,11 @@
     "Resultados de laboratorio o histopatología por participante.",
     "Identidad de los pacientes con cáncer detectado.",
     "Prevalencia de LPM y H. pylori de los 45 municipios fuera de los dos top 10.",
-    "Subregiones de Nariño no reportadas en el informe (se documentan 11)."
+    "Subregiones de Nariño no reportadas en el informe (se documentan 11).",
+    "Municipios con menor prevalencia de H. pylori (solo se publica el extremo alto de ese indicador).",
+    "Mortalidad por cáncer de estómago anterior a 2019 o posterior a 2022.",
+    "Distancia a Pasto desde cada municipio: solo se documenta el caso de Belén (90 km).",
+    "Asignación de los 64 municipios a las tres zonas de riesgo: la fuente solo nombra territorios de referencia."
   ],
   "discrepancias_detectadas": [
     {
@@ -132,7 +180,8 @@
       "suma_por_tipo": 31190,
       "texto_documentos": "más de 25.000 muestras",
       "meta_mga": 45000,
-      "tratamiento": "Se registran las tres cifras; requiere validación con el custodio del biobanco (Fundación CIEDYN)."
+      "tratamiento": "Se registran todas las cifras sin reconciliarlas. La propia presentación de cierre se contradice entre diapositivas, de modo que ninguna puede darse por buena sin validación del custodio del biobanco.",
+      "presentacion_pptx_2026_09": "Más de 25.000 en las diapositivas 10 y 18; «+45.000 muestras» en la diapositiva 14"
     },
     {
       "tema": "Número de publicaciones",
@@ -144,6 +193,24 @@
       "informe_pdf": "Coautoría en publicaciones recientes (microbiota, modelo multifactorial)",
       "presentacion_pptx": "Analítica avanzada y datos de secuenciación",
       "tratamiento": "Se combinan ambas descripciones."
+    },
+    {
+      "tema": "Custodio del biobanco",
+      "informe_pdf": "Fundación CIEDYN — «Custodio del biobanco y bases de datos históricas (2018-2023)»",
+      "presentacion_pptx": "Instituto Nacional de Cancerología — «Custodio del biobanco (+45.000 muestras)»; a CIEDYN le asigna el «liderazgo técnico y administrativo» y al HUDN las «bases de datos históricas»",
+      "tratamiento": "Se conserva el reparto de roles del informe preliminar, que es el documento que desarrolla la tabla de actores. El cuerpo del propio informe sitúa las muestras «en el Instituto Nacional de Cáncer de Colombia», así que custodia física y custodia documental podrían no coincidir: requiere validación con las dos entidades antes de publicarse como dato de gobernanza."
+    },
+    {
+      "tema": "Forma de la serie de mortalidad 2019-2022",
+      "texto_informe": "«Los casos … han tenido un crecimiento constante desde 2019 hasta 2022»",
+      "grafica_del_mismo_informe": "101 (2019), 77 (2020), 118 (2021), 137 (2022): hay una caída en 2020 antes del repunte",
+      "tratamiento": "Se publica la serie de la gráfica, que es el dato. El crecimiento total del periodo (+35,64%) sí es correcto; lo que no se sostiene es que sea constante. El conjunto no atribuye causa alguna a la caída de 2020 porque la fuente no la explica."
+    },
+    {
+      "tema": "Número de retos de la siguiente fase",
+      "texto_informe": "«El propio equipo del proyecto identifica cuatro retos técnicos pendientes»",
+      "tabla_del_mismo_informe": "La tabla que sigue a esa frase enumera cinco retos",
+      "tratamiento": "Se conservan los cinco retos de la tabla; el «cuatro» del texto parece no haberse actualizado al añadirse el repositorio digital."
     }
   ]
 }
