@@ -112,12 +112,24 @@ function url_de_handle( $tipo, $handle ) {
  * @param string $cuerpo Marcado del shortcode.
  * @return string
  */
-function pagina( $titulo, $cuerpo ) {
+function pagina( $titulo, $cuerpo, $temprano = null ) {
+	$todas = uhp_test_resolver( 'style' );
+	// Sin lista temprana, todo al <head>: es el caso de las páginas que no
+	// declaran sus shortcodes y no tienen nada que repartir.
+	$en_head = ( null === $temprano ) ? $todas : $temprano;
+
 	$hojas = '';
-	foreach ( uhp_test_resolver( 'style' ) as $handle ) {
+	$tarde = '';
+	foreach ( $todas as $handle ) {
 		$url = url_de_handle( 'style', $handle );
-		if ( '' !== $url ) {
-			$hojas .= '<link rel="stylesheet" href="' . $url . '" data-handle="' . $handle . '">' . "\n";
+		if ( '' === $url ) {
+			continue;
+		}
+		$etiqueta = '<link rel="stylesheet" href="' . $url . '" data-handle="' . $handle . '">' . "\n";
+		if ( in_array( $handle, $en_head, true ) ) {
+			$hojas .= $etiqueta;
+		} else {
+			$tarde .= $etiqueta;
 		}
 	}
 
@@ -159,7 +171,7 @@ body{margin:0;font-family:system-ui,sans-serif;background:#fff;}
 </head>
 <body>
 ' . $cuerpo . '
-' . $scripts . '</body>
+' . $tarde . $scripts . '</body>
 </html>';
 }
 
@@ -171,10 +183,27 @@ body{margin:0;font-family:system-ui,sans-serif;background:#fff;}
  * @param callable $pintar Devuelve el marcado; se le pasa UHP_Shortcodes.
  * @return string
  */
-function construir( $nombre, $titulo, $pintar ) {
+function construir( $nombre, $titulo, $pintar, $shortcodes = '' ) {
 	uhp_test_limpiar_encolados();
+
+	/* Primero la pasada TEMPRANA, la que en WordPress corre en
+	   `wp_enqueue_scripts` antes de que wp_head imprima. Lo que se encole
+	   aquí sale en el <head>; lo que encolen los shortcodes al renderizar
+	   sale en el pie, que es exactamente lo que hace WordPress.
+
+	   Reproducirlo importa: el generador imprimía TODO en el <head> y por
+	   eso la suite nunca vio que en el sitio real las hojas salían en el
+	   pie y la página se pintaba en crudo hasta que llegaban. */
+	$GLOBALS['uhp_test_contenido'] = $shortcodes;
+	if ( '' !== $shortcodes ) {
+		$GLOBALS['uhp_sc']->adelantar_hojas();
+	}
+	$temprano = uhp_test_resolver( 'style' );
+
 	$cuerpo = $pintar( $GLOBALS['uhp_sc'] );
-	return pagina( $titulo, $cuerpo );
+	$GLOBALS['uhp_test_contenido'] = '';
+
+	return pagina( $titulo, $cuerpo, $temprano );
 }
 
 /* ------------------------------------------------------------------ */
@@ -186,7 +215,8 @@ $paginas['objeto-3d'] = construir(
 	'Objeto 3D',
 	function ( $sc ) {
 		return $sc->sc_3d( array( 'alto' => '100vh' ) );
-	}
+	},
+	'[urkunina_3d]'
 );
 
 $paginas['objeto-3d-embebido'] = construir(
@@ -198,7 +228,8 @@ $paginas['objeto-3d-embebido'] = construir(
 			$sc->sc_3d( array( 'alto' => '600px' ) ) .
 			'<h2>Después de la escena</h2>' .
 			'<p>Más contenido para comprobar que la escena no se apodera de la página.</p></div>';
-	}
+	},
+	'[urkunina_3d]'
 );
 
 $paginas['tablero'] = construir(
@@ -206,7 +237,8 @@ $paginas['tablero'] = construir(
 	'Tablero',
 	function ( $sc ) {
 		return $sc->sc_dashboard( array() );
-	}
+	},
+	'[urkunina_dashboard]'
 );
 
 $paginas['graficos'] = construir(
@@ -234,7 +266,8 @@ $paginas['graficos'] = construir(
 			);
 		}
 		return '<div class="pagina">' . $html . '</div>';
-	}
+	},
+	'[urkunina_grafico]'
 );
 
 $paginas['maqueta'] = construir(
@@ -280,7 +313,8 @@ $paginas['maqueta'] = construir(
 				)
 			) .
 			'</div></div>';
-	}
+	},
+	'[urkunina_titulo][urkunina_grafico][urkunina_descripcion][urkunina_interpretacion][urkunina_resumen][urkunina_cifras][urkunina_fuente][urkunina_analisis]'
 );
 
 $paginas['geomapa'] = construir(
@@ -340,7 +374,8 @@ $paginas['geomapa'] = construir(
 			'<div data-caso="no-territorial">' .
 			$sc->sc_geomapa( array( 'view' => 'perfil_etnia' ) ) .
 			'</div></div>';
-	}
+	},
+	'[urkunina_geomapa]'
 );
 
 $paginas['tablero-embebido'] = construir(
@@ -355,7 +390,8 @@ $paginas['tablero-embebido'] = construir(
 			$sc->sc_dashboard( array( 'alto' => '640px' ) ) .
 			'<div class="pagina"><h2>Después del tablero</h2>' .
 			'<p>Más contenido, para comprobar que el tablero no se apodera de la página.</p></div>';
-	}
+	},
+	'[urkunina_dashboard]'
 );
 
 $paginas['selector'] = construir(
@@ -428,7 +464,8 @@ $paginas['selector'] = construir(
 			// Un selector sin grupo: avisa, no rompe la página.
 			'<div data-zona="sin-grupo">' . $sc->sc_selector( array() ) . '</div>' .
 			'</div>';
-	}
+	},
+	'[urkunina_selector][urkunina_titulo][urkunina_grafico][urkunina_descripcion][urkunina_interpretacion][urkunina_resumen][urkunina_cifras][urkunina_fuente][urkunina_tabla]'
 );
 
 $paginas['grafico-mapa'] = construir(
@@ -489,7 +526,8 @@ $paginas['grafico-mapa'] = construir(
 				)
 			) .
 			'</div></div>';
-	}
+	},
+	'[urkunina_grafico]'
 );
 
 $paginas['mapa'] = construir(
@@ -497,7 +535,8 @@ $paginas['mapa'] = construir(
 	'Mapa',
 	function ( $sc ) {
 		return '<div class="pagina">' . $sc->sc_mapa( array( 'alto' => '560px' ) ) . '</div>';
-	}
+	},
+	'[urkunina_mapa]'
 );
 
 $paginas['servidor'] = construir(
@@ -516,7 +555,8 @@ $paginas['servidor'] = construir(
 					'formato' => 'porcentaje',
 				)
 			) . '</p></div>';
-	}
+	},
+	'[urkunina_kpi][urkunina_ficha][urkunina_tabla][urkunina_dato]'
 );
 
 $paginas['convivencia'] = construir(
@@ -535,7 +575,8 @@ $paginas['convivencia'] = construir(
 			$sc->sc_mapa( array( 'alto' => '380px' ) ) .
 			'</div>' .
 			$sc->sc_3d( array( 'alto' => '500px' ) );
-	}
+	},
+	'[urkunina_kpi][urkunina_grafico][urkunina_mapa][urkunina_3d]'
 );
 
 foreach ( $paginas as $nombre => $html ) {

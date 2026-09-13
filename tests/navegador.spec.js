@@ -1075,6 +1075,34 @@ test.describe('Tablero', () => {
     expect(cols).toBe(1);
   });
 
+  test('su hoja llega en el <head>, no después del marcado', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero.html');
+
+    // EL FALLO QUE ESTO IMPIDE. Los shortcodes encolan sus hojas cuando se
+    // renderizan, y eso ocurre cuando wp_head ya pasó: WordPress las saca
+    // entonces en el pie. El marcado se pinta en crudo hasta que llegan, y
+    // en la página real eso eran 223 KB de HTML sin estilo. Con la página
+    // grande y la conexión lenta el parpadeo dura lo suficiente para que
+    // parezca que el tablero no funciona.
+    const posicion = await page.evaluate(() => {
+      const link = document.querySelector('link[data-handle="uhp-dashboard"]');
+      const db = document.querySelector('.uhp-db');
+      if (!link || !db) { return { falta: true }; }
+      return {
+        enHead: link.closest('head') !== null,
+        // Y antes que el contenedor en el orden del documento.
+        antesDelMarcado: !!(link.compareDocumentPosition(db) & Node.DOCUMENT_POSITION_FOLLOWING)
+      };
+    });
+
+    expect(posicion.falta, 'no se encontró la hoja o el contenedor').toBeFalsy();
+    expect(posicion.enHead, 'la hoja del tablero salió fuera del <head>').toBe(true);
+    expect(posicion.antesDelMarcado).toBe(true);
+
+    // Y el estilo está realmente aplicado, no solo enlazado.
+    await expect(page.locator('.uhp-db')).toHaveCSS('display', 'grid');
+  });
+
   test('el tablero no se apodera de la página que lo contiene', async ({ page }) => {
     await page.goto(BASE + '/paginas/tablero-embebido.html');
     await listo(page);
