@@ -665,7 +665,38 @@ contenedor, y la hoja **no depende de `uhp.css`**: el tablero define su propia
 retícula y su propia tipografía, y heredar los tokens del resto del plugin
 solo introduciría colores que luego hay que volver a pisar.
 
-#### 4.8.8 Accesibilidad
+#### 4.8.8 Las hojas van en el `<head>`
+
+Un shortcode encola lo suyo **cuando se renderiza**, y eso ocurre durante
+`the_content`, cuando `wp_head` ya imprimió las hojas. WordPress no las
+descarta —las saca en el pie—, pero para entonces el navegador ya pintó el
+marcado sin estilo.
+
+En la página real del tablero eso eran **223 KB de HTML dibujados en crudo**
+antes de que llegara el CSS: la página entera parpadeaba, y con la conexión
+lenta el parpadeo duraba lo suficiente para parecer que el tablero estaba
+roto. Afectaba a todos los componentes del plugin desde el principio; se notó
+con el tablero porque ocupa la pantalla entera.
+
+`UHP_Shortcodes::adelantar_hojas()`, enganchada a `wp_enqueue_scripts` con
+prioridad 20 —después de que `UHP_Assets` registre, antes de que `wp_head`
+imprima—, mira el contenido de la entrada con `has_shortcode()` y encola las
+hojas que vaya a hacer falta. El marcado nace ya vestido.
+
+Solo se adelantan las **hojas**. Los scripts siguen en el pie, que es donde
+deben estar: no bloquean el pintado y no producen parpadeo. Y los shortcodes
+siguen encolando lo suyo al renderizar, que es lo que cubre lo que esa
+función no puede ver —un widget, una plantilla que llame a `do_shortcode()`,
+un constructor de páginas que guarde el contenido en otro sitio—. Encolar dos
+veces no cuesta nada: WordPress ignora el duplicado.
+
+> **Por qué la suite no lo vio.** `tests/generar-paginas.php` imprimía TODAS
+> las hojas en el `<head>`, de modo que la página de prueba nunca reprodujo
+> el reparto real. Ahora hace la pasada temprana primero y manda al pie lo
+> que se encole después, igual que WordPress, y hay una prueba que comprueba
+> que la hoja del tablero está en el `<head>` y antes del contenedor.
+
+#### 4.8.9 Accesibilidad
 
 - Cada filtro es un `<button>` con `aria-pressed`, no un `<div>` con un clic.
 - El cambio de selección se anuncia en una región `aria-live`: mueve media
@@ -839,7 +870,7 @@ silencioso:
   Ofrecerlo en una vista sin territorio produciría un mapa vacío; no ofrecerlo
   en una que sí lo tiene esconde la mitad de la lectura.
 
-### 8.2 Navegador — 60 pruebas
+### 8.2 Navegador — 61 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a

@@ -169,6 +169,28 @@ function apply_filters( $etiqueta, $valor ) {
 }
 
 function add_action() {}
+
+/* El contenido de la «entrada» que se está mostrando. El generador de
+   páginas lo fija antes de llamar a adelantar_hojas(), de modo que
+   has_shortcode() vea lo mismo que vería WordPress. */
+$GLOBALS['uhp_test_contenido'] = '';
+
+function is_singular() {
+	return '' !== $GLOBALS['uhp_test_contenido'];
+}
+
+function get_post() {
+	if ( '' === $GLOBALS['uhp_test_contenido'] ) {
+		return null;
+	}
+	return (object) array( 'post_content' => $GLOBALS['uhp_test_contenido'] );
+}
+
+function has_shortcode( $contenido, $tag ) {
+	// Basta con buscar «[tag» seguido de espacio o cierre: es lo que
+	// distingue [urkunina_grafico] de [urkunina_graficos_otro].
+	return (bool) preg_match( '/\[' . preg_quote( (string) $tag, '/' ) . '[\s\]\/]/', (string) $contenido );
+}
 function add_shortcode() {}
 
 function add_filter( $etiqueta, $fn, $prioridad = 10, $args = 1 ) {

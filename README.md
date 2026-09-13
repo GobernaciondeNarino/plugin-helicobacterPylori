@@ -87,6 +87,12 @@ panel: **URKUNINA 5000 → Shortcodes**.
 
 ---
 
+> **Al actualizar el plugin, suba la versión.** `UHP_VERSION` en
+> `urkunina-5000.php` es el `?ver=` de cada hoja y cada script. Si no
+> cambia, el navegador y la caché del sitio siguen sirviendo los archivos
+> viejos aunque los nuevos ya estén en disco, y la página se ve a medias.
+> Tras subirla, purgue la caché del sitio.
+
 ## Instalación
 
 1. Copie la carpeta del plugin en `wp-content/plugins/urkunina-5000/`.
@@ -207,7 +213,7 @@ cáncer detectado: esa información no está en los documentos fuente.
 ```bash
 npm install          # instala Playwright
 npm run test:datos   # 430 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 60 pruebas de navegador
+npm test             # lo anterior más 61 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los

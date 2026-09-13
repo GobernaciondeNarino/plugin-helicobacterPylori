@@ -23,6 +23,110 @@ final class UHP_Shortcodes {
 
 	public function __construct() {
 		add_action( 'init', array( $this, 'registrar' ) );
+		// Prioridad 20: después de que UHP_Assets registre las hojas (5) y
+		// antes de que wp_head las imprima. Ver adelantar_hojas().
+		add_action( 'wp_enqueue_scripts', array( $this, 'adelantar_hojas' ), 20 );
+	}
+
+	/**
+	 * Encola las hojas de los shortcodes que haya en la entrada, ANTES de
+	 * que se renderice el contenido.
+	 *
+	 * EL PROBLEMA QUE RESUELVE. Cada shortcode encola lo suyo cuando se
+	 * renderiza, y eso ocurre durante `the_content`, cuando `wp_head` ya
+	 * imprimió las hojas. WordPress no las descarta —las saca en el pie—,
+	 * pero para entonces el navegador ya pintó el marcado sin estilo. En la
+	 * página del tablero eso son 223 KB de HTML dibujados en crudo antes de
+	 * que llegue el CSS: la página entera parpadea, y en una conexión lenta
+	 * el parpadeo dura lo suficiente para fotografiarlo.
+	 *
+	 * Encolar aquí, en `wp_enqueue_scripts`, hace que las hojas salgan en
+	 * el `<head>` y el marcado nazca ya vestido.
+	 *
+	 * Solo se adelantan las HOJAS. Los scripts siguen saliendo en el pie,
+	 * que es donde deben estar: no bloquean el pintado y no producen
+	 * parpadeo. Y los shortcodes siguen encolando lo suyo al renderizar,
+	 * que es lo que cubre los casos que esta función no puede ver —un
+	 * widget, una plantilla que llame a do_shortcode(), un constructor de
+	 * páginas que guarde el contenido en otro sitio—. Encolar dos veces no
+	 * cuesta nada: WordPress ignora el duplicado.
+	 */
+	public function adelantar_hojas() {
+		$contenido = self::contenido_de_la_entrada();
+		if ( '' === $contenido ) {
+			return;
+		}
+
+		// Qué hoja necesita cada shortcode. Es la única duplicación de la
+		// tabla que cada sc_* aplica por su cuenta, y va junta y a la vista
+		// para que se note si alguna se queda atrás.
+		$hojas = array(
+			'urkunina_3d'             => '3d',
+			'urkunina_dashboard'      => 'dashboard',
+			'urkunina_grafico'        => 'grafico',
+			'urkunina_selector'       => 'grafico',
+			'urkunina_mapa'           => 'mapa',
+			'urkunina_geomapa'        => 'geomapa',
+			'urkunina_analisis'       => 'base',
+			'urkunina_titulo'         => 'base',
+			'urkunina_descripcion'    => 'base',
+			'urkunina_interpretacion' => 'base',
+			'urkunina_resumen'        => 'base',
+			'urkunina_cifras'         => 'base',
+			'urkunina_fuente'         => 'base',
+			'urkunina_kpi'            => 'base',
+			'urkunina_tabla'          => 'base',
+			'urkunina_ficha'          => 'base',
+			'urkunina_dato'           => 'base',
+		);
+
+		$hay_tablero = false;
+		$hay_resto   = false;
+
+		foreach ( $hojas as $tag => $hoja ) {
+			if ( ! has_shortcode( $contenido, $tag ) ) {
+				continue;
+			}
+			wp_enqueue_style( UHP_Assets::P . $hoja );
+
+			if ( 'urkunina_dashboard' === $tag ) {
+				$hay_tablero = true;
+			} else {
+				$hay_resto = true;
+			}
+
+			// Un gráfico de vista territorial puede pasar al tipo «mapa»
+			// desde su barra, y entonces necesita la hoja del geomapa.
+			if ( 'urkunina_grafico' === $tag ) {
+				wp_enqueue_style( UHP_Assets::P . 'geomapa' );
+			}
+		}
+
+		// Las dos familias tipográficas son distintas y no se estorban: el
+		// tablero usa IBM Plex y el resto Hind Madurai.
+		if ( $hay_tablero ) {
+			UHP_Estilos::encolar_fuentes_tablero();
+		}
+		if ( $hay_resto ) {
+			UHP_Estilos::encolar_fuentes();
+		}
+	}
+
+	/**
+	 * Contenido de la entrada que se está mostrando, si lo hay.
+	 *
+	 * Devuelve '' en archivos, búsquedas y cualquier vista que no sea una
+	 * entrada concreta: ahí no hay un contenido que inspeccionar y los
+	 * shortcodes encolarán lo suyo al renderizarse, como siempre.
+	 *
+	 * @return string
+	 */
+	private static function contenido_de_la_entrada() {
+		if ( ! is_singular() ) {
+			return '';
+		}
+		$entrada = get_post();
+		return ( $entrada && isset( $entrada->post_content ) ) ? (string) $entrada->post_content : '';
 	}
 
 	/**
