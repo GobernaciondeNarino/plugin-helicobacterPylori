@@ -4,7 +4,7 @@
     "proyecto": "URKUNINA 5000",
     "bpin": "2015000100064",
     "entidad": "Gobernación de Nariño — Secretaría TIC, Innovación y Gobierno Abierto",
-    "fecha_generacion": "2026-09-11",
+    "fecha_generacion": "2026-09-13",
     "codificacion": "UTF-8",
     "licencia_sugerida": "Datos abiertos institucionales — verificar con el custodio antes de publicar",
     "cobertura_del_listado": "Todos los archivos del conjunto salvo el propio manifiesto, que no puede declarar su propio hash."
@@ -132,6 +132,12 @@
       "sha256_16": "cec35c4023a57631"
     },
     {
+      "archivo": "17_zonas_riesgo_subregion.json",
+      "contenido": "Zona de riesgo de cada subregión. DERIVACIÓN declarada, no dato publicado",
+      "bytes": 4625,
+      "sha256_16": "c7892f3f8814cb85"
+    },
+    {
       "archivo": "dep-sub-mun.geojson",
       "contenido": "Cartografía de Nariño con departamento, subregión y municipio, base de la topología subregional",
       "bytes": 3249617,
@@ -160,7 +166,7 @@
     "Municipios con menor prevalencia de H. pylori (solo se publica el extremo alto de ese indicador).",
     "Mortalidad por cáncer de estómago anterior a 2019 o posterior a 2022.",
     "Distancia a Pasto desde cada municipio: solo se documenta el caso de Belén (90 km).",
-    "Asignación de los 64 municipios a las tres zonas de riesgo: la fuente solo nombra territorios de referencia."
+    "Asignación de los municipios a las tres zonas de riesgo: la fuente solo nombra territorios de referencia. 17_zonas_riesgo_subregion.json la deriva por subregión y lo declara como tal, con su comprobación; NO es un dato publicado."
   ],
   "discrepancias_detectadas": [
     {

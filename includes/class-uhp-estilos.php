@@ -189,4 +189,32 @@ final class UHP_Estilos {
 		);
 		wp_enqueue_style( 'uhp-fuentes' );
 	}
+
+	/**
+	 * Tipografías del tablero: IBM Plex Sans y IBM Plex Mono.
+	 *
+	 * El tablero no comparte tipografía con el resto del plugin. Su diseño
+	 * se apoya en una monoespaciada para los rótulos y las cifras —de ahí
+	 * que las columnas de números queden alineadas y los rótulos en
+	 * versalitas tengan el mismo ancho— y eso Hind Madurai no lo da. Van
+	 * bajo su propio handle para que una página con tablero y gráficos no
+	 * descargue dos veces lo mismo ni pierda ninguna de las dos familias.
+	 */
+	public static function encolar_fuentes_tablero() {
+		$e = self::estilo();
+		if ( empty( $e['fuentes_cdn'] ) ) {
+			return;
+		}
+		if ( wp_style_is( 'uhp-fuentes-plex', 'registered' ) || wp_style_is( 'uhp-fuentes-plex', 'enqueued' ) ) {
+			wp_enqueue_style( 'uhp-fuentes-plex' );
+			return;
+		}
+		wp_register_style(
+			'uhp-fuentes-plex',
+			'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap',
+			array(),
+			null // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion -- Google Fonts versiona por URL.
+		);
+		wp_enqueue_style( 'uhp-fuentes-plex' );
+	}
 }

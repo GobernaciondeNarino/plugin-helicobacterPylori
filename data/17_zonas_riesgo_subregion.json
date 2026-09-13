@@ -1,0 +1,152 @@
+{
+  "_meta": {
+    "conjunto": "Zona de riesgo de cáncer gástrico de cada subregión de Nariño",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "naturaleza": "DERIVACIÓN, no dato publicado",
+    "fuentes": [
+      "Tablero de resultados URKUNINA 5000 (content/Tablero URKUNINA 5000.html)"
+    ],
+    "fecha_extraccion": "2026-09-13",
+    "codificacion": "UTF-8",
+    "advertencia": "Los documentos fuente NO asignan los municipios ni las subregiones a las tres zonas de riesgo: solo describen cada zona («norte y suroccidente», «Pasto y aledaños», «costa Pacífica») y nombran unos pocos territorios de referencia. Esta tabla es la asignación que usa el tablero de resultados para colorear y filtrar el mapa. Se publica como derivación declarada, con su comprobación, y NO debe citarse como si la hubiera publicado el informe.",
+    "por_que_por_subregion": "La asignación se hace por subregión y no municipio a municipio porque es el nivel más grueso que reproduce la descripción de las fuentes: trece filas verificables en vez de sesenta y cuatro decisiones sueltas. Un municipio hereda la zona de su subregión.",
+    "notas": [
+      "Las seis referencias territoriales que publica la presentación de cierre caen todas en la zona que les corresponde con esta tabla; la comprobación está en `verificacion` y la repiten las pruebas.",
+      "La zona describe la INCIDENCIA histórica del territorio, no un resultado del tamizaje. No debe confundirse con la prevalencia de LPM o de H. pylori, que sí son medidas del proyecto.",
+      "Las tres subregiones de la costa (Pacífico Sur, Sanquianga, Telembí) más Piedemonte Costero forman la zona verde; de sus municipios solo tres fueron intervenidos, porque el proyecto priorizó el área andina."
+    ]
+  },
+  "zonas": [
+    {
+      "zona": "roja",
+      "etiqueta": "Zona roja",
+      "territorio": "Norte y suroccidente del departamento",
+      "incidencia_por_100000": 150.0,
+      "color": "#e4572e"
+    },
+    {
+      "zona": "amarilla",
+      "etiqueta": "Zona amarilla",
+      "territorio": "Pasto y municipios circunvecinos",
+      "incidencia_por_100000": 40.0,
+      "color": "#e8b53a"
+    },
+    {
+      "zona": "verde",
+      "etiqueta": "Zona verde",
+      "territorio": "Costa Pacífica",
+      "incidencia_por_100000": 6.0,
+      "color": "#2fb67d"
+    }
+  ],
+  "subregiones": [
+    {
+      "subregion": "Centro",
+      "zona": "amarilla"
+    },
+    {
+      "subregion": "Guambuyaco",
+      "zona": "roja"
+    },
+    {
+      "subregion": "Juanambú",
+      "zona": "roja"
+    },
+    {
+      "subregion": "La Cordillera",
+      "zona": "roja"
+    },
+    {
+      "subregion": "La Sabana",
+      "zona": "roja"
+    },
+    {
+      "subregion": "Los Abades",
+      "zona": "roja"
+    },
+    {
+      "subregion": "Obando",
+      "zona": "roja"
+    },
+    {
+      "subregion": "Occidente",
+      "zona": "amarilla"
+    },
+    {
+      "subregion": "Pacífico Sur",
+      "zona": "verde"
+    },
+    {
+      "subregion": "Piedemonte Costero",
+      "zona": "verde"
+    },
+    {
+      "subregion": "Río Mayo",
+      "zona": "roja"
+    },
+    {
+      "subregion": "Sanquianga",
+      "zona": "verde"
+    },
+    {
+      "subregion": "Telembí",
+      "zona": "verde"
+    }
+  ],
+  "resumen": {
+    "subregiones": 13,
+    "subregiones_por_zona": {
+      "roja": 7,
+      "verde": 4,
+      "amarilla": 2
+    }
+  },
+  "verificacion": {
+    "descripcion": "Territorios que la presentación de cierre nombra como referencia de cada zona, y la zona que les asigna esta tabla.",
+    "referencias": [
+      {
+        "nombre": "Juanambú",
+        "tipo": "subregion",
+        "subregion": "Juanambú",
+        "zona_fuente": "roja",
+        "zona_tabla": "roja"
+      },
+      {
+        "nombre": "Túquerres",
+        "tipo": "municipio",
+        "subregion": "La Sabana",
+        "zona_fuente": "roja",
+        "zona_tabla": "roja"
+      },
+      {
+        "nombre": "Cumbal",
+        "tipo": "municipio",
+        "subregion": "Obando",
+        "zona_fuente": "roja",
+        "zona_tabla": "roja"
+      },
+      {
+        "nombre": "Pasto",
+        "tipo": "municipio",
+        "subregion": "Centro",
+        "zona_fuente": "amarilla",
+        "zona_tabla": "amarilla"
+      },
+      {
+        "nombre": "Tumaco",
+        "tipo": "municipio",
+        "subregion": "Pacífico Sur",
+        "zona_fuente": "verde",
+        "zona_tabla": "verde"
+      },
+      {
+        "nombre": "Barbacoas",
+        "tipo": "municipio",
+        "subregion": "Telembí",
+        "zona_fuente": "verde",
+        "zona_tabla": "verde"
+      }
+    ]
+  }
+}

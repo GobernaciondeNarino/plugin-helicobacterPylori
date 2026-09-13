@@ -724,6 +724,64 @@ final class UHP_Topojson {
 	}
 
 	/**
+	 * Reorienta la geometría de un feature al sentido que espera D3.
+	 *
+	 * Exterior HORARIO, huecos antihorario: el convenio CONTRARIO al del
+	 * RFC 7946 de GeoJSON, y a propósito. D3 recorta los polígonos sobre la
+	 * esfera y decide cuál es el interior por el sentido del anillo, con el
+	 * criterio inverso al del RFC. Un anillo al revés no se ve mal: se ve
+	 * como el mundo entero MENOS el municipio, y basta uno para que el
+	 * departamento quede reducido a un punto, porque el encuadre se calcula
+	 * sobre esa extensión.
+	 *
+	 * Lo usan los dos mapas que dibuja D3 —el geomapa por la vía del
+	 * TopoJSON y el tablero por la del GeoJSON—, de modo que vive aquí y no
+	 * dentro del constructor de la topología: duplicar la regla es duplicar
+	 * la ocasión de que solo uno de los dos la aplique.
+	 *
+	 * @param array $geometria Geometría GeoJSON (Polygon o MultiPolygon).
+	 * @return array La misma geometría con los anillos orientados.
+	 */
+	public static function orientar( $geometria ) {
+		if ( empty( $geometria['type'] ) || ! isset( $geometria['coordinates'] ) ) {
+			return $geometria;
+		}
+
+		if ( 'Polygon' === $geometria['type'] ) {
+			$geometria['coordinates'] = self::orientar_anillos( $geometria['coordinates'] );
+			return $geometria;
+		}
+
+		if ( 'MultiPolygon' === $geometria['type'] ) {
+			foreach ( $geometria['coordinates'] as $i => $poligono ) {
+				$geometria['coordinates'][ $i ] = self::orientar_anillos( $poligono );
+			}
+		}
+
+		return $geometria;
+	}
+
+	/**
+	 * Orienta los anillos de un polígono: el primero horario, el resto no.
+	 *
+	 * @param array $anillos Anillos del polígono.
+	 * @return array
+	 */
+	private static function orientar_anillos( $anillos ) {
+		foreach ( (array) $anillos as $i => $anillo ) {
+			if ( ! is_array( $anillo ) || count( $anillo ) < 4 ) {
+				continue;
+			}
+			$es_horario   = self::area( $anillo ) < 0;
+			$debe_horario = ( 0 === $i );
+			if ( $es_horario !== $debe_horario ) {
+				$anillos[ $i ] = array_reverse( $anillo );
+			}
+		}
+		return $anillos;
+	}
+
+	/**
 	 * Extensión de todas las coordenadas de la colección.
 	 *
 	 * @param array $features Features del GeoJSON.

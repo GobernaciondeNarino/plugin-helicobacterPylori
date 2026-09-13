@@ -188,6 +188,14 @@ final class UHP_Datos {
 				'lista'       => 'subregiones',
 				'grupo'       => 'territorio',
 			),
+			'zonas'           => array(
+				'archivo'     => '17_zonas_riesgo_subregion.json',
+				'titulo'      => 'Zona de riesgo por subregión',
+				'descripcion' => 'A qué zona de riesgo —roja, amarilla o verde— pertenece cada una de las 13 subregiones. Es una DERIVACIÓN declarada, no un dato publicado: los documentos describen las zonas y nombran territorios de referencia, pero no reparten el departamento entre ellas. El archivo trae la comprobación contra esas referencias.',
+				'claves'      => array( 'zonas', 'subregiones', 'verificacion' ),
+				'lista'       => 'subregiones',
+				'grupo'       => 'territorio',
+			),
 			'geojson'         => array(
 				'archivo'     => 'narino_municipios.geojson',
 				'titulo'      => 'Geometría municipal (GeoJSON)',

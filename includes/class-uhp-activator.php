@@ -99,22 +99,10 @@ final class UHP_Activator {
 	 */
 	public static function dashboard_por_defecto() {
 		return array(
-			'titulo'      => 'URKUNINA 5000 — Tamizaje de Helicobacter pylori en Nariño',
-			'indicador'   => 'lpm',
-			'mapa_lat'    => 1.30,
-			'mapa_lon'    => -77.60,
-			'mapa_zoom'   => 8,
-			// El tablero viste la identidad del objeto 3D, así que su tema
-			// por defecto es el oscuro. La capa base va en «auto»: sigue al
-			// tema, que es lo que casi siempre se quiere y lo que evita el
-			// descuido de cambiar a claro y quedarse con teselas oscuras.
-			'tema'        => 'oscuro',
-			'teselas'     => 'auto',
-			// Capa territorial de partida del mapa.
-			'nivel'       => 'municipio',
-			'panel_izq'   => 1,
-			'panel_der'   => 1,
-			'mostrar_kpi' => 1,
+			'titulo'    => 'URKUNINA 5000 — Tamizaje de Helicobacter pylori en Nariño',
+			'lema'      => 'Prevalencia de lesiones precursoras de malignidad y erradicación de H. pylori como prevención primaria del cáncer gástrico — Nariño, 2018–2023',
+			// Con cuál de los dos indicadores arranca el mapa y las barras.
+			'indicador' => 'lpm',
 		);
 	}
 

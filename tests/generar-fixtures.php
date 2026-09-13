@@ -148,25 +148,10 @@ foreach ( UHP_Views::territoriales() as $t ) {
 	}
 }
 
-/* ---- /dashboard ---- */
-escribir(
-	$destino,
-	'dashboard',
-	array(
-		'kpi'         => UHP_Rest::kpis(),
-		'indicadores' => UHP_Rest::indicadores_mapa(),
-		'valores'     => UHP_Rest::valores_mapa( 'lpm' ),
-		'subregiones' => UHP_Views::obtener( 'prev_subregion' ),
-		'zonas'       => UHP_Views::obtener( 'zonas_riesgo' ),
-		'proyecto'    => array(
-			'nombre'    => UHP_Datos::valor( 'proyecto', 'identificacion.nombre_corto', 'URKUNINA 5000' ),
-			'completo'  => UHP_Datos::valor( 'proyecto', 'identificacion.nombre_completo', '' ),
-			'bpin'      => UHP_Datos::valor( 'proyecto', 'identificacion.bpin', '' ),
-			'estado'    => UHP_Datos::valor( 'proyecto', 'ejecucion.estado', '' ),
-			'inicio'    => UHP_Datos::valor( 'proyecto', 'ejecucion.fecha_inicio', '' ),
-			'fin_campo' => UHP_Datos::valor( 'proyecto', 'ejecucion.fecha_fin_trabajo_campo', '' ),
-		),
-	)
-);
+/* ---- /tablero ----
+   Se pide al mismo constructor que usa la ruta: rehacer aquí la forma del
+   payload dejaría a las pruebas de navegador validando contra algo que el
+   servidor no sirve. */
+escribir( $destino, 'tablero', UHP_Rest::carga_tablero() );
 
 echo "Listo.\n";

@@ -209,7 +209,17 @@ final class UHP_Shortcodes {
 	/* ================================================================= */
 
 	/**
-	 * Tablero completo del proyecto.
+	 * Tablero de resultados del proyecto.
+	 *
+	 * Rejilla de tres columnas dentro de un contenedor a pantalla completa:
+	 * filtros y lista de municipios a la izquierda, mapa del departamento
+	 * al centro, lectura del territorio a la derecha.
+	 *
+	 * El marcado se imprime completo y vacío; lo rellena uhp-dashboard.js
+	 * con una sola petición a /tablero. Las partes que NO dependen de los
+	 * datos —el perfil de los 5.000 participantes, la leyenda, los rótulos—
+	 * van en el HTML, de modo que la página ya dice algo antes de que llegue
+	 * la respuesta y lo sigue diciendo si no llega nunca.
 	 *
 	 * @param array $atts Atributos del shortcode.
 	 * @return string
@@ -220,115 +230,206 @@ final class UHP_Shortcodes {
 		$atts = $this->fusionar(
 			array(
 				'titulo'    => isset( $cfg['titulo'] ) ? $cfg['titulo'] : 'URKUNINA 5000',
+				'lema'      => __( 'Prevalencia de lesiones precursoras de malignidad y erradicación de H. pylori como prevención primaria del cáncer gástrico — Nariño, 2018–2023', 'urkunina-5000' ),
 				'alto'      => '100vh',
 				'indicador' => isset( $cfg['indicador'] ) ? $cfg['indicador'] : 'lpm',
-				'nivel'     => isset( $cfg['nivel'] ) ? $cfg['nivel'] : 'municipio',
-				'tema'      => isset( $cfg['tema'] ) ? $cfg['tema'] : 'oscuro',
-				'teselas'   => isset( $cfg['teselas'] ) ? $cfg['teselas'] : '',
-				'lat'       => isset( $cfg['mapa_lat'] ) ? $cfg['mapa_lat'] : 1.30,
-				'lon'       => isset( $cfg['mapa_lon'] ) ? $cfg['mapa_lon'] : -77.60,
-				'zoom'      => isset( $cfg['mapa_zoom'] ) ? $cfg['mapa_zoom'] : 8,
 			),
 			$atts,
 			'urkunina_dashboard'
 		);
 
-		UHP_Estilos::encolar_fuentes();
-		// Basta encolar el tablero: sus dependencias declaradas arrastran el
-		// módulo de mapa, el renderer, el núcleo, Leaflet y D3plus. Enumerar
-		// aquí cada pieza a mano fue justo lo que dejó fuera uhp-mapa en la
-		// primera versión y rompió el mapa del tablero.
+		UHP_Estilos::encolar_fuentes_tablero();
 		wp_enqueue_style( UHP_Assets::P . 'dashboard' );
+		UHP_Assets::encolar_libreria( 'd3' );
 		wp_enqueue_script( UHP_Assets::P . 'dashboard' );
-
-		// Coordenadas fuera de Nariño delatarían un error de configuración:
-		// se cae al centro del departamento antes que mostrar otro sitio.
-		$lat = (float) $atts['lat'];
-		$lon = (float) $atts['lon'];
-		if ( ! UHP_Security::validar_bbox( $lat, $lon ) ) {
-			$lat = 1.30;
-			$lon = -77.60;
-		}
 
 		$id = $this->id( 'uhpdb' );
 
-		// El tema decide el aspecto de TODO el tablero: sus superficies, el
-		// mapa y la tinta de los gráficos. Un valor desconocido cae al
-		// oscuro, que es la identidad del proyecto.
-		$tema = ( 'claro' === UHP_Security::clave( $atts['tema'] ) ) ? 'claro' : 'oscuro';
-
-		// La capa base sigue al tema salvo que se pida una concreta: un
-		// tablero claro con teselas oscuras se lee fatal, y es el descuido
-		// más fácil de cometer al cambiar solo el tema.
-		$teselas = UHP_Security::clave( $atts['teselas'] );
-		if ( '' === $teselas || 'auto' === $teselas ) {
-			$teselas = ( 'claro' === $tema ) ? 'claro' : 'oscuro';
+		// Solo dos indicadores tienen rampa en el mapa; cualquier otro
+		// valor cae en el de lesión precursora, que es el del proyecto.
+		$indicador = UHP_Security::clave( $atts['indicador'] );
+		if ( ! in_array( $indicador, array( 'lpm', 'hp' ), true ) ) {
+			$indicador = 'lpm';
 		}
+
+		$estilo = '--uhp-db-alto:' . UHP_Estilos::sanitizar_css( $atts['alto'] ) . ';';
 
 		ob_start();
 		?>
 		<div id="<?php echo esc_attr( $id ); ?>"
-			class="uhp uhp-db uhp-db--<?php echo esc_attr( $tema ); ?>"
-			style="<?php echo esc_attr( '--uhp-alto:' . UHP_Estilos::sanitizar_css( $atts['alto'] ) . ';' . UHP_Estilos::inline( $atts ) ); ?>"
-			data-uhp-dashboard
-			data-tema="<?php echo esc_attr( $tema ); ?>"
-			data-indicador="<?php echo esc_attr( UHP_Security::clave( $atts['indicador'] ) ); ?>"
-			data-nivel="<?php echo esc_attr( UHP_Territorios::nivel( $atts['nivel'] ) ); ?>"
-			data-teselas="<?php echo esc_attr( $teselas ); ?>"
-			data-lat="<?php echo esc_attr( $lat ); ?>"
-			data-lon="<?php echo esc_attr( $lon ); ?>"
-			data-zoom="<?php echo esc_attr( (int) $atts['zoom'] ); ?>"
+			class="uhp-db"
+			style="<?php echo esc_attr( $estilo ); ?>"
+			data-uhp-tablero
+			data-indicador="<?php echo esc_attr( $indicador ); ?>"
 			role="region"
 			aria-label="<?php echo esc_attr( $atts['titulo'] ); ?>">
 
-			<header class="uhp-db__cabecera">
+			<header class="uhp-db__cab">
 				<div class="uhp-db__marca">
-					<h2 class="uhp-db__titulo"><?php echo esc_html( $atts['titulo'] ); ?></h2>
-					<p class="uhp-db__subtitulo" data-uhp-zona="subtitulo">
-						<?php esc_html_e( 'Gobernación de Nariño · Secretaría TIC, Innovación y Gobierno Abierto', 'urkunina-5000' ); ?>
-					</p>
+					<h1><?php echo esc_html( $atts['titulo'] ); ?></h1>
+					<span class="uhp-db__lema"><?php echo esc_html( $atts['lema'] ); ?></span>
 				</div>
-				<div class="uhp-db__kpis" data-uhp-zona="kpi"
-					aria-label="<?php esc_attr_e( 'Indicadores clave del proyecto', 'urkunina-5000' ); ?>"></div>
-				<div class="uhp-db__ctx" data-uhp-zona="contexto" aria-live="polite"
-					aria-label="<?php esc_attr_e( 'Territorio seleccionado', 'urkunina-5000' ); ?>"></div>
+				<div class="uhp-db__chips">
+					<div class="uhp-db__pill"><?php esc_html_e( 'Cobertura', 'urkunina-5000' ); ?> <b>55/55</b></div>
+					<div class="uhp-db__pill"><?php esc_html_e( 'Participantes', 'urkunina-5000' ); ?> <b>5.000</b></div>
+					<div class="uhp-db__pill"><?php esc_html_e( 'Ejecución', 'urkunina-5000' ); ?> <b>100%</b></div>
+					<div class="uhp-db__pill"><?php esc_html_e( 'Estado', 'urkunina-5000' ); ?> <b><?php esc_html_e( 'Cierre', 'urkunina-5000' ); ?></b></div>
+				</div>
 			</header>
 
-			<aside class="uhp-db__lateral" data-uhp-panel="controles"
-				aria-label="<?php esc_attr_e( 'Controles y filtros', 'urkunina-5000' ); ?>">
-				<div class="uhp-db__panel-cab">
-					<h3 class="uhp-db__panel-t"><?php esc_html_e( 'Controles', 'urkunina-5000' ); ?></h3>
-					<button type="button" class="uhp-db__plegar" data-uhp-toggle="controles"
-						aria-expanded="true"
-						aria-label="<?php esc_attr_e( 'Plegar o desplegar el panel de controles', 'urkunina-5000' ); ?>">◀</button>
-				</div>
-				<div class="uhp-db__controles" data-uhp-zona="controles"></div>
-			</aside>
+			<main class="uhp-db__main">
+				<div class="uhp-db__col uhp-db__col--izq">
+					<div class="uhp-db__kpis" data-uhp-zona="kpis"
+						aria-label="<?php esc_attr_e( 'Cifras de la selección actual', 'urkunina-5000' ); ?>"></div>
 
-			<div class="uhp-db__mapa">
-				<!-- El lienzo se reconstruye al cambiar de capa base, de modo
-				     que la ficha del municipio vive fuera de él: si colgara
-				     dentro, cada cambio de capa la destruiría. -->
-				<div class="uhp-db__mapa-zona" data-uhp-zona="mapa"></div>
-				<div class="uhp-db__ficha" data-uhp-zona="ficha" aria-live="polite"></div>
-			</div>
+					<div class="uhp-db__card">
+						<h2><?php esc_html_e( 'Zona de riesgo', 'urkunina-5000' ); ?></h2>
+						<div class="uhp-db__zonas" data-uhp-zona="zonas"></div>
+					</div>
 
-			<aside class="uhp-db__panel" data-uhp-panel="grafico"
-				aria-label="<?php esc_attr_e( 'Gráficos y análisis', 'urkunina-5000' ); ?>">
-				<div class="uhp-db__panel-cab">
-					<h3 class="uhp-db__panel-t"><?php esc_html_e( 'Análisis', 'urkunina-5000' ); ?></h3>
-					<button type="button" class="uhp-db__plegar" data-uhp-toggle="grafico"
-						aria-expanded="true"
-						aria-label="<?php esc_attr_e( 'Plegar o desplegar el panel de análisis', 'urkunina-5000' ); ?>">▶</button>
+					<div class="uhp-db__card">
+						<div class="uhp-db__cardcab">
+							<h2><?php esc_html_e( 'Municipios intervenidos', 'urkunina-5000' ); ?></h2>
+							<span class="uhp-db__pill" data-uhp-zona="mcount" style="padding:3px 8px"></span>
+						</div>
+						<div class="uhp-db__scroll">
+							<div class="uhp-db__mlista" data-uhp-zona="mlista"></div>
+						</div>
+					</div>
 				</div>
-				<div class="uhp-db__grafico-caja">
-					<h4 class="uhp-db__grafico-t" data-uhp-zona="grafico-titulo"></h4>
-					<div class="uhp-db__grafico" data-uhp-zona="grafico"></div>
-				</div>
-				<div class="uhp-db__analisis" data-uhp-zona="analisis"></div>
-			</aside>
 
-			<p class="uhp-sr" data-uhp-zona="estado" role="status" aria-live="polite"></p>
+				<div class="uhp-db__col">
+					<div class="uhp-db__card uhp-db__mapacard">
+						<div class="uhp-db__mapa" data-uhp-zona="mapa"></div>
+						<div class="uhp-db__mapacab">
+							<div class="t" data-uhp-zona="mapatitulo"><?php esc_html_e( '55 municipios priorizados · área andina', 'urkunina-5000' ); ?></div>
+						</div>
+						<div class="uhp-db__tip" data-uhp-zona="tip" role="presentation"></div>
+						<button type="button" class="uhp-db__limpiar" data-uhp-accion="limpiar">
+							<?php esc_html_e( 'Limpiar', 'urkunina-5000' ); ?>
+						</button>
+						<p class="uhp-db__fuente">
+							<?php esc_html_e( 'Cartografía municipal DANE · datos del proyecto URKUNINA 5000', 'urkunina-5000' ); ?>
+						</p>
+						<div class="uhp-db__zoomctl">
+							<button type="button" data-uhp-accion="zoom-mas"
+								aria-label="<?php esc_attr_e( 'Acercar el mapa', 'urkunina-5000' ); ?>">+</button>
+							<button type="button" data-uhp-accion="zoom-menos"
+								aria-label="<?php esc_attr_e( 'Alejar el mapa', 'urkunina-5000' ); ?>">−</button>
+						</div>
+						<div class="uhp-db__leyenda">
+							<span class="lgtitle" data-uhp-zona="leyenda-titulo"></span>
+							<div class="ramp">
+								<i data-uhp-zona="rampa"></i>
+								<span data-uhp-zona="rampa-min">—</span>
+								<span data-uhp-zona="rampa-max">—</span>
+							</div>
+							<div>
+								<i class="sw" data-uhp-zona="muestra-sub"></i>
+								<?php esc_html_e( 'Dato subregional (sin cifra municipal)', 'urkunina-5000' ); ?>
+							</div>
+							<div>
+								<i class="sw nd"></i>
+								<?php esc_html_e( 'Municipio no intervenido', 'urkunina-5000' ); ?>
+							</div>
+							<div>
+								<i class="ring"></i>
+								<?php esc_html_e( 'Caso de cáncer detectado', 'urkunina-5000' ); ?>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="uhp-db__col uhp-db__col--der">
+					<div class="uhp-db__card">
+						<h2 data-uhp-zona="detalle-titulo"><?php esc_html_e( 'Casos de cáncer gástrico detectados', 'urkunina-5000' ); ?></h2>
+						<div class="uhp-db__detalle" data-uhp-zona="detalle" aria-live="polite"></div>
+					</div>
+
+					<div class="uhp-db__card">
+						<div class="uhp-db__cardcab">
+							<h2><?php esc_html_e( 'Prevalencia por subregión', 'urkunina-5000' ); ?></h2>
+							<div class="uhp-db__tabs" role="group"
+								aria-label="<?php esc_attr_e( 'Indicador de la prevalencia', 'urkunina-5000' ); ?>">
+								<button type="button" class="uhp-db__tab" data-uhp-ind="lpm"
+									aria-pressed="<?php echo 'lpm' === $indicador ? 'true' : 'false'; ?>">LPM</button>
+								<button type="button" class="uhp-db__tab" data-uhp-ind="hp"
+									aria-pressed="<?php echo 'hp' === $indicador ? 'true' : 'false'; ?>">H. PYLORI</button>
+							</div>
+						</div>
+						<div class="uhp-db__bars" data-uhp-zona="bars"></div>
+					</div>
+
+					<div class="uhp-db__card">
+						<h2><?php esc_html_e( 'Perfil de los 5.000 participantes', 'urkunina-5000' ); ?></h2>
+						<?php
+						/* Estas cuatro filas son departamentales y no se filtran:
+						   el perfil está publicado para el conjunto de los 5.000
+						   participantes, no municipio a municipio. Por eso van en
+						   el HTML y no las toca el JavaScript: si se redibujaran
+						   con la selección parecerían responder a ella. */
+						$perfil = array(
+							array(
+								'lab'    => __( 'Género', 'urkunina-5000' ),
+								'partes' => array(
+									array( 64.2, 'var(--uhp-db-acc)', __( 'Mujeres', 'urkunina-5000' ) ),
+									array( 35.8, 'var(--uhp-db-azul)', __( 'Hombres', 'urkunina-5000' ) ),
+								),
+							),
+							array(
+								'lab'    => __( 'Régimen de salud', 'urkunina-5000' ),
+								'partes' => array(
+									array( 81.9, 'var(--uhp-db-amar)', __( 'Subsidiado', 'urkunina-5000' ) ),
+									array( 17.7, 'var(--uhp-db-azul)', __( 'Contributivo', 'urkunina-5000' ) ),
+								),
+							),
+							array(
+								'lab'    => __( 'Pertenencia étnica', 'urkunina-5000' ),
+								'partes' => array(
+									array( 87.6, 'var(--uhp-db-ink-3)', __( 'Mestiza', 'urkunina-5000' ) ),
+									array( 9.9, 'var(--uhp-db-acc)', __( 'Indígena', 'urkunina-5000' ) ),
+									array( 2.2, 'var(--uhp-db-roja)', __( 'Afro', 'urkunina-5000' ) ),
+								),
+							),
+							array(
+								'lab'    => __( 'Estado nutricional', 'urkunina-5000' ),
+								'partes' => array(
+									array( 29.6, 'var(--uhp-db-verde)', __( 'Normal', 'urkunina-5000' ) ),
+									array( 48.2, 'var(--uhp-db-amar)', __( 'Sobrepeso', 'urkunina-5000' ) ),
+									array( 21.8, 'var(--uhp-db-roja)', __( 'Obesidad', 'urkunina-5000' ) ),
+								),
+							),
+						);
+						?>
+						<div class="uhp-db__perfil">
+							<?php foreach ( $perfil as $fila ) : ?>
+								<div class="row">
+									<div class="lab"><?php echo esc_html( $fila['lab'] ); ?></div>
+									<div class="uhp-db__stack" role="img"
+										aria-label="<?php
+										$partes = array();
+										foreach ( $fila['partes'] as $p ) {
+											$partes[] = $p[2] . ' ' . number_format_i18n( $p[0], 1 ) . '%';
+										}
+										echo esc_attr( $fila['lab'] . ': ' . implode( ', ', $partes ) );
+										?>">
+										<?php foreach ( $fila['partes'] as $p ) : ?>
+											<i style="width:<?php echo esc_attr( (float) $p[0] ); ?>%;background:<?php echo esc_attr( $p[1] ); ?>"></i>
+										<?php endforeach; ?>
+									</div>
+									<div class="leg">
+										<?php foreach ( $fila['partes'] as $p ) : ?>
+											<span><?php echo esc_html( $p[2] ); ?> <em><?php echo esc_html( number_format_i18n( $p[0], 1 ) . '%' ); ?></em></span>
+										<?php endforeach; ?>
+									</div>
+								</div>
+							<?php endforeach; ?>
+						</div>
+					</div>
+				</div>
+			</main>
+
+			<p class="uhp-db__sr" data-uhp-zona="estado" role="status" aria-live="polite"></p>
 		</div>
 		<?php
 		return ob_get_clean();

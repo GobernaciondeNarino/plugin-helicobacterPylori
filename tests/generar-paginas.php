@@ -71,9 +71,10 @@ $GLOBALS['uhp_test_faltantes'] = array();
 function url_de_handle( $tipo, $handle ) {
 	$vendor = array(
 		'script' => array(
+			// d3 suelto: lo usa el tablero, que dibuja su mapa con él.
+			'd3'      => '/assets/js/vendor-d3.js',
 			'd3plus'  => '/assets/js/vendor-d3plus.js',
 			'leaflet' => '/assets/js/vendor-leaflet.js',
-			'd3'      => '',      // ningún componente lo usa directamente
 			'plotly'  => '',      // registrado pero sin usar todavía
 		),
 		'style'  => array(
@@ -87,7 +88,7 @@ function url_de_handle( $tipo, $handle ) {
 
 	// Las tipografías de Google se excluyen a propósito: la suite no debe
 	// depender de la red más que para el espejo de Three.js.
-	if ( 'uhp-fuentes' === $handle ) {
+	if ( 'uhp-fuentes' === $handle || 'uhp-fuentes-plex' === $handle ) {
 		return '';
 	}
 
@@ -205,14 +206,6 @@ $paginas['tablero'] = construir(
 	'Tablero',
 	function ( $sc ) {
 		return $sc->sc_dashboard( array() );
-	}
-);
-
-$paginas['tablero-claro'] = construir(
-	'tablero-claro',
-	'Tablero en tema claro',
-	function ( $sc ) {
-		return $sc->sc_dashboard( array( 'tema' => 'claro' ) );
 	}
 );
 
@@ -347,6 +340,21 @@ $paginas['geomapa'] = construir(
 			'<div data-caso="no-territorial">' .
 			$sc->sc_geomapa( array( 'view' => 'perfil_etnia' ) ) .
 			'</div></div>';
+	}
+);
+
+$paginas['tablero-embebido'] = construir(
+	'tablero-embebido',
+	'Tablero dentro de una página con más contenido',
+	function ( $sc ) {
+		// El tablero define su propia retícula, su propia tipografía y su
+		// propio fondo. Esta página comprueba que nada de eso se escapa al
+		// contenido de alrededor.
+		return '<div class="pagina"><h1>Antes del tablero</h1>' .
+			'<p>Contenido de la página anfitriona.</p></div>' .
+			$sc->sc_dashboard( array( 'alto' => '640px' ) ) .
+			'<div class="pagina"><h2>Después del tablero</h2>' .
+			'<p>Más contenido, para comprobar que el tablero no se apodera de la página.</p></div>';
 	}
 );
 
