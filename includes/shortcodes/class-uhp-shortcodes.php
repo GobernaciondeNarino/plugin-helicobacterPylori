@@ -178,10 +178,20 @@ final class UHP_Shortcodes {
 				'duracion'     => isset( $cfg['duracion'] ) ? $cfg['duracion'] : 15,
 				'instrumentos' => ! empty( $cfg['instrumentos'] ) ? 'si' : 'no',
 				'cabecera'     => ! empty( $cfg['cabecera'] ) ? 'si' : 'no',
+				// Llevar la página hasta el objeto cada vez que la línea de
+				// tiempo cambia de momento. Apagado salvo que se pida: si el
+				// objeto no abre la página, hacerlo le roba el scroll a quien
+				// esté leyendo más arriba.
+				'desplazar'    => ! empty( $cfg['desplazar'] ) ? 'si' : 'no',
 			),
 			$atts,
 			'urkunina_3d'
 		);
+
+		$autoplay     = $this->afirmativo( $atts['autoplay'] );
+		$instrumentos = $this->afirmativo( $atts['instrumentos'] );
+		$cabecera     = $this->afirmativo( $atts['cabecera'] );
+		$desplazar    = $this->afirmativo( $atts['desplazar'] );
 
 		UHP_Estilos::encolar_fuentes();
 		wp_enqueue_style( UHP_Assets::P . '3d' );
@@ -203,8 +213,8 @@ final class UHP_Shortcodes {
 
 		$id      = $this->id( 'uhp3d' );
 		$clases  = 'uhp3d';
-		$clases .= ( 'si' === $atts['cabecera'] ) ? '' : ' uhp3d--sin-cabecera';
-		$clases .= ( 'si' === $atts['instrumentos'] ) ? '' : ' uhp3d--sin-instrumentos';
+		$clases .= $cabecera ? '' : ' uhp3d--sin-cabecera';
+		$clases .= $instrumentos ? '' : ' uhp3d--sin-instrumentos';
 
 		$alto = UHP_Estilos::sanitizar_css( $atts['alto'] );
 
@@ -214,7 +224,8 @@ final class UHP_Shortcodes {
 			class="<?php echo esc_attr( $clases ); ?>"
 			style="--uhp3d-alto:<?php echo esc_attr( $alto ); ?>"
 			data-uhp3d-raiz
-			data-autoplay="<?php echo 'si' === $atts['autoplay'] ? '1' : '0'; ?>"
+			data-autoplay="<?php echo $autoplay ? '1' : '0'; ?>"
+			data-desplazar="<?php echo $desplazar ? '1' : '0'; ?>"
 			data-duracion="<?php echo esc_attr( (float) $atts['duracion'] ); ?>"
 			tabindex="0"
 			role="group"
@@ -227,7 +238,7 @@ final class UHP_Shortcodes {
 			<div class="uhp3d__vineta" aria-hidden="true"></div>
 			<div class="uhp3d__grano" aria-hidden="true"></div>
 
-			<?php if ( 'si' === $atts['cabecera'] ) : ?>
+			<?php if ( $cabecera ) : ?>
 			<div class="uhp3d__cabecera">
 				<div class="uhp3d__marca">
 					<div class="uhp3d__escudo" aria-hidden="true"></div>

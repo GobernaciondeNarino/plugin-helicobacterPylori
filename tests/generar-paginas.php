@@ -232,6 +232,34 @@ $paginas['objeto-3d-embebido'] = construir(
 	'[urkunina_3d]'
 );
 
+/* El objeto colocado lejos del principio de la página: así se comprueba
+   que avanzar la línea de tiempo NO se lleva el scroll del documento y que
+   `desplazar="si"` es lo único que lo permite. */
+$paginas['objeto-3d-desplazamiento'] = construir(
+	'objeto-3d-desplazamiento',
+	'Objeto 3D y desplazamiento de la página',
+	function ( $sc ) {
+		$relleno = '<div style="height:150vh"><h1>Contenido por encima</h1>' .
+			'<p>La escena queda fuera de la ventana al cargar.</p></div>';
+
+		return '<div class="pagina">' . $relleno .
+			'<div id="quieto">' . $sc->sc_3d(
+				array(
+					'alto'     => '600px',
+					'autoplay' => 'no',
+				)
+			) . '</div>' . $relleno .
+			'<div id="arrastra">' . $sc->sc_3d(
+				array(
+					'alto'      => '600px',
+					'autoplay'  => 'no',
+					'desplazar' => 'si',
+				)
+			) . '</div>' . $relleno . '</div>';
+	},
+	'[urkunina_3d]'
+);
+
 $paginas['tablero'] = construir(
 	'tablero',
 	'Tablero',

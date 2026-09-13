@@ -123,6 +123,49 @@ test.describe('Objeto 3D', () => {
     await page.keyboard.press('ArrowRight');
     await expect(titulo).not.toHaveText(inicial);
   });
+
+  test('avanzar la línea de tiempo no se lleva el scroll de la página', async ({ page }) => {
+    await page.goto(BASE + '/paginas/objeto-3d-desplazamiento.html');
+    await expect(page.locator('#quieto .uhp3d__carga')).toHaveClass(/is-oculto/, { timeout: 45000 });
+
+    // La escena está muy por debajo del pliegue y nada ha movido la página.
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+    // El paso se activa por código a propósito: si lo pulsara Playwright,
+    // sería él quien desplazase la página hasta el botón y la prueba no
+    // mediría nada. Así, lo único que puede mover el scroll es el plugin.
+    await page.evaluate(() => document.querySelectorAll('#quieto .uhp3d__paso')[7].click());
+    await expect(page.locator('#quieto .uhp3d__paso').nth(7)).toHaveAttribute('aria-current', 'true');
+
+    await page.waitForTimeout(800); // margen para un scroll suave, si lo hubiera.
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+    // Y sin embargo el paso activo sí queda a la vista dentro de su carril:
+    // lo que se movió fue el carril, no el documento.
+    await expect.poll(
+      () => page.evaluate(() => {
+        const b = document.querySelectorAll('#quieto .uhp3d__paso')[7];
+        const c = document.querySelector('#quieto [data-uhp3d="pasos"]');
+        const rb = b.getBoundingClientRect(), rc = c.getBoundingClientRect();
+        return rb.left >= rc.left - 1 && rb.right <= rc.right + 1;
+      }),
+      { timeout: 5000 }
+    ).toBe(true);
+  });
+
+  test('desplazar="si" sí lleva la página hasta el objeto', async ({ page }) => {
+    await page.goto(BASE + '/paginas/objeto-3d-desplazamiento.html');
+    await expect(page.locator('#arrastra .uhp3d__carga')).toHaveClass(/is-oculto/, { timeout: 45000 });
+
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+    await page.evaluate(() => document.querySelectorAll('#arrastra .uhp3d__paso')[7].click());
+
+    await expect.poll(
+      () => page.evaluate(() => window.scrollY),
+      { timeout: 5000 }
+    ).toBeGreaterThan(0);
+  });
 });
 
 /* ================================================================== */

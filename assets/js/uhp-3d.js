@@ -261,7 +261,10 @@ function crearInstancia(raiz, libs) {
 
   const cfg = {
     duracion: Math.max(4, parseFloat(raiz.getAttribute('data-duracion')) || 15),
-    autoplay: raiz.getAttribute('data-autoplay') !== '0'
+    autoplay: raiz.getAttribute('data-autoplay') !== '0',
+    // Si el componente puede llevarse el scroll de la página hasta él al
+    // cambiar de momento. Por defecto no: ver centrarPaso().
+    desplazar: raiz.getAttribute('data-desplazar') === '1'
   };
 
   /* ---------- Medidas del contenedor ---------- */
@@ -913,6 +916,46 @@ function crearInstancia(raiz, libs) {
     });
   }
 
+  // Solo la pintada inicial de la línea de tiempo; ver centrarPaso().
+  let primeraPintada = true;
+
+  /**
+   * Centra el paso activo dentro de su carril horizontal.
+   *
+   * Antes esto era un scrollIntoView sobre el botón. Ese método desplaza
+   * TODOS los antepasados desplazables, el documento incluido: con el
+   * objeto fuera de la ventana —que es lo normal si no abre la página—,
+   * el avance automático de la línea de tiempo arrastraba al visitante
+   * hasta aquí sin que lo hubiese pedido. Ahora se mueve solo el carril,
+   * calculando su scrollLeft a partir de la posición del botón, y llevar
+   * la página hasta el objeto queda detrás del atributo `desplazar` del
+   * shortcode, apagado por defecto.
+   *
+   * @param {HTMLElement} b Botón del paso activo.
+   */
+  function centrarPaso(b){
+    const carril = $('pasos');
+    if(carril){
+      const rb = b.getBoundingClientRect();
+      const rc = carril.getBoundingClientRect();
+      const desvio = (rb.left + rb.width/2) - (rc.left + rc.width/2);
+      const tope   = Math.max(0, carril.scrollWidth - carril.clientWidth);
+      const x      = Math.max(0, Math.min(tope, carril.scrollLeft + desvio));
+      if(typeof carril.scrollTo === 'function'){
+        carril.scrollTo({ left: x, behavior: movReducido ? 'auto' : 'smooth' });
+      } else {
+        carril.scrollLeft = x;
+      }
+    }
+    // La primera pintada solo coloca el momento inicial: nadie ha pedido
+    // nada todavía, así que ni siquiera con `desplazar` puesto se mueve la
+    // página. Lo contrario sería saltar al objeto nada más abrir.
+    if(cfg.desplazar && !primeraPintada){
+      b.scrollIntoView({ behavior: movReducido ? 'auto' : 'smooth', block:'nearest', inline:'center' });
+    }
+    primeraPintada = false;
+  }
+
   function irA(i, manual){
     indice = (i + MOMENTOS.length) % MOMENTOS.length;
     transcurrido = 0;
@@ -930,7 +973,7 @@ function crearInstancia(raiz, libs) {
 
     raiz.querySelectorAll('.uhp3d__paso').forEach((b,k) => {
       b.setAttribute('aria-current', k === indice ? 'true' : 'false');
-      if(k === indice) b.scrollIntoView({ behavior: movReducido ? 'auto' : 'smooth', block:'nearest', inline:'center' });
+      if(k === indice) centrarPaso(b);
     });
 
     Object.assign(objetivo, m.fx);
