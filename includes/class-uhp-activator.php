@@ -113,11 +113,15 @@ final class UHP_Activator {
 	 */
 	public static function tresd_por_defecto() {
 		return array(
-			'alto'        => '100vh',
-			'autoplay'    => 1,
-			'duracion'    => 15,
+			'alto'         => '100vh',
+			'autoplay'     => 1,
+			'duracion'     => 15,
 			'instrumentos' => 1,
-			'cabecera'    => 1,
+			'cabecera'     => 1,
+			// El objeto no se lleva el scroll de la página hasta él: si no
+			// abre la página, arrastrar al visitante mientras lee más arriba
+			// es justo lo que nadie espera de un banner.
+			'desplazar'    => 0,
 		);
 	}
 

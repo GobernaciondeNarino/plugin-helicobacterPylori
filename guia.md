@@ -830,9 +830,58 @@ cabecera de `assets/js/uhp-3d.js` y `assets/css/uhp-3d.css`:
    el contexto WebGL se libera si su contenedor desaparece del documento —sin
    esto, un tema con navegación por AJAX dejaría contextos huérfanos hasta
    agotar el límite del navegador.
+4. **No se apropia del scroll.** Ver 7.1.
 
 La lógica de la escena, la morfometría y los diez momentos de la línea de
 tiempo son los del original, sin cambios.
+
+### 7.1 El scroll de la página es de quien la lee
+
+El original ocupaba la ventana entera, de modo que centrar el paso activo de la
+línea de tiempo con `scrollIntoView` no tenía consecuencias. Embebido más abajo
+en una página larga sí las tiene: `scrollIntoView` desplaza **todos** los
+antepasados desplazables del elemento, el documento incluido.
+
+El efecto era desconcertante porque solo aparecía al pasar por delante. El
+bucle de dibujo se detiene mientras la escena está fuera de la vista y con él
+la línea de tiempo (sección 7, punto 3), así que nada ocurría hasta que el
+visitante llegaba bajando a la altura del objeto: ahí el recorrido se
+reanudaba, cambiaba de momento y el navegador enganchaba la página al objeto,
+justo mientras se estaba desplazando.
+
+`centrarPaso()` mueve ahora solo el carril de los pasos, calculando su
+`scrollLeft` desde la posición del botón activo. El efecto visible dentro del
+componente es el mismo —el paso en curso queda a la vista— y el documento no se
+entera.
+
+Llevar la página hasta el objeto sigue siendo posible donde tenga sentido —si
+el objeto **abre** la página y se quiere que el recorrido la gobierne— pero hay
+que pedirlo:
+
+```
+[urkunina_3d desplazar="si"]
+```
+
+| Atributo | Valores | Por defecto | Qué hace |
+|---|---|---|---|
+| `alto` | cualquier medida CSS | `100vh` | Altura del contenedor. |
+| `autoplay` | `si` / `no` | `si` | Avanza la línea de tiempo sola. |
+| `duracion` | 4 a 90 | `15` | Segundos por momento. |
+| `instrumentos` | `si` / `no` | `si` | Panel de morfometría. |
+| `cabecera` | `si` / `no` | `si` | Marca institucional dentro de la escena. |
+| `desplazar` | `si` / `no` | `no` | Lleva la página hasta el objeto al cambiar de momento. |
+
+Los valores por defecto se editan en **URKUNINA 5000 → Componentes → Objeto
+3D**, y el
+shortcode manda sobre ellos. Ni siquiera con `desplazar="si"` se mueve la
+página en la **primera** pintada: ahí nadie ha pedido nada todavía y saltar al
+objeto nada más abrir sería el mismo problema con otro nombre.
+
+Dos pruebas de navegador cubren las dos mitades del contrato: que avanzar la
+línea de tiempo deja `window.scrollY` donde estaba —con el paso activo, aun
+así, dentro de su carril— y que `desplazar="si"` sí mueve la página. Los pasos
+se activan por código en ambas: si los pulsara Playwright, sería él quien
+desplazase la ventana hasta el botón y la prueba no mediría nada.
 
 ---
 
@@ -870,7 +919,7 @@ silencioso:
   Ofrecerlo en una vista sin territorio produciría un mapa vacío; no ofrecerlo
   en una que sí lo tiene esconde la mitad de la lectura.
 
-### 8.2 Navegador — 61 pruebas
+### 8.2 Navegador — 63 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a

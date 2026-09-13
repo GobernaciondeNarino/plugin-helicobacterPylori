@@ -22,7 +22,7 @@ de WordPress:
 | Componente | Shortcode |
 |---|---|
 | Tablero de resultados: mapa del departamento, filtros y lectura del territorio | `[urkunina_dashboard]` |
-| Recreación 3D de *Helicobacter pylori* con línea de tiempo | `[urkunina_3d]` |
+| Recreación 3D de *Helicobacter pylori* con línea de tiempo | `[urkunina_3d desplazar="si\|no"]` |
 | Gráfico de cualquiera de las 27 vistas del catálogo, con el mapa entre sus tipos | `[urkunina_grafico view="…" type="…"]` |
 | Mapa coroplético de los 64 municipios sobre OpenStreetMap | `[urkunina_mapa]` |
 | Geomapa de D3plus de una vista territorial, por municipio o por subregión | `[urkunina_geomapa view="…" teselas="si\|no"]` |
@@ -213,7 +213,7 @@ cáncer detectado: esa información no está en los documentos fuente.
 ```bash
 npm install          # instala Playwright
 npm run test:datos   # 430 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 61 pruebas de navegador
+npm test             # lo anterior más 63 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los

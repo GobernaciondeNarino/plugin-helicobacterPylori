@@ -213,6 +213,7 @@ final class UHP_Admin {
 			'duracion'     => min( 90, max( 4, isset( $entrada['duracion'] ) ? (int) $entrada['duracion'] : $def['duracion'] ) ),
 			'instrumentos' => empty( $entrada['instrumentos'] ) ? 0 : 1,
 			'cabecera'     => empty( $entrada['cabecera'] ) ? 0 : 1,
+			'desplazar'    => empty( $entrada['desplazar'] ) ? 0 : 1,
 		);
 	}
 
@@ -1076,11 +1077,12 @@ final class UHP_Admin {
 			array(
 				'tag'         => 'urkunina_3d',
 				'titulo'      => __( 'Recreación 3D de Helicobacter pylori', 'urkunina-5000' ),
-				'descripcion' => __( 'Modelo tridimensional científicamente parametrizado de la bacteria, con una línea de tiempo de siete momentos que recorre el contagio, la colonización, el daño y el tratamiento.', 'urkunina-5000' ),
+				'descripcion' => __( 'Modelo tridimensional científicamente parametrizado de la bacteria, con una línea de tiempo de diez momentos que recorre el contagio, la colonización, el daño y el tratamiento.', 'urkunina-5000' ),
 				'ejemplos'    => array(
 					'[urkunina_3d]',
 					'[urkunina_3d alto="720px" autoplay="no"]',
 					'[urkunina_3d cabecera="no" instrumentos="no" duracion="20"]',
+					'[urkunina_3d desplazar="si"]',
 				),
 				'atributos'   => array(
 					'alto'         => __( 'Altura del contenedor. Por defecto 100vh.', 'urkunina-5000' ),
@@ -1088,6 +1090,7 @@ final class UHP_Admin {
 					'duracion'     => __( 'Segundos que dura cada momento de la línea de tiempo.', 'urkunina-5000' ),
 					'instrumentos' => __( 'si o no. Muestra u oculta el panel de morfometría.', 'urkunina-5000' ),
 					'cabecera'     => __( 'si o no. Muestra u oculta la marca institucional dentro de la escena.', 'urkunina-5000' ),
+					'desplazar'    => __( 'si o no. Por defecto no. Con si, la página se desplaza hasta el objeto cada vez que la línea de tiempo cambia de momento; solo tiene sentido si el objeto abre la página.', 'urkunina-5000' ),
 				),
 				'nota'        => __( 'Requiere un navegador con WebGL 2. Si no está disponible, el componente muestra un mensaje explicativo en lugar de quedarse en blanco.', 'urkunina-5000' ),
 			),
@@ -1489,8 +1492,11 @@ final class UHP_Admin {
 							<label><input type="checkbox" name="uhp_3d[instrumentos]" value="1" <?php checked( 1, (int) $cfg['instrumentos'] ); ?>>
 								<?php esc_html_e( 'Mostrar el panel de morfometría', 'urkunina-5000' ); ?></label><br>
 							<label><input type="checkbox" name="uhp_3d[cabecera]" value="1" <?php checked( 1, (int) $cfg['cabecera'] ); ?>>
-								<?php esc_html_e( 'Mostrar la marca institucional dentro de la escena', 'urkunina-5000' ); ?></label>
+								<?php esc_html_e( 'Mostrar la marca institucional dentro de la escena', 'urkunina-5000' ); ?></label><br>
+							<label><input type="checkbox" name="uhp_3d[desplazar]" value="1" <?php checked( 1, (int) $cfg['desplazar'] ); ?>>
+								<?php esc_html_e( 'Llevar la página hasta el objeto al cambiar de momento', 'urkunina-5000' ); ?></label>
 						</p>
+						<p class="uhpa-nota"><?php esc_html_e( 'Lo último solo tiene sentido si el objeto abre la página. Colocado más abajo, y con la reproducción automática puesta, arrastraría el scroll de quien esté leyendo por encima de él.', 'urkunina-5000' ); ?></p>
 						<p class="uhpa-nota"><?php esc_html_e( 'Quien tenga activada la reducción de movimiento en su sistema verá el recorrido en pausa aunque la reproducción automática esté activada.', 'urkunina-5000' ); ?></p>
 
 						<?php submit_button( __( 'Guardar el objeto 3D', 'urkunina-5000' ) ); ?>
