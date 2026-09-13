@@ -210,6 +210,75 @@ final class UHP_Subregiones {
 	}
 
 	/**
+	 * Zona de riesgo de cada subregión, indexada por su nombre normalizado.
+	 *
+	 * La zona NO es un dato del tamizaje sino de incidencia histórica, y
+	 * NO viene publicada: los documentos describen las tres zonas y nombran
+	 * unos pocos territorios de referencia, pero no reparten el
+	 * departamento entre ellas. `17_zonas_riesgo_subregion.json` recoge esa
+	 * asignación como derivación declarada, con su comprobación contra las
+	 * referencias que sí publica la presentación.
+	 *
+	 * Se indexa por el nombre normalizado para que «La Cordillera» de la
+	 * división oficial y «Cordillera» del informe caigan en la misma clave.
+	 *
+	 * @return array<string,string> nombre normalizado => roja|amarilla|verde
+	 */
+	public static function zonas() {
+		static $mapa = null;
+		if ( null !== $mapa ) {
+			return $mapa;
+		}
+
+		$mapa = array();
+		foreach ( (array) UHP_Datos::valor( 'zonas', 'subregiones', array() ) as $fila ) {
+			if ( empty( $fila['subregion'] ) || empty( $fila['zona'] ) ) {
+				continue;
+			}
+			$mapa[ self::normalizar( $fila['subregion'] ) ] = (string) $fila['zona'];
+		}
+		return $mapa;
+	}
+
+	/**
+	 * Zona de riesgo de una subregión.
+	 *
+	 * @param string $nombre Nombre de la subregión, en cualquiera de sus formas.
+	 * @return string roja|amarilla|verde, o '' si no está asignada.
+	 */
+	public static function zona_de( $nombre ) {
+		$mapa  = self::zonas();
+		$clave = self::normalizar( $nombre );
+		return isset( $mapa[ $clave ] ) ? $mapa[ $clave ] : '';
+	}
+
+	/**
+	 * Ficha de cada zona: etiqueta, territorio, incidencia y color.
+	 *
+	 * @return array<string,array>
+	 */
+	public static function fichas_zona() {
+		static $fichas = null;
+		if ( null !== $fichas ) {
+			return $fichas;
+		}
+
+		$fichas = array();
+		foreach ( (array) UHP_Datos::valor( 'zonas', 'zonas', array() ) as $z ) {
+			if ( empty( $z['zona'] ) ) {
+				continue;
+			}
+			$fichas[ (string) $z['zona'] ] = array(
+				'etiqueta'   => isset( $z['etiqueta'] ) ? (string) $z['etiqueta'] : '',
+				'territorio' => isset( $z['territorio'] ) ? (string) $z['territorio'] : '',
+				'incidencia' => isset( $z['incidencia_por_100000'] ) ? (float) $z['incidencia_por_100000'] : null,
+				'color'      => isset( $z['color'] ) ? (string) $z['color'] : '',
+			);
+		}
+		return $fichas;
+	}
+
+	/**
 	 * Normaliza un nombre de subregión para compararlo.
 	 *
 	 * Quita tildes, signos, espacios y el artículo inicial: «La Sabana» y

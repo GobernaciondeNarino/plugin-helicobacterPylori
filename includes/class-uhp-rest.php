@@ -131,6 +131,16 @@ final class UHP_Rest {
 
 		register_rest_route(
 			self::NS,
+			'/tablero',
+			array(
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'ruta_tablero' ),
+				'permission_callback' => $publico,
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/geomapa',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -166,16 +176,6 @@ final class UHP_Rest {
 						'sanitize_callback' => array( UHP_Security::class, 'clave' ),
 					),
 				),
-			)
-		);
-
-		register_rest_route(
-			self::NS,
-			'/dashboard',
-			array(
-				'methods'             => \WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'ruta_dashboard' ),
-				'permission_callback' => $publico,
 			)
 		);
 
@@ -251,6 +251,157 @@ final class UHP_Rest {
 		}
 
 		return self::respuesta( self::carga_render( $id, (string) $req->get_param( 'type' ) ) );
+	}
+
+	/**
+	 * GET /tablero — todo lo que pinta el tablero, en una sola respuesta.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function ruta_tablero() {
+		$limite = self::limitar( 'tablero' );
+		if ( $limite ) {
+			return $limite;
+		}
+		return self::respuesta( self::carga_tablero() );
+	}
+
+	/**
+	 * Los 64 municipios con su geometría y sus cifras.
+	 *
+	 * Devuelve un FeatureCollection porque el tablero lo dibuja con d3
+	 * directamente, sin capa intermedia. Cada municipio lleva lo justo
+	 * para pintarse, filtrarse y explicarse:
+	 *
+	 *   c     DIVIPOLA          n     nombre
+	 *   sub   subregión         zona  roja | amarilla | verde
+	 *   int   ¿intervenido?     lpm   prevalencia municipal de LPM
+	 *   hp    prevalencia municipal de H. pylori
+	 *   casos casos de cáncer detectados
+	 *   lat   latitud del centroide    lon  longitud
+	 *
+	 * `lpm` y `hp` van a null cuando el informe no publica cifra municipal,
+	 * que es lo normal: solo se publican los extremos de la distribución.
+	 * El tablero cae entonces en la cifra de la subregión y LO DICE. De ahí
+	 * que `meta.subregional` viaje en la misma respuesta: sin ella, el mapa
+	 * tendría que dejar en gris a cuarenta y tantos municipios sobre los
+	 * que sí se sabe algo.
+	 *
+	 * La geometría sale de UHP_Topojson::features(), la misma autoridad que
+	 * alimenta al geomapa de D3plus: los dos mapas no pueden divergir
+	 * porque leen el mismo origen.
+	 *
+	 * Vive aparte de la ruta para que el generador de fixtures produzca
+	 * exactamente lo que produce el servidor.
+	 *
+	 * @return array
+	 */
+	public static function carga_tablero() {
+		$lpm   = self::indice_municipal( 'prev_municipal', 'top10_lesion_precursora_malignidad', 'prevalencia_lpm_porcentaje' );
+		$lpm  += self::indice_municipal( 'prev_municipal', 'menor_prevalencia_lesion_precursora_malignidad', 'prevalencia_lpm_porcentaje' );
+		$hp    = self::indice_municipal( 'prev_municipal', 'top10_infeccion_h_pylori', 'prevalencia_h_pylori_porcentaje' );
+		$casos = self::indice_municipal( 'cancer', 'distribucion_por_municipio', 'casos' );
+
+		$rasgos = array();
+		foreach ( UHP_Topojson::features( 'municipio' ) as $f ) {
+			$p  = isset( $f['properties'] ) ? $f['properties'] : array();
+			$id = isset( $p['divipola'] ) ? (string) $p['divipola'] : '';
+			if ( '' === $id ) {
+				continue;
+			}
+
+			$sub = isset( $p['subregion'] ) ? (string) $p['subregion'] : '';
+
+			$rasgos[] = array(
+				'type'       => 'Feature',
+				'properties' => array(
+					'c'     => $id,
+					// El rótulo es el de los informes cuando lo hay —«Colón
+					// (Génova)», no «Colón»—; el cruce sigue siendo por código.
+					'n'     => UHP_Municipios::nombre_de_lectura( $id, isset( $p['nombre'] ) ? (string) $p['nombre'] : '' ),
+					'sub'   => $sub,
+					'zona'  => UHP_Subregiones::zona_de( $sub ),
+					'int'   => ! empty( $p['priorizado'] ),
+					'lpm'   => isset( $lpm[ $id ] ) ? $lpm[ $id ] : null,
+					'hp'    => isset( $hp[ $id ] ) ? $hp[ $id ] : null,
+					// Un municipio sin casos tiene CERO casos, no un dato
+					// que falte: el tamizaje lo cubrió y no encontró
+					// ninguno. Por eso 0 y no null.
+					'casos' => isset( $casos[ $id ] ) ? (int) $casos[ $id ] : 0,
+					'lat'   => isset( $p['lat'] ) ? (float) $p['lat'] : null,
+					'lon'   => isset( $p['lon'] ) ? (float) $p['lon'] : null,
+				),
+				// Reorientada al sentido que espera D3 —exterior horario—,
+				// que es el CONTRARIO al del RFC 7946. Sin esto cada
+				// municipio se dibuja como el mundo entero menos él mismo
+				// y el departamento queda reducido a un punto.
+				'geometry'   => isset( $f['geometry'] ) ? UHP_Topojson::orientar( $f['geometry'] ) : null,
+			);
+		}
+
+		return array(
+			'type'     => 'FeatureCollection',
+			'meta'     => array(
+				'fuente'      => 'Cartografía municipal DANE · datos del proyecto URKUNINA 5000',
+				'subregional' => self::prevalencia_subregional(),
+				'zonas'       => UHP_Subregiones::fichas_zona(),
+			),
+			'features' => $rasgos,
+		);
+	}
+
+	/**
+	 * Indexa por DIVIPOLA una lista de municipios con un valor.
+	 *
+	 * Los informes nombran municipios; la geometría los identifica por
+	 * código. UHP_Municipios resuelve el cruce, y un nombre que no cruce se
+	 * descarta en silencio AQUÍ pero no pasa desapercibido: hay una prueba
+	 * que comprueba que los 55 priorizados cruzan.
+	 *
+	 * @param string $archivo Clave del archivo en el registro.
+	 * @param string $ruta    Ruta de la lista dentro del archivo.
+	 * @param string $campo   Campo del que sale el valor.
+	 * @return array<string,float>
+	 */
+	private static function indice_municipal( $archivo, $ruta, $campo ) {
+		$salida = array();
+		foreach ( (array) UHP_Datos::valor( $archivo, $ruta, array() ) as $fila ) {
+			if ( empty( $fila['municipio'] ) || ! isset( $fila[ $campo ] ) ) {
+				continue;
+			}
+			$divipola = UHP_Municipios::divipola_de( $fila['municipio'] );
+			if ( '' !== $divipola ) {
+				$salida[ $divipola ] = (float) $fila[ $campo ];
+			}
+		}
+		return $salida;
+	}
+
+	/**
+	 * Prevalencia de LPM y de H. pylori de cada subregión documentada.
+	 *
+	 * La clave es el nombre OFICIAL de la subregión —el de la división que
+	 * entregó la Gobernación—, no el del informe: es el que llevan los
+	 * municipios de la geometría, y si no coincidieran el tablero no podría
+	 * caer en la cifra subregional de nadie.
+	 *
+	 * @return array<string,array{lpm:float|null,hp:float|null}>
+	 */
+	private static function prevalencia_subregional() {
+		$salida = array();
+		foreach ( (array) UHP_Datos::valor( 'prev_subregion', 'subregiones', array() ) as $s ) {
+			if ( empty( $s['subregion'] ) ) {
+				continue;
+			}
+			$codigo = UHP_Subregiones::codigo_de( $s['subregion'] );
+			$nombre = ( '' !== $codigo ) ? UHP_Subregiones::nombre_de( $codigo ) : (string) $s['subregion'];
+
+			$salida[ $nombre ] = array(
+				'lpm' => isset( $s['prevalencia_lpm_porcentaje'] ) ? (float) $s['prevalencia_lpm_porcentaje'] : null,
+				'hp'  => isset( $s['prevalencia_h_pylori_porcentaje'] ) ? (float) $s['prevalencia_h_pylori_porcentaje'] : null,
+			);
+		}
+		return $salida;
 	}
 
 	/**
@@ -647,36 +798,6 @@ final class UHP_Rest {
 			'casos'       => 'casos',
 		);
 		return isset( $unidades[ $medida ] ) ? $unidades[ $medida ] : '';
-	}
-
-	/**
-	 * GET /dashboard — todo lo que el tablero necesita en una sola petición.
-	 *
-	 * @return \WP_REST_Response|\WP_Error
-	 */
-	public function ruta_dashboard() {
-		$limite = self::limitar( 'dashboard' );
-		if ( $limite ) {
-			return $limite;
-		}
-
-		return self::respuesta(
-			array(
-				'kpi'         => self::kpis(),
-				'indicadores' => self::indicadores_mapa(),
-				'valores'     => self::valores_mapa( 'lpm' ),
-				'subregiones' => UHP_Views::obtener( 'prev_subregion' ),
-				'zonas'       => UHP_Views::obtener( 'zonas_riesgo' ),
-				'proyecto'    => array(
-					'nombre'    => UHP_Datos::valor( 'proyecto', 'identificacion.nombre_corto', 'URKUNINA 5000' ),
-					'completo'  => UHP_Datos::valor( 'proyecto', 'identificacion.nombre_completo', '' ),
-					'bpin'      => UHP_Datos::valor( 'proyecto', 'identificacion.bpin', '' ),
-					'estado'    => UHP_Datos::valor( 'proyecto', 'ejecucion.estado', '' ),
-					'inicio'    => UHP_Datos::valor( 'proyecto', 'ejecucion.fecha_inicio', '' ),
-					'fin_campo' => UHP_Datos::valor( 'proyecto', 'ejecucion.fecha_fin_trabajo_campo', '' ),
-				),
-			)
-		);
 	}
 
 	/**

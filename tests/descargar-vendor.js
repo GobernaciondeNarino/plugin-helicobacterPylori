@@ -20,6 +20,13 @@ const ARCHIVOS = [
     url: 'https://cdn.jsdelivr.net/npm/d3plus@2.0.0/build/d3plus.full.min.js'
   },
   {
+    // d3 suelto, el que usa el tablero. No basta con d3plus: su bundle
+    // expone window.d3plus, no window.d3, y el tablero llama a
+    // d3.geoMercator, d3.zoom y d3.interpolateRgbBasis directamente.
+    nombre: 'd3.min.js',
+    url: 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js'
+  },
+  {
     nombre: 'leaflet.js',
     url: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
   },

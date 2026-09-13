@@ -187,31 +187,13 @@ final class UHP_Admin {
 		$def     = UHP_Activator::dashboard_por_defecto();
 		$entrada = is_array( $entrada ) ? $entrada : array();
 
-		$indicadores = array_keys( UHP_Rest::indicadores_mapa() );
-		$indicador   = isset( $entrada['indicador'] ) ? UHP_Security::clave( $entrada['indicador'] ) : $def['indicador'];
-		$teselas     = isset( $entrada['teselas'] ) ? UHP_Security::clave( $entrada['teselas'] ) : $def['teselas'];
-		$tema        = isset( $entrada['tema'] ) ? UHP_Security::clave( $entrada['tema'] ) : $def['tema'];
-		$nivel       = isset( $entrada['nivel'] ) ? UHP_Security::clave( $entrada['nivel'] ) : $def['nivel'];
-
-		$lat = isset( $entrada['mapa_lat'] ) ? (float) $entrada['mapa_lat'] : $def['mapa_lat'];
-		$lon = isset( $entrada['mapa_lon'] ) ? (float) $entrada['mapa_lon'] : $def['mapa_lon'];
-		if ( ! UHP_Security::validar_bbox( $lat, $lon ) ) {
-			$lat = $def['mapa_lat'];
-			$lon = $def['mapa_lon'];
-		}
+		$indicador = isset( $entrada['indicador'] ) ? UHP_Security::clave( $entrada['indicador'] ) : $def['indicador'];
 
 		return array(
-			'titulo'      => sanitize_text_field( isset( $entrada['titulo'] ) ? $entrada['titulo'] : $def['titulo'] ),
-			'indicador'   => in_array( $indicador, $indicadores, true ) ? $indicador : $def['indicador'],
-			'tema'        => in_array( $tema, array( 'oscuro', 'claro' ), true ) ? $tema : $def['tema'],
-			'nivel'       => in_array( $nivel, UHP_Territorios::NIVELES, true ) ? $nivel : $def['nivel'],
-			'teselas'     => in_array( $teselas, array( 'auto', 'oscuro', 'osm', 'claro', 'humanitario' ), true ) ? $teselas : $def['teselas'],
-			'mapa_lat'    => $lat,
-			'mapa_lon'    => $lon,
-			'mapa_zoom'   => min( 14, max( 5, isset( $entrada['mapa_zoom'] ) ? (int) $entrada['mapa_zoom'] : $def['mapa_zoom'] ) ),
-			'panel_izq'   => empty( $entrada['panel_izq'] ) ? 0 : 1,
-			'panel_der'   => empty( $entrada['panel_der'] ) ? 0 : 1,
-			'mostrar_kpi' => empty( $entrada['mostrar_kpi'] ) ? 0 : 1,
+			'titulo'    => sanitize_text_field( isset( $entrada['titulo'] ) ? $entrada['titulo'] : $def['titulo'] ),
+			'lema'      => sanitize_text_field( isset( $entrada['lema'] ) ? $entrada['lema'] : $def['lema'] ),
+			// Solo dos indicadores tienen rampa en el mapa del tablero.
+			'indicador' => in_array( $indicador, array( 'lpm', 'hp' ), true ) ? $indicador : $def['indicador'],
 		);
 	}
 
@@ -1076,26 +1058,20 @@ final class UHP_Admin {
 		return array(
 			array(
 				'tag'         => 'urkunina_dashboard',
-				'titulo'      => __( 'Tablero completo', 'urkunina-5000' ),
-				'descripcion' => __( 'Todo el proyecto en una sola pantalla: cintillo de cifras, panel de controles y filtros, mapa de OpenStreetMap al centro y panel de gráficos con su análisis. Ocupa el 100 % del ancho y toda la altura de la ventana. Todo gira alrededor de un territorio seleccionado —el departamento, una subregión o un municipio—: al elegirlo en el mapa, en una barra del gráfico o en el selector, el cintillo, la ficha y el gráfico pasan a hablar de él, y lo que el proyecto no publica por territorio queda marcado como departamental en vez de pasar por local.', 'urkunina-5000' ),
+				'titulo'      => __( 'Tablero de resultados', 'urkunina-5000' ),
+				'descripcion' => __( 'Los 64 municipios sobre un mapa dibujado con D3 —sin teselas ni mapa base—, con filtros por zona de riesgo y por subregión, la lista de los 55 intervenidos, la ficha del municipio elegido, la prevalencia por subregión y el perfil de los 5.000 participantes. Ocupa el 100 % del ancho y toda la altura de la ventana, y todo se recoloca alrededor del territorio que se elija, sin volver a pedir datos.', 'urkunina-5000' ),
 				'ejemplos'    => array(
 					'[urkunina_dashboard]',
-					'[urkunina_dashboard tema="claro"]',
-					'[urkunina_dashboard nivel="subregion"]',
-					'[urkunina_dashboard indicador="hpylori" zoom="9"]',
+					'[urkunina_dashboard indicador="hp"]',
 					'[urkunina_dashboard alto="calc(100vh - 80px)"]',
 				),
 				'atributos'   => array(
 					'titulo'    => __( 'Título mostrado en la cabecera del tablero.', 'urkunina-5000' ),
-					'tema'      => __( 'oscuro (por defecto) o claro. Viste todo el tablero: paneles, controles, fichas, mapa y la tinta de los gráficos.', 'urkunina-5000' ),
-					'nivel'     => __( 'Capa territorial de partida del mapa: municipio (por defecto), subregion o departamento.', 'urkunina-5000' ),
+					'lema'      => __( 'Línea descriptiva bajo el título. Se oculta en pantallas estrechas.', 'urkunina-5000' ),
 					'alto'      => __( 'Altura del contenedor. Por defecto 100vh; use calc() si su tema tiene una barra fija.', 'urkunina-5000' ),
-					'indicador' => __( 'Indicador inicial del mapa: lpm, hpylori, cancer o intervencion.', 'urkunina-5000' ),
-					'teselas'   => __( 'Capa base: auto (sigue al tema, recomendado), oscuro, claro, osm o humanitario.', 'urkunina-5000' ),
-					'lat, lon'  => __( 'Centro inicial del mapa. Debe caer dentro de Nariño.', 'urkunina-5000' ),
-					'zoom'      => __( 'Nivel de acercamiento inicial, entre 5 y 14.', 'urkunina-5000' ),
+					'indicador' => __( 'Con cuál arranca el mapa y las barras: lpm (por defecto) o hp.', 'urkunina-5000' ),
 				),
-				'nota'        => __( 'Publíquelo en una página con plantilla de ancho completo y sin barra lateral para que el contenedor aproveche la pantalla. El tema por defecto sale de URKUNINA 5000 → Componentes; el atributo lo cambia página a página.', 'urkunina-5000' ),
+				'nota'        => __( 'Publíquelo en una página con plantilla de ancho completo y sin barra lateral. El tablero tiene un solo tema, el oscuro sobre el que se diseñó: la rampa del mapa y todos los contrastes están calculados sobre él.', 'urkunina-5000' ),
 			),
 			array(
 				'tag'         => 'urkunina_3d',
@@ -1390,9 +1366,8 @@ final class UHP_Admin {
 	 * Formulario de configuración del tablero.
 	 */
 	private function form_tablero() {
-		$cfg         = get_option( 'uhp_dashboard', UHP_Activator::dashboard_por_defecto() );
-		$cfg         = wp_parse_args( is_array( $cfg ) ? $cfg : array(), UHP_Activator::dashboard_por_defecto() );
-		$indicadores = UHP_Rest::indicadores_mapa();
+		$cfg = get_option( 'uhp_dashboard', UHP_Activator::dashboard_por_defecto() );
+		$cfg = wp_parse_args( is_array( $cfg ) ? $cfg : array(), UHP_Activator::dashboard_por_defecto() );
 		?>
 		<div class="uhpa-rejilla uhpa-rejilla--2">
 			<section class="uhpa-card">
@@ -1411,105 +1386,66 @@ final class UHP_Admin {
 						</p>
 
 						<p>
-							<label class="uhpa-label" for="uhp-db-ind"><?php esc_html_e( 'Indicador inicial del mapa', 'urkunina-5000' ); ?></label>
+							<label class="uhpa-label" for="uhp-db-lema"><?php esc_html_e( 'Lema', 'urkunina-5000' ); ?></label>
+							<input type="text" id="uhp-db-lema" class="uhpa-input" name="uhp_dashboard[lema]"
+								value="<?php echo esc_attr( $cfg['lema'] ); ?>">
+						</p>
+						<p class="uhpa-ayuda">
+							<?php esc_html_e( 'La línea que acompaña al título en la cabecera. Se oculta en pantallas estrechas.', 'urkunina-5000' ); ?>
+						</p>
+
+						<p>
+							<label class="uhpa-label" for="uhp-db-ind"><?php esc_html_e( 'Indicador inicial', 'urkunina-5000' ); ?></label>
 							<select id="uhp-db-ind" class="uhpa-select" name="uhp_dashboard[indicador]">
-								<?php foreach ( $indicadores as $clave => $meta ) : ?>
-									<option value="<?php echo esc_attr( $clave ); ?>" <?php selected( $clave, $cfg['indicador'] ); ?>>
-										<?php echo esc_html( $meta['etiqueta'] ); ?>
-									</option>
-								<?php endforeach; ?>
-							</select>
-						</p>
-
-						<p>
-							<label class="uhpa-label" for="uhp-db-tema"><?php esc_html_e( 'Tema del tablero', 'urkunina-5000' ); ?></label>
-							<select id="uhp-db-tema" class="uhpa-select" name="uhp_dashboard[tema]">
-								<option value="oscuro" <?php selected( 'oscuro', $cfg['tema'] ); ?>><?php esc_html_e( 'Oscuro — identidad del objeto 3D (recomendado)', 'urkunina-5000' ); ?></option>
-								<option value="claro" <?php selected( 'claro', $cfg['tema'] ); ?>><?php esc_html_e( 'Claro — para páginas de fondo blanco y para imprimir', 'urkunina-5000' ); ?></option>
+								<option value="lpm" <?php selected( 'lpm', $cfg['indicador'] ); ?>>
+									<?php esc_html_e( 'Lesión precursora de malignidad', 'urkunina-5000' ); ?>
+								</option>
+								<option value="hp" <?php selected( 'hp', $cfg['indicador'] ); ?>>
+									<?php esc_html_e( 'Infección por H. pylori', 'urkunina-5000' ); ?>
+								</option>
 							</select>
 						</p>
 						<p class="uhpa-ayuda">
-							<?php esc_html_e( 'Viste todo el tablero: paneles, controles, mapa, fichas y la tinta de los gráficos. Cada página puede llevar el suyo con [urkunina_dashboard tema="claro"].', 'urkunina-5000' ); ?>
+							<?php esc_html_e( 'Con cuál arrancan el mapa y las barras por subregión. Quien visita la página puede cambiarlo desde la tarjeta de prevalencia.', 'urkunina-5000' ); ?>
 						</p>
 
-						<p>
-							<label class="uhpa-label" for="uhp-db-nivel"><?php esc_html_e( 'Capa territorial inicial', 'urkunina-5000' ); ?></label>
-							<select id="uhp-db-nivel" class="uhpa-select" name="uhp_dashboard[nivel]">
-								<option value="municipio" <?php selected( 'municipio', $cfg['nivel'] ); ?>><?php esc_html_e( 'Municipios — los 64 del departamento', 'urkunina-5000' ); ?></option>
-								<option value="subregion" <?php selected( 'subregion', $cfg['nivel'] ); ?>><?php esc_html_e( 'Subregiones — las 13', 'urkunina-5000' ); ?></option>
-								<option value="departamento" <?php selected( 'departamento', $cfg['nivel'] ); ?>><?php esc_html_e( 'Departamento — solo el contorno', 'urkunina-5000' ); ?></option>
-							</select>
-						</p>
-						<p class="uhpa-ayuda">
-							<?php esc_html_e( 'Con qué división arranca el mapa. Quien visita puede cambiarla desde los controles del propio tablero.', 'urkunina-5000' ); ?>
-						</p>
-
-						<p>
-							<label class="uhpa-label" for="uhp-db-tes"><?php esc_html_e( 'Capa base', 'urkunina-5000' ); ?></label>
-							<select id="uhp-db-tes" class="uhpa-select" name="uhp_dashboard[teselas]">
-								<option value="auto" <?php selected( 'auto', $cfg['teselas'] ); ?>><?php esc_html_e( 'La del tema (recomendado)', 'urkunina-5000' ); ?></option>
-								<option value="oscuro" <?php selected( 'oscuro', $cfg['teselas'] ); ?>><?php esc_html_e( 'Tono oscuro', 'urkunina-5000' ); ?></option>
-								<option value="osm" <?php selected( 'osm', $cfg['teselas'] ); ?>><?php esc_html_e( 'OpenStreetMap estándar', 'urkunina-5000' ); ?></option>
-								<option value="claro" <?php selected( 'claro', $cfg['teselas'] ); ?>><?php esc_html_e( 'Tono claro', 'urkunina-5000' ); ?></option>
-								<option value="humanitario" <?php selected( 'humanitario', $cfg['teselas'] ); ?>><?php esc_html_e( 'Humanitarian OSM', 'urkunina-5000' ); ?></option>
-							</select>
-						</p>
-
-						<div class="uhpa-fila3">
-							<p>
-								<label class="uhpa-label" for="uhp-db-lat"><?php esc_html_e( 'Latitud', 'urkunina-5000' ); ?></label>
-								<input type="number" step="0.0001" id="uhp-db-lat" class="uhpa-input" name="uhp_dashboard[mapa_lat]"
-									value="<?php echo esc_attr( $cfg['mapa_lat'] ); ?>">
-							</p>
-							<p>
-								<label class="uhpa-label" for="uhp-db-lon"><?php esc_html_e( 'Longitud', 'urkunina-5000' ); ?></label>
-								<input type="number" step="0.0001" id="uhp-db-lon" class="uhpa-input" name="uhp_dashboard[mapa_lon]"
-									value="<?php echo esc_attr( $cfg['mapa_lon'] ); ?>">
-							</p>
-							<p>
-								<label class="uhpa-label" for="uhp-db-zoom"><?php esc_html_e( 'Zoom', 'urkunina-5000' ); ?></label>
-								<input type="number" min="5" max="14" id="uhp-db-zoom" class="uhpa-input" name="uhp_dashboard[mapa_zoom]"
-									value="<?php echo esc_attr( $cfg['mapa_zoom'] ); ?>">
-							</p>
-						</div>
-						<p class="uhpa-nota"><?php esc_html_e( 'Las coordenadas deben caer dentro de Nariño. Si no lo hacen, el plugin vuelve al centro del departamento en lugar de mostrar otro territorio.', 'urkunina-5000' ); ?></p>
-
-						<p>
-							<label><input type="checkbox" name="uhp_dashboard[mostrar_kpi]" value="1" <?php checked( 1, (int) $cfg['mostrar_kpi'] ); ?>>
-								<?php esc_html_e( 'Mostrar el cintillo de cifras clave', 'urkunina-5000' ); ?></label><br>
-							<label><input type="checkbox" name="uhp_dashboard[panel_izq]" value="1" <?php checked( 1, (int) $cfg['panel_izq'] ); ?>>
-								<?php esc_html_e( 'Abrir el panel de controles al cargar', 'urkunina-5000' ); ?></label><br>
-							<label><input type="checkbox" name="uhp_dashboard[panel_der]" value="1" <?php checked( 1, (int) $cfg['panel_der'] ); ?>>
-								<?php esc_html_e( 'Abrir el panel de análisis al cargar', 'urkunina-5000' ); ?></label>
-						</p>
-
-						<?php submit_button( __( 'Guardar el tablero', 'urkunina-5000' ) ); ?>
+						<?php submit_button( __( 'Guardar', 'urkunina-5000' ) ); ?>
 					</form>
 				</div>
 			</section>
 
 			<section class="uhpa-card">
 				<header class="uhpa-card__cab">
-					<h2><?php esc_html_e( 'Cómo está compuesto', 'urkunina-5000' ); ?></h2>
-					<p><?php esc_html_e( 'El tablero reparte una sola pantalla en cuatro zonas.', 'urkunina-5000' ); ?></p>
+					<h2><?php esc_html_e( 'Cómo publicarlo', 'urkunina-5000' ); ?></h2>
+					<p><?php esc_html_e( 'El tablero ocupa todo el ancho y toda la altura de la ventana: necesita una plantilla de página sin barra lateral.', 'urkunina-5000' ); ?></p>
 				</header>
 				<div class="uhpa-card__cuerpo">
-					<div class="uhpa-esquema" aria-hidden="true">
-						<div class="uhpa-esquema__cab"><?php esc_html_e( 'Cabecera y cifras clave', 'urkunina-5000' ); ?></div>
-						<div class="uhpa-esquema__fila">
-							<div class="uhpa-esquema__izq"><?php esc_html_e( 'Controles y filtros', 'urkunina-5000' ); ?></div>
-							<div class="uhpa-esquema__centro"><?php esc_html_e( 'Mapa OpenStreetMap', 'urkunina-5000' ); ?></div>
-							<div class="uhpa-esquema__der"><?php esc_html_e( 'Gráficos y análisis', 'urkunina-5000' ); ?></div>
-						</div>
-					</div>
-					<ul class="uhpa-lista uhpa-lista--check">
-						<li><?php esc_html_e( 'El contenedor ocupa el 100 % del ancho disponible y toda la altura de la ventana.', 'urkunina-5000' ); ?></li>
-						<li><?php esc_html_e( 'Los dos paneles laterales se pliegan para dejar el mapa a pantalla completa.', 'urkunina-5000' ); ?></li>
-						<li><?php esc_html_e( 'Al hacer clic en un municipio se abre su ficha sobre el mapa.', 'urkunina-5000' ); ?></li>
-						<li><?php esc_html_e( 'Por debajo de 1100 px de ancho las zonas se apilan en una sola columna y el tablero sigue siendo usable en móvil.', 'urkunina-5000' ); ?></li>
-						<li><?php esc_html_e( 'La geometría de los 64 municipios se descarga una sola vez: cambiar de indicador solo repide la tabla de valores.', 'urkunina-5000' ); ?></li>
-					</ul>
 					<?php $this->copiable( '[urkunina_dashboard]' ); ?>
+					<?php $this->copiable( '[urkunina_dashboard alto="720px"]' ); ?>
+					<?php $this->copiable( '[urkunina_dashboard indicador="hp"]' ); ?>
+
+					<h3 class="uhpa-h3"><?php esc_html_e( 'Qué muestra', 'urkunina-5000' ); ?></h3>
+					<p class="uhpa-texto">
+						<?php esc_html_e( 'Los 64 municipios del departamento sobre un mapa dibujado con D3, con filtros por zona de riesgo y por subregión, la lista de los 55 intervenidos, la ficha del municipio elegido y el perfil de los 5.000 participantes.', 'urkunina-5000' ); ?>
+					</p>
+
+					<h3 class="uhpa-h3"><?php esc_html_e( 'Lo que el tablero declara', 'urkunina-5000' ); ?></h3>
+					<ul class="uhpa-lista">
+						<li><?php esc_html_e( 'Un municipio sin cifra propia se pinta con la de su subregión, atenuado, y lo dice en el tooltip y en la ficha. El informe solo publica los extremos de la distribución municipal.', 'urkunina-5000' ); ?></li>
+						<li><?php esc_html_e( 'Un municipio no intervenido va con trama discontinua y sin color: no falta el dato, es que el proyecto no estuvo allí.', 'urkunina-5000' ); ?></li>
+						<li><?php esc_html_e( 'El perfil de los participantes no responde a los filtros: está publicado para el conjunto de los 5.000, no municipio a municipio.', 'urkunina-5000' ); ?></li>
+						<li><?php esc_html_e( 'La cifra de participantes por selección es un prorrateo y lo dice en su rótulo.', 'urkunina-5000' ); ?></li>
+					</ul>
+
+					<h3 class="uhpa-h3"><?php esc_html_e( 'Zona de riesgo', 'urkunina-5000' ); ?></h3>
+					<p class="uhpa-nota">
+						<?php esc_html_e( 'Los documentos describen las tres zonas y nombran algunos territorios de referencia, pero no reparten el departamento entre ellas. La asignación que usa el tablero se hace por subregión y vive en el archivo 17_zonas_riesgo_subregion.json, marcada como derivación y con su comprobación contra esas referencias.', 'urkunina-5000' ); ?>
+					</p>
+					<p>
+						<a href="<?php echo esc_url( admin_url( 'admin.php?page=uhp-datos&tab=zonas' ) ); ?>">
+							<?php esc_html_e( 'Ver y editar la tabla de zonas', 'urkunina-5000' ); ?>
+						</a>
+					</p>
 				</div>
 			</section>
 		</div>

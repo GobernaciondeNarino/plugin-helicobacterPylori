@@ -154,6 +154,62 @@ final class UHP_Municipios {
 	}
 
 	/**
+	 * Nombre con el que se rotula un municipio en pantalla.
+	 *
+	 * La cartografía del DANE y los informes del proyecto no escriben igual
+	 * los mismos municipios. El DANE usa la forma corta y oficial —«Colón»,
+	 * «Los Andes», «Santacruz»—, mientras los informes usan la forma con la
+	 * que se los conoce en Nariño: «Colón (Génova)», «Los Andes
+	 * (Sotomayor)», «Santacruz (Guachavés)». En un mapa del departamento la
+	 * segunda es la útil: «Colón» a secas no distingue nada para quien vive
+	 * allí, y hay otro Colón en Putumayo.
+	 *
+	 * De ahí que el rótulo salga, en este orden:
+	 *
+	 *   1. de la lista de cobertura del proyecto, que nombra a los 55
+	 *      priorizados tal como los escriben los informes;
+	 *   2. de la tabla de abajo, para los municipios que el proyecto NO
+	 *      intervino pero sus documentos sí nombran;
+	 *   3. de la cartografía, para el resto.
+	 *
+	 * El cruce sigue haciéndose por DIVIPOLA en todos los casos: esto solo
+	 * decide qué texto se enseña, nunca con qué geometría se cruza.
+	 *
+	 * @param string $divipola Código DIVIPOLA.
+	 * @param string $defecto  Nombre de la cartografía, como último recurso.
+	 * @return string
+	 */
+	public static function nombre_de_lectura( $divipola, $defecto = '' ) {
+		static $tabla = null;
+
+		if ( null === $tabla ) {
+			$tabla = array();
+			foreach ( self::priorizados() as $m ) {
+				if ( '' !== $m['divipola'] ) {
+					$tabla[ $m['divipola'] ] = $m['municipio'];
+				}
+			}
+
+			// Municipios fuera de los 55 que los documentos del proyecto
+			// sí nombran, con la forma que usan. Tumaco aparece así en las
+			// zonas de referencia de la presentación de cierre, pese a que
+			// su nombre DIVIPOLA es «San Andrés de Tumaco».
+			$fuera = array(
+				'52835' => 'Tumaco',
+				'52427' => 'Magüí Payán',
+			);
+			foreach ( $fuera as $codigo => $nombre ) {
+				if ( ! isset( $tabla[ $codigo ] ) ) {
+					$tabla[ $codigo ] = $nombre;
+				}
+			}
+		}
+
+		$codigo = (string) $divipola;
+		return isset( $tabla[ $codigo ] ) ? $tabla[ $codigo ] : (string) $defecto;
+	}
+
+	/**
 	 * Conjunto de los DIVIPOLA priorizados, para consultas rápidas.
 	 *
 	 * @return array<string,bool>

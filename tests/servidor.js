@@ -33,6 +33,7 @@ const TIPOS = {
 
 /* Alias de las librerías de terceros usadas por las páginas de prueba. */
 const VENDOR_ALIAS = {
+  '/assets/js/vendor-d3.js': path.join(VENDOR, 'd3.min.js'),
   '/assets/js/vendor-d3plus.js': path.join(VENDOR, 'd3plus.min.js'),
   '/assets/js/vendor-leaflet.js': path.join(VENDOR, 'leaflet.js'),
   '/assets/css/leaflet-vendor.css': path.join(VENDOR, 'leaflet.css')

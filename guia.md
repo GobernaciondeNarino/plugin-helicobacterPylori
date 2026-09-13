@@ -106,7 +106,7 @@ urkunina-5000/
 
 ## 3. El conjunto de datos
 
-Diecinueve archivos en `data/`: diecisiete JSON del proyecto y dos de cartografía.
+Veinte archivos en `data/`: dieciocho JSON del proyecto y dos de cartografía.
 
 | Clave | Archivo | Contenido |
 |---|---|---|
@@ -127,6 +127,7 @@ Diecinueve archivos en `data/`: diecisiete JSON del proyecto y dos de cartograf�
 | `subregiones` | `14_subregiones_municipios.json` | División subregional oficial de la Gobernación: las 13 subregiones y sus municipios |
 | `mortalidad` | `15_mortalidad_departamental.json` | Fallecimientos anuales por cáncer de estómago, 2019-2022 (IDSN) |
 | `acceso_oncologico` | `16_acceso_servicios_oncologicos.json` | Las seis IPS oncológicas del departamento y la barrera de acceso territorial |
+| `zonas` | `17_zonas_riesgo_subregion.json` | A qué zona de riesgo pertenece cada subregión. **Derivación declarada**, no dato publicado: trae su comprobación contra los territorios de referencia |
 | `geojson` | `narino_municipios.geojson` | Geometría de los 64 municipios (DANE) |
 | `geojson_subregiones` | `dep-sub-mun.geojson` | Tres capas: departamento, 13 subregiones y los 64 municipios con la subregión de cada uno |
 
@@ -505,165 +506,196 @@ que produce filas, que sus filas traen todas las dimensiones y medidas que
 declara, que su tipo por defecto es compatible y que sus dos textos llegan a
 los 375 caracteres.
 
-### 4.8 Los dos temas del tablero
+### 4.8 El tablero
 
-El tablero se publica en **oscuro** o en **claro**, con
-`[urkunina_dashboard tema="claro"]` o desde **Componentes** en el panel. El
-oscuro es el de por defecto y el de la identidad del proyecto; el claro existe
-para páginas de fondo blanco, para imprimir y para quien necesite más luz.
+`[urkunina_dashboard]` reproduce el tablero de resultados que diseñó la
+Secretaría TIC. Es la pieza más autónoma del plugin: no comparte motor, ni
+tipografía, ni paleta con el resto.
 
-El tema no es un fondo: viste **todo** el tablero —paneles, controles,
-selectores, chips, fichas, tooltip, leyenda del mapa, controles y atribución de
-Leaflet, y la tinta con la que se dibujan los gráficos del panel—. Un tema a
-medias es peor que ninguno: una ficha clara sobre un tablero oscuro se lee
-peor que las dos piezas claras.
+```
+[urkunina_dashboard]
+[urkunina_dashboard alto="720px" indicador="hp"]
+```
 
-#### 4.8.1 El tema oscuro
+| Atributo | Qué hace |
+|---|---|
+| `titulo` | Encabezado del tablero. Por defecto, el de los ajustes. |
+| `lema` | Línea descriptiva bajo el título. |
+| `alto` | Altura del contenedor. Por defecto `100vh`. |
+| `indicador` | `lpm` o `hp`: con cuál arranca el mapa y las barras. |
 
-Viste la paleta del objeto 3D: fondo `#0C1116`, paneles translúcidos con
-desenfoque y borde blanco al 9 %, verde `#10A13B` y amarillo `#FFD500` de la
-Gobernación, tinta clara `#E7EDF1`. Quien pasa de la escena al tablero debe
-percibir una sola pieza, no dos productos distintos.
+#### 4.8.1 Rejilla de tres columnas
 
-Tres consecuencias que no son solo de color:
+Filtros y lista a la izquierda (258 px), mapa al centro (elástico), lectura
+del territorio a la derecha (300 px). Por debajo de 1180 px las columnas se
+estrechan y por debajo de 860 px se apilan, y entonces el contenedor **deja
+de estar atado a la altura de la ventana**: con `100vh` repartidos entre tres
+filas no queda sitio ni para el mapa ni para leer nada.
 
-- **La capa base es la oscura** (CARTO dark, sobre datos de OpenStreetMap).
-- **Los gráficos se tiñen para fondo oscuro.** D3plus pinta los ejes en tonos
-  pensados para fondo claro; el renderer acepta `tema` y fija la tinta de
-  títulos, etiquetas, rejilla y leyenda. La paleta categórica también cambia:
-  el verde institucional y el azul de encabezados no llegan al contraste mínimo
-  sobre `#0C1116`, así que el tema oscuro usa versiones aclaradas.
-- **El filete de «municipio priorizado» se atenúa.** 55 de los 64 municipios lo
-  son: a plena intensidad sobre fondo oscuro el mapa se convertía en una malla
-  verde que ya no distinguía nada.
+La columna del contenedor se declara `minmax(0, 1fr)` y no se deja implícita.
+Una columna `auto` crece hasta el contenido más ancho que no pueda encogerse
+—un título largo, una píldora con `nowrap`— y entonces el tablero desborda su
+propio relleno. Con `100%` de ancho y relleno propio, `.uhp-db` entra además
+en su propia regla de `box-sizing`: sin eso suma los 28 px del relleno al
+100 % y empuja la página a desbordarse en horizontal.
 
-#### 4.8.2 El tema claro
+#### 4.8.2 El mapa es D3 puro, no Leaflet
 
-`.uhp-db--claro` **solo redefine tokens**: ni una regla de disposición, ni un
-selector nuevo. Si algo se ve mal en claro, el arreglo está en el token, no en
-una excepción.
+Proyección Mercator ajustada al departamento con `fitExtent`, trazado con
+`d3.geoPath` y desplazamiento con `d3.zoom` sobre un `<g>`. **No hay teselas
+ni mapa base.** El tablero habla de los 64 municipios de Nariño; una capa de
+calles no aporta nada a esa lectura y sí añadiría una petición externa por
+cada celda.
 
-Para que eso sea posible, la hoja del tablero tiene una regla dura: **ni un
-color literal fuera del bloque de tokens**. Cada superficie, tinta, borde, velo
-y sombra tiene su `--uhp-db-*`. Hay una prueba de la capa de datos que lee la
-hoja y falla si aparece un literal, y otra que comprueba que el tema claro
-redefine todos los tokens que dependen del tema. Sin las dos, un color se queda
-oscuro sobre fondo blanco y nadie se entera hasta que lo ve un ciudadano.
+Los trazos se dividen por la **raíz** del zoom y no por el zoom entero: a
+escala 12 un borde de 0,6 px dividido por 12 desaparecería, y sin dividir
+engordaría hasta tapar los municipios pequeños.
 
-Dos tokens existen precisamente porque el tema cambia el papel de un color:
+> **El sentido de giro de los anillos.** D3 decide cuál es el interior de un
+> polígono por el sentido de su anillo, con el criterio **inverso** al del
+> RFC 7946 de GeoJSON: exterior **horario**. Un anillo al revés no se ve mal,
+> se ve como el mundo entero **menos** el municipio, y basta uno para que el
+> departamento quede reducido a un punto porque el encuadre se calcula sobre
+> esa extensión.
+>
+> `UHP_Topojson::orientar()` normaliza anillo a anillo. Vive ahí y no dentro
+> del constructor de la topología porque la usan **los dos** mapas que dibuja
+> D3 —el geomapa por la vía del TopoJSON y el tablero por la del GeoJSON—, y
+> duplicar la regla es duplicar la ocasión de que solo uno la aplique. Hay
+> una prueba de datos que mide el sentido de los 64 municipios y otra de
+> navegador que comprueba que sus extensiones en pantalla son distintas
+> entre sí: con los anillos al revés todas medirían lo mismo.
 
-| Token | Oscuro | Claro | Por qué |
+#### 4.8.3 Una sola petición
+
+`GET /tablero` devuelve un `FeatureCollection` con los 64 municipios y, en
+`meta`, la prevalencia de cada subregión y la ficha de cada zona. Filtrar por
+zona, por subregión o por municipio **no vuelve a pedir nada**: todo ocurre
+en el cliente.
+
+Cada municipio lleva lo justo para pintarse, filtrarse y explicarse:
+
+| Campo | Qué es |
+|---|---|
+| `c` | DIVIPOLA |
+| `n` | Nombre, con el que lo escriben los informes |
+| `sub` · `zona` | Subregión y zona de riesgo |
+| `int` | Si el proyecto lo intervino |
+| `lpm` · `hp` | Prevalencias municipales, o `null` |
+| `casos` | Casos de cáncer detectados |
+| `lat` · `lon` | Centroide, para el círculo del caso |
+
+La geometría sale de `UHP_Topojson::features()`, la misma autoridad que
+alimenta al geomapa de D3plus: los dos mapas no pueden divergir porque leen
+el mismo origen.
+
+**Los rótulos no son los de la cartografía.** El DANE escribe «Colón», «Los
+Andes», «Santacruz»; los informes del proyecto escriben «Colón (Génova)»,
+«Los Andes (Sotomayor)», «Santacruz (Guachavés)». En un mapa del departamento
+la segunda forma es la útil: «Colón» a secas no distingue nada para quien
+vive allí, y hay otro Colón en Putumayo.
+`UHP_Municipios::nombre_de_lectura()` resuelve el rótulo desde la lista de
+cobertura del proyecto y cae en la cartografía cuando el proyecto no nombra
+ese municipio. **El cruce sigue siendo por DIVIPOLA**: esto solo decide qué
+texto se enseña.
+
+#### 4.8.4 Tres reglas de honestidad que el dibujo sostiene
+
+- **Un municipio sin cifra propia se pinta con la de su subregión**, pero
+  atenuado (`fill-opacity: .72`) y diciéndolo: el tooltip marca «(subregión)»
+  y la ficha lo escribe. El informe solo publica los extremos de la
+  distribución municipal —15 de 55 en LPM, 10 en H. pylori—; dejar en gris a
+  los cuarenta restantes escondería lo que sí se sabe de ellos.
+- **Un municipio no intervenido no se colorea en absoluto**: trama
+  discontinua y sin relleno. No es que falte el dato, es que el proyecto no
+  estuvo allí. Son dos estados distintos y el mapa los distingue.
+- **Un municipio sin casos tiene cero casos**, no un dato que falte: el
+  tamizaje lo cubrió y no encontró ninguno.
+
+A eso se suma lo que el tablero **no** hace: el perfil de los 5.000
+participantes no responde a los filtros. Está publicado para el conjunto, no
+municipio a municipio; si se redibujara con la selección parecería responder
+a ella. Va en el HTML y el JavaScript no lo toca, y hay una prueba que
+comprueba que no cambia al filtrar.
+
+Dos cifras del tablero **son estimaciones y lo dicen en su propio rótulo**:
+«Participantes est.» reparte los 5.000 a partes iguales entre los municipios
+seleccionados —el proyecto no publica cuántos aportó cada uno— y lleva
+«prorrateo sobre 5.000» al pie. El promedio de prevalencia de la selección
+lleva al lado la cifra departamental para que se lea contra ella.
+
+#### 4.8.5 La zona de riesgo es una derivación declarada
+
+El tablero colorea y filtra por zona, pero **los documentos fuente no
+reparten el departamento entre las tres**: describen cada una («norte y
+suroccidente», «Pasto y aledaños», «costa Pacífica») y nombran unos pocos
+territorios de referencia.
+
+`17_zonas_riesgo_subregion.json` recoge la asignación **por subregión** —trece
+filas verificables en vez de sesenta y cuatro decisiones sueltas— y la marca
+en su `_meta` como derivación, no como dato publicado. El archivo trae además
+su propia comprobación: los seis territorios que la presentación de cierre
+nombra como referencia caen todos en la zona que les corresponde
+(Túquerres→La Sabana→roja, Pasto→Centro→amarilla, Tumaco→Pacífico Sur→verde…).
+Esa comprobación **se ejecuta en la suite**, no se afirma en un comentario.
+
+#### 4.8.6 Un solo tema
+
+No hay variante clara. El tablero se diseñó sobre fondo `#080d11` y la rampa
+del mapa, los estados de los filtros y todos los contrastes están calculados
+sobre él: una versión clara no es cambiar cuatro tokens, es rehacer la rampa.
+El atributo `tema` que existía antes se retiró.
+
+La hoja mantiene la regla de siempre: **ni un color literal fuera del bloque
+de tokens**, y hay una prueba que lo comprueba descartando los comentarios
+—un color citado en prosa no es una declaración que se haya colado—.
+
+#### 4.8.7 Aislamiento
+
+El diseño original era una página suelta y estilizaba `header`, `main`,
+`.card`, `.kpi`… en selectores de elemento y de clase genérica. Dentro de
+WordPress eso alcanzaría al tema y a cualquier otro plugin de la página. Aquí
+**cada regla nace de `.uhp-db`** y cada clase lleva el prefijo `uhp-db__`: el
+resultado visual es el mismo y el radio de acción es el contenedor. Una
+prueba recorre la hoja y falla si aparece un selector que no empiece por
+`.uhp-db`.
+
+El reinicio `*{margin:0;padding:0}` del diseño también se acotó al
+contenedor, y la hoja **no depende de `uhp.css`**: el tablero define su propia
+retícula y su propia tipografía, y heredar los tokens del resto del plugin
+solo introduciría colores que luego hay que volver a pisar.
+
+#### 4.8.8 Accesibilidad
+
+- Cada filtro es un `<button>` con `aria-pressed`, no un `<div>` con un clic.
+- El cambio de selección se anuncia en una región `aria-live`: mueve media
+  pantalla sin mover el foco, de modo que un lector de pantalla no se
+  enteraría por su cuenta.
+- La ficha del territorio es `aria-live="polite"`.
+- Las barras apiladas del perfil llevan `role="img"` con su composición en el
+  `aria-label`.
+- **La cifra de cada barra se ancla al relleno, no al borde del track.** El
+  diseño la fijaba al borde y elegía tinta por un umbral; con la barra a
+  media asta eso deja el número medio sobre el relleno y medio sobre el
+  hueco, y la tinta oscura sobre el hueco da **1,17:1**. Anclada al relleno
+  solo hay un fondo debajo: dentro cuando la barra pasa de la mitad (8,4:1 en
+  LPM, 4,5:1 en H. pylori) y fuera cuando no (14,6:1). Para las barras largas
+  —que son la mayoría— se ve igual que en el diseño.
+- Con `prefers-reduced-motion` las transiciones del mapa se apagan y los
+  desplazamientos son instantáneos.
+
+**Dos valores de la paleta se ajustaron para cumplir la norma**, conservando
+tono y saturación:
+
+| Token | Diseño | Aquí | Por qué |
 |---|---|---|---|
-| `--uhp-db-cifra` | `#3FD26E` | `#0B7A2C` | El número grande de la ficha y del tooltip. El verde claro sobre blanco no llega a 2:1 |
-| `--uhp-db-rotulo` | `#FFD500` | `#003366` | El encabezado de la leyenda y el punto del panel. El amarillo institucional sobre blanco tampoco |
-| `--uhp-db-foco` | `#FFD500` | `#003366` | El anillo de foco es un elemento gráfico obligatorio y necesita 3:1 contra lo que tiene al lado |
+| `--uhp-db-ink-3` | `#5f7382` — 3,67:1 | `#728898` — 4,53:1 | Rotula las cabeceras de tarjeta, las etiquetas de las cifras y la subregión de cada municipio: es texto y le toca 4,5:1. El valor se calcula contra la superficie **más clara** sobre la que llega a posarse, la de la rejilla de la ficha; ajustarlo al fondo general dejaría esos rótulos por debajo. |
+| `--uhp-db-borde-control` | *(usaba `--uhp-db-linea`)* — 1,28:1 | `#546f80` — 3,41:1 | La línea que separa un control de su fondo es información visual necesaria para identificarlo (§1.4.11, 3:1). El borde decorativo de las tarjetas no tiene esa obligación y sigue con `--uhp-db-linea`. |
 
-El amarillo institucional no desaparece del tema claro: sigue en la franja de
-identidad de la cabecera y en el punto de riesgo medio, que son elementos
-gráficos con su propio contorno, no texto.
-
-Los puntos de riesgo clínico **sí** se retematizan, al contrario que el resto de
-colores de dato: codifican el nivel de riesgo y tienen que leerse en los dos
-temas, así que en claro se oscurecen y pierden el halo, que sobre blanco solo
-emborrona el punto.
-
-#### 4.8.3 Todo gira alrededor de un territorio
-
-El tablero mantiene **un territorio seleccionado** —el departamento entero, una
-de sus 13 subregiones o uno de sus 64 municipios— y cada pieza se recoloca a su
-alrededor. Se selecciona pulsando en el mapa, pulsando una barra del gráfico,
-en el selector de los controles o navegando por la ficha hacia arriba (su
-subregión) o hacia abajo (sus municipios). Volver a pulsar el territorio ya
-elegido lo deselecciona.
-
-El mapa dibuja **tres capas** —`/geo?nivel=municipio|subregion|departamento`—
-con el contorno del departamento siempre por debajo como marco. Las tres salen
-de `UHP_Topojson::features()`, la misma función de la que se construye la
-topología de D3plus: los dos mapas del plugin dibujan así el mismo
-departamento, vértice a vértice, y no pueden divergir con un cambio en uno solo.
-
-Al cambiar de vista en el panel, **el mapa sigue a la vista**: si el gráfico
-pasa a hablar de subregiones, el mapa se dibuja por subregiones. Las vistas
-departamentales no mueven la capa, porque no tienen un nivel al que llevarla.
-
-#### 4.8.4 Lo que no se puede filtrar se dice
-
-Es la regla que sostiene la honestidad del tablero. De las 27 vistas del
-catálogo, 5 nombran municipios y 3 subregiones: **las otras 19 solo existen para
-el conjunto del departamento**. De los 6 indicadores del cintillo, 2 no están
-desagregados en ninguna fuente.
-
-`UHP_Territorios` decide, para cada indicador y cada nivel, en cuál de estas
-cuatro condiciones está la cifra, y la condición viaja con ella hasta la
-interfaz:
-
-| Condición | Qué significa | Cómo se ve |
-|---|---|---|
-| `publicado` | El proyecto publica ese dato para ese territorio | La cifra, sin marca |
-| `sin_dato` | Se publica a ese nivel, pero no para ese territorio | Una raya, no un cero |
-| `agregado` | No viene dado, pero se suma de sus municipios sin inventar nada | Marca «suma» |
-| `departamental` | No se desagrega por territorio en ninguna fuente | Marca «departamental» y filete amarillo |
-
-Enseñar el 67,4 % de infección del departamento con «Telembí» seleccionado, sin
-decir que esa cifra es departamental, es afirmar algo que el proyecto no ha
-medido. Un tablero público de una entidad no puede hacer eso. Cuando la vista
-del panel no puede hablar del territorio elegido, el análisis lo advierte antes
-que el texto.
-
-**Dos cosas que el tablero NO hace, a propósito:**
-
-- **No promedia prevalencias** de municipios para obtener la de su subregión.
-  Son porcentajes sobre bases distintas y sin las bases no hay media ponderada
-  posible; el promedio simple daría un número verosímil y falso. La subregión
-  usa su valor publicado o ninguno.
-- **No reparte** los 5.000 participantes ni las muestras del biobanco entre
-  territorios. No están desagregados en ninguna fuente.
-
-Lo que sí se agrega son **conteos**: casos de cáncer y municipios intervenidos
-se suman por subregión, porque sumar casos no inventa nada. Una prueba comprueba
-que esas sumas cuadran con los totales del departamento (8 casos, 55
-municipios).
-
-#### 4.8.5 Cero no es «sin dato»
-
-Un cero es una cifra; «sin dato» es la ausencia de una. Confundirlos deforma la
-lectura, y el plugin lo hacía en dos sitios hasta que se corrigió:
-
-- El renderer descartaba las filas cuyo valor era cero. En la serie de
-  producción científica eso borraba cinco años —2020, 2021, 2023, 2024 y 2025— y
-  la línea saltaba de 2019 a 2022 como si no hubiera habido años de por medio,
-  cuando lo que hubo fue un vacío de publicaciones: justo lo que había que ver.
-- El geomapa subregional descartaba las subregiones con conteo cero y las
-  pintaba como «sin dato publicado». De esas subregiones sí se sabe, y lo que
-  se sabe es que no tienen casos documentados.
-
-Hay dos pruebas de navegador que lo vigilan, y una tercera comprueba que **cada
-gráfico dibuja una marca por fila**: lo que publica la API es lo que se ve. Esa
-última cuenta marcas y no rótulos a propósito —D3plus escribe la etiqueta dentro
-de cada barra y la acorta cuando no cabe, pero acortar un rótulo no es perder un
-dato: la barra está, y el nombre completo sigue en el tooltip y en la tabla de
-datos.
-
-#### 4.8.6 La capa base sigue al tema
-
-`teselas` por defecto vale `auto`: la capa base la decide el tema —clara con el
-tema claro, oscura con el oscuro—. Un tablero claro con teselas oscuras se lee
-fatal y es el descuido más fácil de cometer al cambiar solo el tema. Pedir una
-capa concreta (`teselas="humanitario"`) sigue mandando sobre el automatismo.
-
-#### 4.8.7 Accesibilidad
-
-Todos los pares tinta/fondo se verificaron **en el navegador, sobre el tablero
-ya pintado**, en los dos temas: mínimo 7,15:1 en oscuro y 5,48:1 en claro, por
-encima del 4,5:1 que exige el Anexo 1 de la Resolución 1519 de 2020 para texto
-normal.
-
-#### 4.8.8 Tokens propios
-
-Los tokens del tablero se declaran con prefijo propio (`--uhp-db-*`) en vez de
-reutilizar los `--uhp3d-*`, porque el objeto 3D puede no estar en la página.
-Una prueba de navegador compara ambos conjuntos y avisa si la paleta de la
-escena cambia y el tablero se queda atrás.
+Son cambios de un punto de luminosidad, apenas perceptibles al lado del
+diseño original, y la prueba de contraste los sostiene: mide los colores que
+el navegador computa de verdad, de modo que un retoque futuro que los rompa
+falla la suite en vez de llegar a producción.
 
 ---
 
@@ -781,11 +813,11 @@ npm run test:datos   # capa de datos, sin WordPress
 npm test             # lo anterior más las pruebas de navegador
 ```
 
-### 8.1 Capa de datos — 417 comprobaciones
+### 8.1 Capa de datos — 430 comprobaciones
 
 `tests/test-datos.php` ejecuta las clases del plugin fuera de WordPress, con
 sustitutos mínimos de sus funciones (`tests/stubs-wordpress.php`). Comprueba
-que los diecinueve archivos se leen y cumplen su contrato, que la topología que
+que los veinte archivos se leen y cumplen su contrato, que la topología que
 consume D3plus se construye bien —anillos cerrados, sentido de giro correcto,
 error de cuantización por debajo del 0,03 % y subregiones disueltas—, que el saneador de CSS
 neutraliza lo peligroso **y conserva intacto lo legítimo**, que los 55
@@ -807,7 +839,7 @@ silencioso:
   Ofrecerlo en una vista sin territorio produciría un mapa vacío; no ofrecerlo
   en una que sí lo tiene esconde la mitad de la lectura.
 
-### 8.2 Navegador — 62 pruebas
+### 8.2 Navegador — 60 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a
@@ -828,12 +860,21 @@ enciende y se apaga desde el shortcode con su atribución, y que cada topología
 se descarga una sola vez por página; que el mapa pinta los 64 municipios sobre OpenStreetMap con su
 leyenda y su atribución, que cambiar de indicador no vuelve a descargar la
 geometría y que los polígonos son accesibles con teclado; que el tablero ocupa
-el 100 % de ancho y 100vh de alto, que sus filtros responden, que al pulsar un
-municipio se abre su ficha, que los paneles se pliegan, que en móvil las zonas
-se apilan sin desbordar y que **el tema claro no deja ni una superficie oscura
-dentro** —ni en los controles, ni en la ficha, ni en la leyenda, ni en la
-atribución del mapa—, con la capa base y la tinta de los gráficos siguiendo al
-tema; que las cifras, la ficha y la tabla llegan en el HTML
+el 100 % de ancho y 100vh de alto sin desbordar, que su mapa dibuja los 64
+municipios **cada uno con su propia extensión** —la prueba del sentido de
+giro: con los anillos al revés todos medirían lo mismo—, que los siete
+municipios con caso llevan su círculo, que filtrar por zona o por subregión
+recorta la lista, las cifras y el título del mapa, que elegir un municipio
+abre su ficha y lo resalta, que el tablero **dice cuándo la cifra es de la
+subregión y no del municipio**, que cambiar de indicador repinta leyenda,
+barras y cifras, que la cifra de cada barra se lee sobre el fondo que le toca,
+que «Limpiar» devuelve el estado inicial, que el zoom mueve el mapa, que el
+**perfil de los participantes NO responde a los filtros**, que el cambio se
+anuncia a los lectores de pantalla, que en móvil las columnas se apilan sin
+desbordar, que **todos los pares tinta/fondo cumplen la norma de contraste**
+—medidos sobre los colores ya computados por el navegador, no sobre los
+tokens— y que **el tablero no se apodera de la página que lo contiene**;
+que las cifras, la ficha y la tabla llegan en el HTML
 **con el JavaScript desactivado**; y que mapa, gráfico y escena 3D funcionan
 juntos en una misma página con una sola instancia de cada librería.
 

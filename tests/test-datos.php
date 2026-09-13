@@ -51,8 +51,8 @@ echo "\n1. Archivos del conjunto\n";
 
 $registro = UHP_Datos::registro();
 comprobar(
-	19 === count( $registro ),
-	sprintf( 'El registro declara los 17 archivos JSON y las dos capas de geometría (%d entradas)', count( $registro ) )
+	20 === count( $registro ),
+	sprintf( 'El registro declara los 18 archivos JSON y las dos capas de geometría (%d entradas)', count( $registro ) )
 );
 
 // La cartografía tiene su propio tope de tamaño: si volviera a compartirlo
@@ -679,111 +679,253 @@ comprobar(
 );
 
 /* ---------------------------------------------------------------- */
-echo "\n5d. Tema del tablero\n";
+echo "\n5d. Tablero\n";
 
-$sc = new GobernacionNarino\Urkunina\UHP_Shortcodes();
-
-$oscuro = $sc->sc_dashboard( array() );
-$claro  = $sc->sc_dashboard( array( 'tema' => 'claro' ) );
-$raro   = $sc->sc_dashboard( array( 'tema' => 'fucsia' ) );
+$sc      = new GobernacionNarino\Urkunina\UHP_Shortcodes();
+$tablero = $sc->sc_dashboard( array() );
 
 comprobar(
-	false !== strpos( $oscuro, 'uhp-db--oscuro' ) && false !== strpos( $oscuro, 'data-tema="oscuro"' ),
-	'Sin atributo, el tablero sale en el tema oscuro'
-);
-comprobar(
-	false !== strpos( $claro, 'uhp-db--claro' ) && false !== strpos( $claro, 'data-tema="claro"' ),
-	'tema="claro" marca el tablero con su clase y su atributo'
-);
-comprobar(
-	false !== strpos( $raro, 'uhp-db--oscuro' ),
-	'Un tema desconocido cae al oscuro, que es la identidad del proyecto'
+	false !== strpos( $tablero, 'data-uhp-tablero' ) && false !== strpos( $tablero, 'class="uhp-db"' ),
+	'El tablero imprime su contenedor'
 );
 
-// La capa base sigue al tema salvo que se pida una concreta: un tablero
-// claro con teselas oscuras es el descuido más fácil al cambiar el tema.
+/* El marcado sale completo y VACÍO: lo rellena el JavaScript con una sola
+   petición. Lo que no depende de los datos —el perfil de los 5.000, la
+   leyenda, los rótulos— tiene que llegar ya en el HTML, de modo que la
+   página diga algo antes de la respuesta y lo siga diciendo si no llega. */
+$zonas_esperadas = array(
+	'kpis', 'zonas', 'mlista', 'mapa', 'tip', 'mapatitulo',
+	'leyenda-titulo', 'rampa', 'bars', 'detalle', 'detalle-titulo', 'estado',
+);
+$faltan = array();
+foreach ( $zonas_esperadas as $z ) {
+	if ( false === strpos( $tablero, 'data-uhp-zona="' . $z . '"' ) ) {
+		$faltan[] = $z;
+	}
+}
 comprobar(
-	false !== strpos( $claro, 'data-teselas="claro"' ),
-	'El tablero claro pide la capa base clara'
+	0 === count( $faltan ),
+	sprintf( 'El marcado declara todas sus zonas%s', $faltan ? ' — faltan: ' . implode( ', ', $faltan ) : '' )
+);
+
+comprobar(
+	4 === substr_count( $tablero, 'class="uhp-db__stack"' ),
+	'El perfil de los participantes llega en el HTML, sin JavaScript'
 );
 comprobar(
-	false !== strpos( $oscuro, 'data-teselas="oscuro"' ),
-	'El tablero oscuro pide la capa base oscura'
+	false !== strpos( $tablero, '64,2' ) && false !== strpos( $tablero, '48,2' ),
+	'El perfil trae sus cifras ya escritas'
 );
-$forzado = $sc->sc_dashboard(
-	array(
-		'tema'    => 'claro',
-		'teselas' => 'humanitario',
-	)
+
+// Un solo tema. El tablero se diseñó sobre fondo oscuro y la rampa del
+// mapa está calculada sobre él: no hay atributo de tema que atender.
+comprobar(
+	false === strpos( $tablero, 'data-tema' ) && false === strpos( $tablero, 'uhp-db--claro' ),
+	'El tablero no ofrece temas: el diseño es uno solo'
+);
+
+$hp = $sc->sc_dashboard( array( 'indicador' => 'hp' ) );
+comprobar(
+	false !== strpos( $hp, 'data-indicador="hp"' ),
+	'El shortcode elige con qué indicador arranca'
 );
 comprobar(
-	false !== strpos( $forzado, 'data-teselas="humanitario"' ),
-	'Una capa base pedida a mano manda sobre la del tema'
+	false !== strpos( $sc->sc_dashboard( array( 'indicador' => 'fucsia' ) ), 'data-indicador="lpm"' ),
+	'Un indicador desconocido cae en lesión precursora'
 );
 
 /* La hoja del tablero tiene una regla: ni un color literal fuera del
-   bloque de tokens. Es lo que permite que el tema claro se limite a
-   redefinirlos, y lo que evita que un color se quede oscuro por descuido. */
-$hoja = file_get_contents( UHP_DIR . 'assets/css/uhp-dashboard.css' );
-$tras = substr( $hoja, strpos( $hoja, '/* Foco visible' ) );
-preg_match_all( '/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/', $tras, $literales );
-$colados = array_values(
-	array_filter(
-		$literales[0],
-		static function ( $c ) {
-			// La parada transparente de la franja de identidad es la misma
-			// en los dos temas: no hay nada que retematizar.
-			return 'rgba(255, 213, 0, 0)' !== $c;
-		}
-	)
-);
+   bloque de tokens. Es lo que permite leer de un vistazo la paleta entera
+   y cambiarla en un sitio. */
+$hoja = file_get_contents( dirname( __DIR__ ) . '/assets/css/uhp-dashboard.css' );
+// Los comentarios se descartan antes de buscar: la cabecera de la hoja
+// NOMBRA el fondo del diseño para explicar por qué no hay tema claro, y
+// un color citado en prosa no es una declaración que se haya colado.
+$hoja_sin_prosa   = preg_replace( '/\/\*.*?\*\//s', '', $hoja );
+preg_match( '/\.uhp-db \{(.*?)\n\}/s', $hoja_sin_prosa, $bloque );
+$fuera_del_bloque = str_replace( $bloque[0], '', $hoja_sin_prosa );
+preg_match_all( '/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/', $fuera_del_bloque, $literales );
+$colados = array_values( array_unique( $literales[0] ) );
 comprobar(
 	0 === count( $colados ),
 	sprintf(
 		'La hoja del tablero no usa colores literales fuera de los tokens%s',
-		$colados ? ' — colados: ' . implode( ', ', array_unique( $colados ) ) : ''
+		$colados ? ' — colados: ' . implode( ', ', $colados ) : ''
 	)
 );
 
-// Y el tema claro tiene que redefinir TODOS los tokens de color, no solo
-// algunos: uno olvidado se queda oscuro sobre fondo blanco.
-preg_match( '/\.uhp-db \{(.*?)\n\}/s', $hoja, $bloque_oscuro );
-preg_match( '/\.uhp-db--claro \{(.*?)\n\}/s', $hoja, $bloque_claro );
-preg_match_all( '/--uhp-db-[a-z0-9-]+(?=\s*:)/', $bloque_oscuro[1], $t_oscuro );
-preg_match_all( '/--uhp-db-[a-z0-9-]+(?=\s*:)/', $bloque_claro[1], $t_claro );
-
-// Los que NO dependen del tema: identidad de marca y medidas.
-$compartidos = array(
-	'--uhp-db-verde',
-	'--uhp-db-verde-claro',
-	'--uhp-db-amarillo',
-	'--uhp-db-alarma',
-	'--uhp-db-r-s',
-	'--uhp-db-r-m',
-	'--uhp-db-cab',
-	'--uhp-db-lateral',
-	'--uhp-db-panel-ancho',
-);
-$sin_redefinir = array_diff( $t_oscuro[0], $t_claro[0], $compartidos );
+/* Todo el CSS del tablero nace de `.uhp-db`. El diseño original era una
+   página suelta y estilizaba `header`, `main`, `.card`…; dentro de
+   WordPress eso alcanzaría al tema y a los demás plugins. */
+$reglas = preg_split( '/\}/', preg_replace( '/\/\*.*?\*\//s', '', $hoja ) );
+$sueltos = array();
+foreach ( $reglas as $regla ) {
+	$sel = trim( substr( $regla, 0, strpos( $regla . '{', '{' ) ) );
+	if ( '' === $sel || 0 === strpos( $sel, '@' ) || false !== strpos( $sel, '{' ) ) {
+		continue;
+	}
+	foreach ( explode( ',', $sel ) as $uno ) {
+		$uno = trim( $uno );
+		if ( '' !== $uno && 0 !== strpos( $uno, '.uhp-db' ) ) {
+			$sueltos[] = $uno;
+		}
+	}
+}
 comprobar(
-	0 === count( $sin_redefinir ),
+	0 === count( $sueltos ),
 	sprintf(
-		'El tema claro redefine todos los tokens que dependen del tema%s',
-		$sin_redefinir ? ' — faltan: ' . implode( ', ', $sin_redefinir ) : ''
+		'Todo selector de la hoja nace de .uhp-db%s',
+		$sueltos ? ' — sueltos: ' . implode( ' | ', array_slice( array_unique( $sueltos ), 0, 5 ) ) : ''
 	)
 );
 
 /* Los ajustes nuevos tienen que llegar a las instalaciones que ya tenían
-   la opción guardada: crear la opción solo si falta dejaba sin `tema` a
-   todo el que actualizara. */
+   la opción guardada. */
 $defectos = GobernacionNarino\Urkunina\UHP_Activator::dashboard_por_defecto();
 comprobar(
-	isset( $defectos['tema'] ) && 'oscuro' === $defectos['tema'],
-	'El tablero declara su tema por defecto'
+	isset( $defectos['indicador'] ),
+	'El tablero declara su indicador por defecto'
 );
+
+/* La carga que consume: los 64 municipios con lo justo para pintarse. */
+$carga = GobernacionNarino\Urkunina\UHP_Rest::carga_tablero();
 comprobar(
-	isset( $defectos['teselas'] ) && 'auto' === $defectos['teselas'],
-	'La capa base por defecto es «auto»: sigue al tema'
+	isset( $carga['type'] ) && 'FeatureCollection' === $carga['type'] && 64 === count( $carga['features'] ),
+	sprintf( 'La carga del tablero trae los 64 municipios (%d)', count( $carga['features'] ) )
+);
+
+$campos = array( 'c', 'n', 'sub', 'zona', 'int', 'lpm', 'hp', 'casos', 'lat', 'lon' );
+$completos = true;
+$intervenidos = 0;
+$con_geometria = 0;
+foreach ( $carga['features'] as $f ) {
+	foreach ( $campos as $campo ) {
+		if ( ! array_key_exists( $campo, $f['properties'] ) ) {
+			$completos = false;
+		}
+	}
+	if ( ! empty( $f['properties']['int'] ) ) {
+		$intervenidos++;
+	}
+	if ( ! empty( $f['geometry']['coordinates'] ) ) {
+		$con_geometria++;
+	}
+}
+comprobar( $completos, 'Cada municipio de la carga trae todos sus campos' );
+comprobar( 55 === $intervenidos, sprintf( 'La carga marca los 55 municipios intervenidos (%d)', $intervenidos ) );
+comprobar( 64 === $con_geometria, sprintf( 'Los 64 municipios traen geometría (%d)', $con_geometria ) );
+
+/* El sentido de giro de los anillos. D3 decide el interior del polígono
+   por él, con el criterio INVERSO al del RFC 7946: exterior horario. Un
+   anillo al revés se dibuja como el mundo entero menos el municipio, y
+   basta uno para que el departamento quede reducido a un punto. */
+$mal_orientados = array();
+foreach ( $carga['features'] as $f ) {
+	$g = $f['geometry'];
+	$poligonos = ( 'Polygon' === $g['type'] ) ? array( $g['coordinates'] ) : $g['coordinates'];
+	foreach ( $poligonos as $poligono ) {
+		foreach ( $poligono as $i => $anillo ) {
+			$a = 0.0;
+			$n = count( $anillo );
+			for ( $j = 0, $k = $n - 1; $j < $n; $k = $j, $j++ ) {
+				$a += ( $anillo[ $k ][0] * $anillo[ $j ][1] ) - ( $anillo[ $j ][0] * $anillo[ $k ][1] );
+			}
+			$es_horario   = ( $a / 2 ) < 0;
+			$debe_horario = ( 0 === $i );
+			if ( $es_horario !== $debe_horario ) {
+				$mal_orientados[] = $f['properties']['n'];
+			}
+		}
+	}
+}
+comprobar(
+	0 === count( $mal_orientados ),
+	sprintf(
+		'Los anillos van en el sentido que espera D3, exterior horario%s',
+		$mal_orientados ? ' — al revés: ' . implode( ', ', array_slice( array_unique( $mal_orientados ), 0, 4 ) ) : ''
+	)
+);
+
+/* Zona de riesgo: es una DERIVACIÓN, no un dato publicado. El archivo
+   trae su comprobación contra los territorios de referencia que sí
+   publica la presentación, y aquí se ejecuta. */
+$verif = UHP_Datos::valor( 'zonas', 'verificacion.referencias', array() );
+comprobar( 6 === count( $verif ), sprintf( 'La tabla de zonas declara sus 6 referencias (%d)', count( $verif ) ) );
+
+$descuadran = array();
+foreach ( $verif as $r ) {
+	if ( $r['zona_fuente'] !== $r['zona_tabla'] ) {
+		$descuadran[] = $r['nombre'];
+	}
+	if ( GobernacionNarino\Urkunina\UHP_Subregiones::zona_de( $r['subregion'] ) !== $r['zona_fuente'] ) {
+		$descuadran[] = $r['nombre'] . ' (índice)';
+	}
+}
+comprobar(
+	0 === count( $descuadran ),
+	sprintf(
+		'Cada territorio de referencia cae en la zona que le da la fuente%s',
+		$descuadran ? ' — descuadran: ' . implode( ', ', $descuadran ) : ''
+	)
+);
+
+$sin_zona = array();
+foreach ( $carga['features'] as $f ) {
+	if ( '' === $f['properties']['zona'] ) {
+		$sin_zona[] = $f['properties']['n'];
+	}
+}
+comprobar(
+	0 === count( $sin_zona ),
+	sprintf(
+		'Los 64 municipios tienen zona asignada%s',
+		$sin_zona ? ' — sin zona: ' . implode( ', ', array_slice( $sin_zona, 0, 4 ) ) : ''
+	)
+);
+
+/* El promedio del tablero se calcula solo sobre los municipios que tienen
+   cifra. Dos subregiones de la costa —Pacífico Sur y Sanquianga— no la
+   tienen publicada; hoy ninguno de sus municipios fue intervenido, así que
+   el caso no se da. Se comprueba que sigue sin darse: el día que aparezca
+   uno, el promedio del tablero tendría que dejar de contarlo como cero. */
+$sub_con_cifra = $carga['meta']['subregional'];
+$sin_ninguna   = array();
+foreach ( $carga['features'] as $f ) {
+	$p = $f['properties'];
+	if ( empty( $p['int'] ) ) {
+		continue;
+	}
+	foreach ( array( 'lpm', 'hp' ) as $ind ) {
+		$hay_sub = isset( $sub_con_cifra[ $p['sub'] ][ $ind ] ) && null !== $sub_con_cifra[ $p['sub'] ][ $ind ];
+		if ( null === $p[ $ind ] && ! $hay_sub ) {
+			$sin_ninguna[] = $p['n'] . ' (' . $ind . ')';
+		}
+	}
+}
+comprobar(
+	0 === count( $sin_ninguna ),
+	sprintf(
+		'Todo municipio intervenido tiene cifra, propia o de su subregión%s',
+		$sin_ninguna ? ' — sin ninguna: ' . implode( ', ', array_slice( $sin_ninguna, 0, 4 ) ) : ''
+	)
+);
+
+comprobar(
+	11 === count( $sub_con_cifra ),
+	sprintf( 'La carga trae las 11 subregiones con prevalencia publicada (%d)', count( $sub_con_cifra ) )
+);
+
+/* Los rótulos: la cartografía escribe «Colón» y los informes «Colón
+   (Génova)». En un mapa del departamento la segunda es la útil. */
+$por_codigo = array();
+foreach ( $carga['features'] as $f ) {
+	$por_codigo[ $f['properties']['c'] ] = $f['properties']['n'];
+}
+comprobar(
+	'Colón (Génova)' === ( isset( $por_codigo['52203'] ) ? $por_codigo['52203'] : '' )
+		&& 'Los Andes (Sotomayor)' === ( isset( $por_codigo['52418'] ) ? $por_codigo['52418'] : '' )
+		&& 'Santacruz (Guachavés)' === ( isset( $por_codigo['52699'] ) ? $por_codigo['52699'] : '' ),
+	'Los municipios se rotulan como los escriben los informes, no la cartografía'
 );
 
 /* ---------------------------------------------------------------- */

@@ -117,15 +117,13 @@ final class UHP_Assets {
 		// El geomapa no usa Leaflet: es un gráfico de D3plus, de modo que su
 		// hoja no arrastra el CSS del visor de mapas.
 		wp_register_style( self::P . 'geomapa', $css . 'uhp-geomapa.css', array( self::P . 'base' ), UHP_VERSION );
-		// El tablero reutiliza el mapa y el motor de gráficos, así que
-		// depende de sus dos hojas: la leyenda y el tooltip del mapa viven
-		// en uhp-mapa.css y sin ella saldrían sin estilo.
-		wp_register_style(
-			self::P . 'dashboard',
-			$css . 'uhp-dashboard.css',
-			array( self::P . 'base', self::P . 'grafico', self::P . 'mapa' ),
-			UHP_VERSION
-		);
+		// El tablero es autónomo: dibuja su mapa con d3 y no reutiliza ni
+		// el visor de Leaflet ni la tarjeta del motor de gráficos, de modo
+		// que su hoja no arrastra las de ellos. Tampoco depende de `base`:
+		// define su propia retícula y su propia tipografía, y heredar los
+		// tokens del resto del plugin solo introduciría colores que luego
+		// hay que volver a pisar.
+		wp_register_style( self::P . 'dashboard', $css . 'uhp-dashboard.css', array(), UHP_VERSION );
 
 		// Núcleo JS compartido por todos los componentes del front.
 		wp_register_script( self::P . 'core', $js . 'uhp-core.js', array(), UHP_VERSION, true );
@@ -164,14 +162,15 @@ final class UHP_Assets {
 			UHP_VERSION,
 			true
 		);
-		// El tablero NO habla con Leaflet directamente: construye su mapa a
-		// través de UHPMapa, que vive en uhp-mapa.js. Declararlo aquí como
-		// dependencia es lo que garantiza que encolar el tablero arrastre
-		// también el módulo de mapa y, con él, Leaflet.
+		// El tablero dibuja su mapa con d3 puro: proyección, trazado y
+		// zoom propios, sin Leaflet y sin teselas. Declarar d3 aquí es lo
+		// que garantiza que WordPress lo imprima ANTES; omitirlo deja el
+		// archivo corriendo contra un `d3` que aún no existe, que es el
+		// error que ya costó dos módulos rotos en silencio.
 		wp_register_script(
 			self::P . 'dashboard',
 			$js . 'uhp-dashboard.js',
-			array( self::P . 'core', self::P . 'renderer', self::P . 'mapa' ),
+			array( self::handle( 'd3' ), self::P . 'core' ),
 			UHP_VERSION,
 			true
 		);

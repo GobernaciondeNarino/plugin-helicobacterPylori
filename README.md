@@ -15,13 +15,13 @@ conoce al volcán Galeras.
 
 ## Qué hace
 
-Convierte el conjunto de datos del proyecto —diecisiete archivos JSON más la
+Convierte el conjunto de datos del proyecto —dieciocho archivos JSON más la
 cartografía municipal y subregional— en componentes publicables desde el editor
 de WordPress:
 
 | Componente | Shortcode |
 |---|---|
-| Tablero interactivo con mapa, controles, filtros y gráficos enlazados | `[urkunina_dashboard tema="oscuro\|claro"]` |
+| Tablero de resultados: mapa del departamento, filtros y lectura del territorio | `[urkunina_dashboard]` |
 | Recreación 3D de *Helicobacter pylori* con línea de tiempo | `[urkunina_3d]` |
 | Gráfico de cualquiera de las 27 vistas del catálogo, con el mapa entre sus tipos | `[urkunina_grafico view="…" type="…"]` |
 | Mapa coroplético de los 64 municipios sobre OpenStreetMap | `[urkunina_mapa]` |
@@ -108,24 +108,37 @@ Publicar el tablero requiere una plantilla de página de ancho completo y sin
 barra lateral: el contenedor ocupa el 100 % del ancho y toda la altura de la
 ventana.
 
-Es **interactivo de punta a punta**: mantiene un territorio seleccionado —el
-departamento, una de sus 13 subregiones o uno de sus 64 municipios— y todo lo
-demás se recoloca a su alrededor. Se selecciona pulsando en el mapa, en una
-barra del gráfico, en el selector o navegando por la ficha. El mapa dibuja las
-tres capas territoriales y sigue a la vista que se elija en el panel.
+Es **interactivo de punta a punta** y con una sola petición: los 64 municipios
+llegan con su geometría y sus cifras, y filtrar por zona, por subregión o por
+municipio no vuelve a pedir nada. Se selecciona pulsando en el mapa, en la
+lista de municipios, en una barra de subregión o en la lista de casos, y todo
+lo demás se recoloca alrededor.
 
-Y **lo que no se puede filtrar, lo dice**: 19 de las 27 vistas y 2 de los 6
-indicadores solo existen para el conjunto del departamento, así que cuando una
-pieza no puede responder por el territorio elegido lo anuncia en vez de enseñar
-la cifra departamental como si fuera local.
+El mapa lo dibuja **D3 directamente** —proyección Mercator, zoom y arrastre
+propios—, sin Leaflet y sin teselas: el tablero habla de los 64 municipios de
+Nariño y una capa de calles no aporta a esa lectura.
 
-Tiene **dos temas**. El oscuro es el de por defecto y viste la misma paleta que
-el objeto 3D —fondo oscuro, verde y amarillo institucionales— para que ambos se
-lean como una sola pieza. El claro, `[urkunina_dashboard tema="claro"]`, sirve
-para páginas de fondo blanco y para imprimir. El tema viste todo el tablero:
-paneles, controles, fichas, la leyenda y la atribución del mapa, la capa base de
-cartografía y la tinta con la que se dibujan los gráficos. También se elige de
-una vez para todo el sitio en **URKUNINA 5000 → Componentes**.
+Y **lo que no se puede afirmar, lo dice**:
+
+- Un municipio **sin cifra propia** se pinta con la de su subregión, pero
+  atenuado, y tanto el tooltip como la ficha lo marcan. El informe solo publica
+  los extremos de la distribución municipal.
+- Un municipio **no intervenido** no se colorea: va con trama discontinua. No
+  falta el dato, es que el proyecto no estuvo allí.
+- Un municipio **sin casos** tiene cero casos, no un hueco.
+- El **perfil de los 5.000 participantes no responde a los filtros**: está
+  publicado para el conjunto, no municipio a municipio.
+- La cifra de **participantes por selección es un prorrateo** y lo dice en su
+  propio rótulo.
+
+La **zona de riesgo** que colorea los filtros es una derivación declarada: los
+documentos describen las tres zonas y nombran territorios de referencia, pero
+no reparten el departamento entre ellas. La asignación se hace por subregión,
+vive en `data/17_zonas_riesgo_subregion.json` marcada como derivación, y trae
+su propia comprobación contra esas referencias —que la suite ejecuta—.
+
+El tablero tiene **un solo tema**, el oscuro sobre el que se diseñó: la rampa
+del mapa y todos los contrastes están calculados sobre él.
 
 ---
 
@@ -178,7 +191,7 @@ GET /wp-json/urkunina/v1/render?view=…      → datos listos para graficar
 GET /wp-json/urkunina/v1/mapa?indicador=…   → valores por municipio
 GET /wp-json/urkunina/v1/geo                → geometría municipal
 GET /wp-json/urkunina/v1/kpi                → cifras clave
-GET /wp-json/urkunina/v1/dashboard          → todo lo que necesita el tablero
+GET /wp-json/urkunina/v1/tablero            → todo lo que necesita el tablero
 ```
 
 Todas son públicas y de solo lectura, con límite de peticiones por IP.
@@ -193,8 +206,8 @@ cáncer detectado: esa información no está en los documentos fuente.
 
 ```bash
 npm install          # instala Playwright
-npm run test:datos   # 417 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 62 pruebas de navegador
+npm run test:datos   # 430 comprobaciones de la capa de datos, sin WordPress
+npm test             # lo anterior más 60 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los
