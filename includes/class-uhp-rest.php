@@ -280,12 +280,12 @@ final class UHP_Rest {
 	 *   casos casos de cáncer detectados
 	 *   lat   latitud del centroide    lon  longitud
 	 *
-	 * `lpm` y `hp` van a null cuando el informe no publica cifra municipal,
-	 * que es lo normal: solo se publican los extremos de la distribución.
-	 * El tablero cae entonces en la cifra de la subregión y LO DICE. De ahí
-	 * que `meta.subregional` viaje en la misma respuesta: sin ella, el mapa
-	 * tendría que dejar en gris a cuarenta y tantos municipios sobre los
-	 * que sí se sabe algo.
+	 * `lpm` y `hp` salen de la serie completa de los 55 municipios que el
+	 * proyecto intervino. Van a null en los nueve municipios restantes, que
+	 * no entraron en el estudio: ahí el tablero cae en la cifra de la
+	 * subregión y LO DICE, de ahí que `meta.subregional` viaje en la misma
+	 * respuesta. Antes de que llegara la serie completa, ese null era la
+	 * norma y no la excepción: solo se conocían los extremos.
 	 *
 	 * La geometría sale de UHP_Topojson::features(), la misma autoridad que
 	 * alimenta al geomapa de D3plus: los dos mapas no pueden divergir
@@ -297,9 +297,15 @@ final class UHP_Rest {
 	 * @return array
 	 */
 	public static function carga_tablero() {
+		// La serie completa manda; los bloques de extremos quedan detrás como
+		// respaldo. No se contradicen —cada uno de sus valores coincide con
+		// el de la serie, y una prueba lo verifica—, pero si algún día la
+		// serie faltara, el tablero seguiría pintando lo que ya publicaba.
 		$lpm   = self::indice_municipal( 'prev_municipal', 'top10_lesion_precursora_malignidad', 'prevalencia_lpm_porcentaje' );
 		$lpm  += self::indice_municipal( 'prev_municipal', 'menor_prevalencia_lesion_precursora_malignidad', 'prevalencia_lpm_porcentaje' );
+		$lpm   = self::indice_municipal( 'prev_municipal', 'serie_completa', 'prevalencia_lpm_porcentaje' ) + $lpm;
 		$hp    = self::indice_municipal( 'prev_municipal', 'top10_infeccion_h_pylori', 'prevalencia_h_pylori_porcentaje' );
+		$hp    = self::indice_municipal( 'prev_municipal', 'serie_completa', 'prevalencia_h_pylori_porcentaje' ) + $hp;
 		$casos = self::indice_municipal( 'cancer', 'distribucion_por_municipio', 'casos' );
 
 		$rasgos = array();
@@ -928,14 +934,14 @@ final class UHP_Rest {
 				'etiqueta' => 'Lesión precursora de malignidad',
 				'unidad'   => '%',
 				'corto'    => 'LPM',
-				'nota'     => 'Prevalencia entre los participantes del municipio. Solo se publican los diez municipios con mayor prevalencia.',
+				'nota'     => 'Prevalencia entre los participantes del municipio, en los 55 que el proyecto intervino. Los otros nueve no entraron en el estudio.',
 				'escala'   => array( '#FFF8E1', '#FFD500', '#F08A00', '#D64525', '#8C1D18' ),
 			),
 			'hpylori'     => array(
 				'etiqueta' => 'Infección por Helicobacter pylori',
 				'unidad'   => '%',
 				'corto'    => 'H. pylori',
-				'nota'     => 'Prevalencia entre los participantes del municipio. Solo se publican los diez municipios con mayor prevalencia.',
+				'nota'     => 'Prevalencia entre los participantes del municipio, en los 55 que el proyecto intervino. Los otros nueve no entraron en el estudio.',
 				'escala'   => array( '#EAF4FF', '#9CC7E8', '#4A90C2', '#1E5F8C', '#0B2E4A' ),
 			),
 			'cancer'      => array(

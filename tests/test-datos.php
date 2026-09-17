@@ -51,8 +51,8 @@ echo "\n1. Archivos del conjunto\n";
 
 $registro = UHP_Datos::registro();
 comprobar(
-	20 === count( $registro ),
-	sprintf( 'El registro declara los 18 archivos JSON y las dos capas de geometría (%d entradas)', count( $registro ) )
+	21 === count( $registro ),
+	sprintf( 'El registro declara los 19 archivos JSON y las dos capas de geometría (%d entradas)', count( $registro ) )
 );
 
 // La cartografía tiene su propio tope de tamaño: si volviera a compartirlo
@@ -1115,6 +1115,217 @@ comprobar(
 	count( $municipios_ips ) === (int) UHP_Datos::valor( 'acceso_oncologico', 'resumen.municipios_con_oferta', 0 ),
 	'Las IPS se reparten entre tantos municipios como declara el resumen'
 );
+
+/* ---------------------------------------------------------------- */
+echo "\n9. La serie completa de los 55 municipios\n";
+
+$serie = (array) UHP_Datos::valor( 'prev_municipal', 'serie_completa', array() );
+
+comprobar( 55 === count( $serie ), sprintf( 'La serie trae los 55 municipios intervenidos (%d)', count( $serie ) ) );
+
+// El nombre es la llave con la que el mapa encuentra el municipio: si uno
+// se escribiera distinto, su cifra se perdería sin que nada avisara.
+$cobertura = array();
+foreach ( (array) UHP_Datos::valor( 'cobertura', 'municipios', array() ) as $m ) {
+	$cobertura[ $m['municipio'] ] = true;
+}
+$fuera = array();
+foreach ( $serie as $f ) {
+	if ( ! isset( $cobertura[ $f['municipio'] ] ) ) {
+		$fuera[] = $f['municipio'];
+	}
+}
+comprobar( ! $fuera, 'Cada municipio de la serie está en la cobertura' . ( $fuera ? ': ' . implode( ', ', $fuera ) : '' ) );
+comprobar(
+	count( $serie ) === count( array_unique( wp_list_pluck( $serie, 'municipio' ) ) ),
+	'Ningún municipio aparece dos veces en la serie'
+);
+
+// Los dos indicadores son porcentajes y ninguno puede faltar: un municipio
+// de la serie sin cifra sería un hueco disfrazado de dato.
+$rango = true;
+foreach ( $serie as $f ) {
+	foreach ( array( 'prevalencia_lpm_porcentaje', 'prevalencia_h_pylori_porcentaje' ) as $k ) {
+		if ( ! isset( $f[ $k ] ) || ! is_numeric( $f[ $k ] ) || $f[ $k ] < 0 || $f[ $k ] > 100 ) {
+			$rango = false;
+		}
+	}
+}
+comprobar( $rango, 'Los dos indicadores de cada municipio son porcentajes entre 0 y 100' );
+
+// La serie tiene que decir lo mismo que los extremos que ya publicaba el
+// informe preliminar. Son dos fuentes distintas: si discreparan, una de las
+// dos estaría mal leída.
+$por_nombre = array();
+foreach ( $serie as $f ) {
+	$por_nombre[ $f['municipio'] ] = $f;
+}
+$choques = array();
+$bloques = array(
+	array( 'top10_lesion_precursora_malignidad', 'prevalencia_lpm_porcentaje' ),
+	array( 'menor_prevalencia_lesion_precursora_malignidad', 'prevalencia_lpm_porcentaje' ),
+	array( 'top10_infeccion_h_pylori', 'prevalencia_h_pylori_porcentaje' ),
+);
+$cruzados = 0;
+foreach ( $bloques as $b ) {
+	foreach ( (array) UHP_Datos::valor( 'prev_municipal', $b[0], array() ) as $m ) {
+		$n = $m['municipio'];
+		if ( ! isset( $por_nombre[ $n ] ) ) {
+			$choques[] = $n . ' (ausente)';
+			continue;
+		}
+		$cruzados++;
+		if ( abs( (float) $por_nombre[ $n ][ $b[1] ] - (float) $m[ $b[1] ] ) > 0.001 ) {
+			$choques[] = $n;
+		}
+	}
+}
+comprobar(
+	! $choques,
+	sprintf( 'Los %d valores de los extremos coinciden con la serie completa%s', $cruzados, $choques ? ': ' . implode( ', ', $choques ) : '' )
+);
+
+// Doce municipios traen numerador y denominador: el porcentaje tiene que
+// salir de ellos, o la cifra publicada no es la que dicen sus propios datos.
+$con_base = 0;
+$mal      = array();
+foreach ( $serie as $f ) {
+	if ( ! isset( $f['participantes_examinados'], $f['positivos_h_pylori'] ) ) {
+		continue;
+	}
+	$con_base++;
+	$calc = round( $f['positivos_h_pylori'] / $f['participantes_examinados'] * 100, 1 );
+	if ( abs( $calc - (float) $f['prevalencia_h_pylori_porcentaje'] ) > 0.001 ) {
+		$mal[] = sprintf( '%s (%s vs %s)', $f['municipio'], $calc, $f['prevalencia_h_pylori_porcentaje'] );
+	}
+}
+comprobar( 12 === $con_base, sprintf( 'Doce municipios publican numerador y denominador (%d)', $con_base ) );
+comprobar( ! $mal, 'El porcentaje de esos doce sale de su propio numerador' . ( $mal ? ': ' . implode( ', ', $mal ) : '' ) );
+
+// Coherencia con la cifra departamental. No es el método de cálculo —eso lo
+// da 1.755 y 3.370 sobre 5.000— sino una comprobación: si alguien transcribe
+// mal un municipio, la media se aparta y la prueba lo delata.
+$dep_lpm = (float) UHP_Datos::valor( 'tamizaje', 'lesion_precursora_malignidad.positivos.porcentaje', 0 );
+$dep_hp  = (float) UHP_Datos::valor( 'tamizaje', 'infeccion_h_pylori.positivos.porcentaje', 0 );
+$med_lpm = array_sum( wp_list_pluck( $serie, 'prevalencia_lpm_porcentaje' ) ) / count( $serie );
+$med_hp  = array_sum( wp_list_pluck( $serie, 'prevalencia_h_pylori_porcentaje' ) ) / count( $serie );
+comprobar(
+	abs( $med_lpm - $dep_lpm ) < 0.5,
+	sprintf( 'La media de los 55 valores de LPM (%.2f) no se aparta de la cifra departamental (%.1f)', $med_lpm, $dep_lpm )
+);
+comprobar(
+	abs( $med_hp - $dep_hp ) < 0.5,
+	sprintf( 'La media de los 55 valores de H. pylori (%.2f) no se aparta de la cifra departamental (%.1f)', $med_hp, $dep_hp )
+);
+
+/* ---------------------------------------------------------------- */
+echo "\n10. Lo demás que anexó la socialización\n";
+
+$casos = (array) UHP_Datos::valor( 'cancer', 'casos', array() );
+comprobar( 8 === count( $casos ), sprintf( 'Los ocho casos de cáncer están detallados uno a uno (%d)', count( $casos ) ) );
+
+$por_mun = array();
+$estados = array();
+foreach ( $casos as $c ) {
+	$por_mun[ $c['municipio'] ] = isset( $por_mun[ $c['municipio'] ] ) ? $por_mun[ $c['municipio'] ] + 1 : 1;
+	$estados[ $c['estado'] ]    = isset( $estados[ $c['estado'] ] ) ? $estados[ $c['estado'] ] + 1 : 1;
+}
+$declarada = array();
+foreach ( (array) UHP_Datos::valor( 'cancer', 'distribucion_por_municipio', array() ) as $m ) {
+	$declarada[ $m['municipio'] ] = (int) $m['casos'];
+}
+ksort( $por_mun );
+ksort( $declarada );
+comprobar( $por_mun === $declarada, 'El detalle por caso reproduce la distribución municipal declarada' );
+comprobar(
+	( isset( $estados['Falleció'] ) ? $estados['Falleció'] : 0 ) === (int) UHP_Datos::valor( 'cancer', 'resumen.fallecieron', -1 )
+		&& ( isset( $estados['En atención por su EPS'] ) ? $estados['En atención por su EPS'] : 0 ) === (int) UHP_Datos::valor( 'cancer', 'resumen.en_atencion_por_su_eps', -1 ),
+	'Los desenlaces caso a caso suman los que declara el resumen'
+);
+
+// Ningún caso puede traer dato personal: ni edad, ni fecha, ni nada que
+// permita reconocer a alguien en un municipio pequeño.
+$claves_permitidas = array( 'caso', 'municipio', 'diagnostico', 'estado' );
+$cotilla           = array();
+foreach ( $casos as $c ) {
+	foreach ( array_keys( $c ) as $k ) {
+		if ( ! in_array( $k, $claves_permitidas, true ) ) {
+			$cotilla[] = $k;
+		}
+	}
+}
+comprobar( ! $cotilla, 'Los casos no traen más campos que municipio, diagnóstico y desenlace' );
+
+// El estado nutricional ya no tiene huecos y sus cifras cuadran con sus
+// propios porcentajes.
+$nutri = (array) UHP_Datos::valor( 'sociodemografia', 'estado_nutricional.distribucion', array() );
+$n_nut = (int) UHP_Datos::valor( 'sociodemografia', 'estado_nutricional.n_con_dato', 0 );
+$sin_personas = 0;
+$descuadre    = array();
+foreach ( $nutri as $c ) {
+	if ( ! isset( $c['personas'] ) || null === $c['personas'] ) {
+		$sin_personas++;
+		continue;
+	}
+	$pct = round( $c['personas'] / $n_nut * 100, 1 );
+	if ( abs( $pct - (float) $c['porcentaje'] ) > 0.05 ) {
+		$descuadre[] = sprintf( '%s (%s vs %s)', $c['categoria'], $pct, $c['porcentaje'] );
+	}
+}
+comprobar( 0 === $sin_personas, 'Las cuatro categorías del estado nutricional traen su número de personas' );
+comprobar( array_sum( wp_list_pluck( $nutri, 'personas' ) ) === $n_nut, 'Las personas por categoría suman la base declarada' );
+comprobar( ! $descuadre, 'Cada porcentaje del estado nutricional sale de su propio número' . ( $descuadre ? ': ' . implode( ', ', $descuadre ) : '' ) );
+
+// El corte de 2022 va aparte y se identifica como tal: es lo que impide que
+// alguien lo lea como si fuera la cifra de cierre.
+$corte = (array) UHP_Datos::valor( 'sociodemografia', 'corte_preliminar_2022', array() );
+comprobar( ! empty( $corte['advertencia'] ), 'El corte preliminar de 2022 lleva su advertencia' );
+comprobar( 4844 === (int) ( isset( $corte['n_declarado'] ) ? $corte['n_declarado'] : 0 ), 'El corte preliminar declara su propia base (4.844)' );
+comprobar(
+	4844 !== (int) UHP_Datos::valor( 'sociodemografia', 'genero.n_con_dato', 0 ),
+	'El corte preliminar no ha contaminado la distribución de cierre'
+);
+
+$crit = UHP_Datos::leer( 'criterios' );
+comprobar(
+	4 === count( (array) UHP_Datos::valor( 'criterios', 'inclusion', array() ) )
+		&& 6 === count( (array) UHP_Datos::valor( 'criterios', 'exclusion', array() ) ),
+	'Los criterios de participación son cuatro de inclusión y seis de exclusión'
+);
+comprobar(
+	(int) UHP_Datos::valor( 'criterios', 'resumen.rango_etario.minimo', 0 ) === (int) UHP_Datos::valor( 'proyecto', 'metas_globales.rango_etario_participantes.minimo', -1 )
+		&& (int) UHP_Datos::valor( 'criterios', 'resumen.rango_etario.maximo', 0 ) === (int) UHP_Datos::valor( 'proyecto', 'metas_globales.rango_etario_participantes.maximo', -1 ),
+	'El rango etario de los criterios es el mismo que declaran las metas del proyecto'
+);
+
+$etapas = (array) UHP_Datos::valor( 'epidemiologia', 'cascada_de_correa.etapas', array() );
+comprobar( 5 === count( $etapas ), sprintf( 'La cascada de Correa tiene sus cinco etapas (%d)', count( $etapas ) ) );
+$orden = wp_list_pluck( $etapas, 'orden' );
+comprobar( $orden === range( 1, count( $etapas ) ), 'Las etapas de la cascada van numeradas en secuencia' );
+
+comprobar(
+	4 === count( (array) UHP_Datos::valor( 'proyecto', 'objetivos.especificos', array() ) ),
+	'El proyecto declara sus cuatro objetivos específicos'
+);
+$hitos = (array) UHP_Datos::valor( 'proyecto', 'cronologia', array() );
+comprobar( 7 === count( $hitos ), sprintf( 'La cronología recoge los siete hitos (%d)', count( $hitos ) ) );
+$anios     = wp_list_pluck( $hitos, 'anio' );
+$ordenados = $anios;
+sort( $ordenados );
+comprobar( $anios === $ordenados, 'Los hitos de la cronología van en orden cronológico' );
+
+// El reparto en porcentaje tiene que salir de los valores, no de la lámina.
+$pres  = (float) UHP_Datos::valor( 'proyecto', 'financiacion.presupuesto_total', 0 );
+$bien  = true;
+$suma  = 0.0;
+foreach ( (array) UHP_Datos::valor( 'proyecto', 'financiacion.fuentes', array() ) as $f ) {
+	$suma += (float) $f['porcentaje'];
+	if ( abs( round( $f['valor'] / $pres * 100, 2 ) - (float) $f['porcentaje'] ) > 0.001 ) {
+		$bien = false;
+	}
+}
+comprobar( $bien, 'El porcentaje de cada fuente de financiación sale de su propio valor' );
+comprobar( abs( $suma - 100.0 ) < 0.01, sprintf( 'Los porcentajes de financiación suman 100 (%.2f)', $suma ) );
 
 /* ---------------------------------------------------------------- */
 echo "\n";

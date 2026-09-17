@@ -196,6 +196,13 @@ final class UHP_Datos {
 				'lista'       => 'subregiones',
 				'grupo'       => 'territorio',
 			),
+			'criterios'       => array(
+				'archivo'     => '18_criterios_participacion.json',
+				'titulo'      => 'Criterios de participación',
+				'descripcion' => 'Los cuatro criterios de inclusión y los seis de exclusión con los que se seleccionó a los 5.000 voluntarios. Dicen de quién habla cada cifra del conjunto y, sobre todo, de quién no.',
+				'claves'      => array( 'inclusion', 'exclusion', 'resumen' ),
+				'grupo'       => 'proyecto',
+			),
 			'geojson'         => array(
 				'archivo'     => 'narino_municipios.geojson',
 				'titulo'      => 'Geometría municipal (GeoJSON)',

@@ -5,11 +5,15 @@
     "bpin": "2015000100064",
     "fuentes": [
       "Informe_Preliminar_URKUNINA_5000.pdf",
-      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx",
+      "SOCIALIZACION_IDSN_septiembre.pptx"
     ],
     "fecha_extraccion": "2026-09-09",
     "codificacion": "UTF-8",
-    "separador_decimal_origen": "coma (convertido a punto en este JSON)"
+    "separador_decimal_origen": "coma (convertido a punto en este JSON)",
+    "notas": [
+      "La cronología procede de la lámina «Línea de tiempo» del informe general del proyecto. Marca el inicio del trabajo de campo en octubre de 2019; la fecha de inicio que registra `ejecucion` es la del primer convenio de cooperación, anterior."
+    ]
   },
   "identificacion": {
     "nombre_corto": "URKUNINA 5000",
@@ -37,12 +41,20 @@
     "fuentes": [
       {
         "fuente": "Fondo de Ciencia, Tecnología e Innovación (SGR)",
-        "valor": 9588676219
+        "valor": 9588676219,
+        "porcentaje": 85.09
       },
       {
         "fuente": "Cofinanciación de entidades cooperantes",
-        "valor": 1679596792
+        "valor": 1679596792,
+        "porcentaje": 14.91
       }
+    ],
+    "entidades_cofinanciadoras": [
+      "Hospital Universitario Departamental de Nariño",
+      "Asociación Colombiana de Cirugía",
+      "Instituto Nacional de Cancerología E.S.E.",
+      "Fundación Universitaria de Ciencias de la Salud (FUCS)"
     ]
   },
   "ejecucion": {
@@ -73,5 +85,59 @@
     "municipios_totales": 64,
     "municipios_zona_andina": 55,
     "porcentaje_poblacion_en_zona_andina": 81.7
-  }
+  },
+  "objetivos": {
+    "problema": "Alta mortalidad de cáncer gástrico en el área andina del departamento de Nariño",
+    "general": "Evaluar la prevalencia de lesiones precursoras de malignidad gástrica y los determinantes de erradicación inicial de la infección por Helicobacter pylori en población voluntaria de 55 municipios de alto riesgo para adenocarcinoma gástrico en Nariño.",
+    "especificos": [
+      "Establecer la prevalencia de las lesiones precursoras de malignidad.",
+      "Crear la primera reserva de material biológico de la población de alto riesgo.",
+      "Estimar el riesgo de no efectividad del tratamiento triconjugado.",
+      "Estimar la relación costo-efectividad de la endoscopia con biopsias y el tratamiento."
+    ]
+  },
+  "cronologia": [
+    {
+      "hito": 1,
+      "anio": 2014,
+      "fecha": null,
+      "descripcion": "Elaboración del proyecto de investigación por el equipo de investigadores."
+    },
+    {
+      "hito": 2,
+      "anio": 2017,
+      "fecha": "2017-06-09",
+      "descripcion": "Aprobación del proyecto por el OCAD del Fondo de Ciencia, Tecnología e Innovación. Acuerdo 057."
+    },
+    {
+      "hito": 3,
+      "anio": 2018,
+      "fecha": "2018-10-31",
+      "descripcion": "Convenio Especial de Cooperación HUDN — CIEDYN."
+    },
+    {
+      "hito": 4,
+      "anio": 2019,
+      "fecha": "2019-10",
+      "descripcion": "Inicio de la contratación de equipos y materiales y de las actividades de campo."
+    },
+    {
+      "hito": 5,
+      "anio": 2020,
+      "fecha": "2020-02",
+      "descripcion": "Segundo Convenio Especial de Cooperación HUDN — CIEDYN."
+    },
+    {
+      "hito": 6,
+      "anio": 2021,
+      "fecha": "2021-07",
+      "descripcion": "Tercer Convenio Especial de Cooperación HUDN — CIEDYN."
+    },
+    {
+      "hito": 7,
+      "anio": 2022,
+      "fecha": "2022-01",
+      "descripcion": "Cuarto Convenio Especial de Cooperación HUDN — CIEDYN, de enero a diciembre de 2022."
+    }
+  ]
 }

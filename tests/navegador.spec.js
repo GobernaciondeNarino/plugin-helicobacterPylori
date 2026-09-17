@@ -39,6 +39,27 @@ function vigilar(page) {
   return errores;
 }
 
+/* Tesela de un píxel con la que se responde a los servidores de capa base.
+
+   La suite NO debe salir a la red —lo dice la guía— y los describe que
+   dibujan con Leaflet o con teselas ya lo tenían resuelto cada uno por su
+   cuenta. Los dos que faltaban salían de verdad a tile.openstreetmap.org y
+   pasaban o fallaban según el entorno: con un proxy que intercepta el TLS,
+   Chromium rechaza el certificado y esos fallos acababan contados como
+   errores del plugin. Lo que estas pruebas comprueban es que el componente
+   PIDE la capa base y la coloca, no cómo se ve una tesela. */
+const TESELA_1PX = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mM8w8DwHwAExAIsF7hMWQAAAABJRU5ErkJggg==',
+  'base64'
+);
+
+/** Responde a las teselas sin salir a la red. */
+async function sinTeselas(page) {
+  await page.route(/basemaps\.cartocdn\.com|tile\.openstreetmap\.org/, (route) =>
+    route.fulfill({ status: 200, contentType: 'image/png', body: TESELA_1PX })
+  );
+}
+
 /* ================================================================== */
 test.describe('Objeto 3D', () => {
 
@@ -541,6 +562,32 @@ test.describe('Geomapa (D3plus)', () => {
     expect(etiquetas.filter((e) => /sin dato publicado/i.test(e)).length).toBe(54);
   });
 
+  test('la serie de los 55 colorea 55 municipios y deja nueve sin dato', async ({ page }) => {
+    const errores = vigilar(page);
+    await sinRed(page);
+    await page.goto(BASE + '/paginas/geomapa.html');
+
+    const fig = page.locator('[data-caso="serie-55"] [data-uhp-geomapa]');
+    await expect(fig.locator('g.d3plus-geomap-paths path')).toHaveCount(64, { timeout: 25000 });
+
+    // Es la vista que trajo la socialización ante el IDSN. Frente a la de
+    // arriba, que solo tiene los diez extremos, aquí el mapa se llena: los
+    // 55 municipios intervenidos con su cifra y los nueve restantes sin
+    // ella, porque el estudio no llegó allí.
+    const relleno = await fig.evaluate((nodo) => {
+      const fills = Array.from(nodo.querySelectorAll('g.d3plus-geomap-paths path'))
+        .map((p) => p.getAttribute('fill'));
+      return {
+        sinDato: fills.filter((f) => f === '#EDF1F5').length,
+        conColor: fills.filter((f) => f !== '#EDF1F5').length
+      };
+    });
+    expect(relleno.sinDato).toBe(9);
+    expect(relleno.conColor).toBe(55);
+
+    expect(errores).toEqual([]);
+  });
+
   test('la leyenda muestra la rampa, el rango y el aviso de sin dato', async ({ page }) => {
     await page.goto(BASE + '/paginas/geomapa.html');
     const fig = page.locator('[data-caso="sin-teselas"] [data-uhp-geomapa]');
@@ -558,6 +605,9 @@ test.describe('Geomapa (D3plus)', () => {
 
   test('una vista subregional se dibuja sobre las 13 subregiones', async ({ page }) => {
     const errores = vigilar(page);
+    // La página trae también el caso con teselas: sin interceptarlas, sus
+    // peticiones a la red acaban contadas como errores de esta prueba.
+    await sinRed(page);
     await page.goto(BASE + '/paginas/geomapa.html');
 
     const fig = page.locator('[data-caso="subregiones"] [data-uhp-geomapa]');
@@ -713,6 +763,7 @@ test.describe('Mapa', () => {
 
   test('pinta los 64 municipios sobre OpenStreetMap con su leyenda', async ({ page }) => {
     const errores = vigilar(page);
+    await sinTeselas(page);
     await page.goto(BASE + '/paginas/mapa.html');
 
     const lienzo = page.locator('.uhp-mapa__lienzo');
@@ -880,28 +931,44 @@ test.describe('Tablero', () => {
     expect(errores).toEqual([]);
   });
 
-  test('el tablero dice cuándo la cifra es de la subregión y no del municipio', async ({ page }) => {
+  test('los 55 municipios intervenidos llevan ya su propia cifra', async ({ page }) => {
     await page.goto(BASE + '/paginas/tablero.html');
     await listo(page);
 
-    // El informe solo publica los extremos de la distribución municipal.
-    // De los 55 intervenidos, la mayoría no tiene cifra propia: el mapa la
-    // toma de su subregión, pero la ficha tiene que decirlo. Es la regla de
-    // honestidad del conjunto y aquí se comprueba que se cumple.
-    const sinCifra = await page.locator('.uhp-db__mrow').evaluateAll((ns) =>
-      ns.map((n) => n.querySelector('span').textContent)
+    // Cuando solo se conocían los extremos de la distribución, la mayoría de
+    // los 55 se pintaba con la cifra de su subregión: atenuada al 0,72 y
+    // diciéndolo en la ficha. La serie completa llegó con la socialización
+    // ante el IDSN y ese respaldo ya no hace falta para ninguno de ellos.
+    const opacidades = await page.locator('.uhp-db__muni').evaluateAll((ns) =>
+      ns.filter((n) => n.getAttribute('stroke-dasharray') === null)
+        .map((n) => n.getAttribute('fill-opacity'))
     );
-    let encontrado = false;
-    for (const nombre of sinCifra) {
-      await page.locator('.uhp-db__mrow', { hasText: nombre }).first().click();
-      const nota = await page.locator('[data-uhp-zona="detalle"] .uhp-db__nota').textContent();
-      if (nota.includes('Sin cifra municipal')) {
-        expect(nota).toContain('referencia de la subregión');
-        encontrado = true;
-        break;
-      }
-    }
-    expect(encontrado, 'ningún municipio declaró usar la cifra de su subregión').toBe(true);
+    expect(opacidades.length).toBe(55);
+    expect(opacidades.filter((o) => o === '0.72')).toEqual([]);
+
+    // Tangua no estaba en ninguno de los dos extremos publicados: si su
+    // ficha declara cifra propia, la serie completa llegó hasta el mapa.
+    await page.locator('.uhp-db__mrow', { hasText: 'Tangua' }).first().click();
+    const nota = await page.locator('[data-uhp-zona="detalle"] .uhp-db__nota').textContent();
+    expect(nota).toContain('Cifras propias del municipio');
+    expect(nota).not.toContain('Sin cifra municipal');
+
+    // Y la cifra que enseña es la suya, no la de Juanambú, su subregión.
+    const lpm = await page.locator('[data-uhp-zona="detalle"] .uhp-db__dgrid .v').first().textContent();
+    expect(lpm.trim()).toBe('28,6%');
+  });
+
+  test('los nueve municipios fuera del estudio siguen sin colorear', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero.html');
+    await listo(page);
+
+    // La serie completa cubre a los 55 que el proyecto intervino. Los otros
+    // nueve no entraron en el estudio: ahí no falta un dato, faltó el
+    // tamizaje, y el mapa tiene que seguir distinguiéndolo.
+    const fuera = await page.locator('.uhp-db__muni').evaluateAll((ns) =>
+      ns.filter((n) => n.getAttribute('stroke-dasharray') !== null).length
+    );
+    expect(fuera).toBe(9);
   });
 
   test('cambiar de indicador repinta leyenda, barras y cifras', async ({ page }) => {
@@ -1191,6 +1258,7 @@ test.describe('Convivencia', () => {
 
   test('mapa, gráfico y escena 3D funcionan juntos en una página', async ({ page }) => {
     const errores = vigilar(page);
+    await sinTeselas(page);
     await page.goto(BASE + '/paginas/convivencia.html');
 
     // El gráfico se dibuja.
