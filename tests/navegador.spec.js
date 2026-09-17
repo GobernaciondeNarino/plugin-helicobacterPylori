@@ -588,6 +588,35 @@ test.describe('Geomapa (D3plus)', () => {
     expect(errores).toEqual([]);
   });
 
+  test('una vista sin un solo valor lo dice, en vez de una rampa de 0 a 0', async ({ page }) => {
+    await sinRed(page);
+
+    // Se simula una instalación cuyos archivos de datos se han quedado
+    // atrás respecto del código: la vista existe y el mapa se dibuja, pero
+    // la respuesta no trae valores. Ocurrió en el sitio real cuando un
+    // despliegue copió includes/ y se saltó data/, y el mapa salía entero
+    // en gris rotulado «0,0 %» a los dos lados, que no es lo que pasa.
+    await page.route(/\/geomapa\?/, async (route) => {
+      const resp = await route.fetch();
+      const cuerpo = await resp.json();
+      cuerpo.valores = {};
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(cuerpo) });
+    });
+
+    await page.goto(BASE + '/paginas/geomapa.html');
+
+    const fig = page.locator('[data-caso="sin-teselas"] [data-uhp-geomapa]');
+    const trazados = fig.locator('g.d3plus-geomap-paths path');
+    await expect(trazados).toHaveCount(64, { timeout: 25000 });
+
+    // El departamento se dibuja igual —el territorio sigue diciendo algo—
+    // pero la leyenda avisa y no inventa un rango.
+    const leyenda = fig.locator('.uhp-geo__leyenda');
+    await expect(leyenda).toContainText('no trae ningún valor publicado');
+    await expect(fig.locator('.uhp-geo__rango')).toHaveCount(0);
+    await expect(fig.locator('.uhp-geo__escala')).toHaveCount(0);
+  });
+
   test('la leyenda muestra la rampa, el rango y el aviso de sin dato', async ({ page }) => {
     await page.goto(BASE + '/paginas/geomapa.html');
     const fig = page.locator('[data-caso="sin-teselas"] [data-uhp-geomapa]');
@@ -1460,9 +1489,11 @@ test.describe('Selector de vistas', () => {
     ).not.toBe(tablaAntes);
 
     // Y el gráfico, que no es un panel escondido sino una figura que se
-    // recarga, sigue a la misma lista.
+    // recarga, sigue a la misma lista. La vista nueva tiene territorio, de
+    // modo que abre en el mapa con sus trece subregiones.
     await expect(fig).toHaveAttribute('data-view', 'prev_subregion_hp');
-    await expect(fig.locator('.uhp-g__lienzo svg')).toHaveCount(1, { timeout: 25000 });
+    await expect(fig).toHaveAttribute('data-type', 'mapa', { timeout: 25000 });
+    await expect(fig.locator('g.d3plus-geomap-paths path')).toHaveCount(13, { timeout: 25000 });
 
     expect(errores).toEqual([]);
   });
@@ -1540,6 +1571,66 @@ test.describe('Selector de vistas', () => {
     await expect(fig.locator('.uhp-g__lienzo svg')).toHaveCount(1, { timeout: 25000 });
 
     expect(errores).toEqual([]);
+  });
+
+  test('al cambiar de vista, la que tiene territorio abre en el mapa', async ({ page }) => {
+    const errores = vigilar(page);
+    await sinTeselas(page);
+    await page.goto(BASE + '/paginas/selector.html');
+
+    const fig = page.locator('[data-zona="grafico"] [data-uhp-grafico]');
+    await expect(fig.locator('.uhp-skeleton')).toHaveCount(0, { timeout: 25000 });
+
+    // «Municipios con mayor infección» tiene por defecto las barras. Al
+    // llegar desde el selector abre igualmente en el mapa: es la lectura
+    // que pidió la Secretaría para cualquier vista con territorio.
+    await page.locator('[data-zona="selector"] .uhp-sel__select').selectOption('prev_hp_municipios');
+    await expect(fig).toHaveAttribute('data-type', 'mapa', { timeout: 25000 });
+    await expect(fig.locator('g.d3plus-geomap-paths path')).toHaveCount(64, { timeout: 25000 });
+
+    // Y la barra de herramientas lo refleja, para poder salir del mapa.
+    await expect(fig.locator('.uhp-g__select')).toHaveValue('mapa');
+
+    expect(errores).toEqual([]);
+  });
+
+  test('una vista sin territorio conserva su propio tipo por defecto', async ({ page }) => {
+    await sinTeselas(page);
+    await page.goto(BASE + '/paginas/selector.html');
+
+    const fig = page.locator('[data-zona="solo-grafico"] [data-uhp-grafico]');
+    await expect(fig.locator('.uhp-skeleton')).toHaveCount(0, { timeout: 25000 });
+
+    const sel = page.locator('[data-zona="solo-grafico"] .uhp-sel__select');
+
+    // El desenlace no tiene territorio: se dibuja con su propia dona, no
+    // con un mapa vacío.
+    await sel.selectOption('cancer_desenlace');
+    await expect(fig).toHaveAttribute('data-type', 'donut', { timeout: 25000 });
+    await expect(fig.locator('g.d3plus-geomap-paths path')).toHaveCount(0);
+
+    // Los casos por municipio sí lo tienen: al volver, mapa.
+    await sel.selectOption('cancer_municipios');
+    await expect(fig).toHaveAttribute('data-type', 'mapa', { timeout: 25000 });
+    await expect(fig.locator('g.d3plus-geomap-paths path')).toHaveCount(64, { timeout: 25000 });
+  });
+
+  test('cambiar de tipo a mano no devuelve al mapa en el siguiente dibujo', async ({ page }) => {
+    await sinTeselas(page);
+    await page.goto(BASE + '/paginas/selector.html');
+
+    const fig = page.locator('[data-zona="grafico"] [data-uhp-grafico]');
+    await expect(fig.locator('.uhp-skeleton')).toHaveCount(0, { timeout: 25000 });
+
+    await page.locator('[data-zona="selector"] .uhp-sel__select').selectOption('prev_hp_55');
+    await expect(fig).toHaveAttribute('data-type', 'mapa', { timeout: 25000 });
+
+    // La preferencia se gasta al aplicarla: quien elige barras se queda en
+    // barras hasta que vuelva a cambiar de vista.
+    await fig.locator('.uhp-g__select').selectOption('bar');
+    await expect(fig).toHaveAttribute('data-type', 'bar', { timeout: 25000 });
+    await expect(fig.locator('.uhp-g__lienzo svg')).toHaveCount(1);
+    await expect(fig.locator('g.d3plus-geomap-paths path')).toHaveCount(0);
   });
 
   test('el borde del control se distingue de su fondo, como exige la norma', async ({ page }) => {

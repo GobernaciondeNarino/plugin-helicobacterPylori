@@ -219,6 +219,11 @@ Las dos vistas abren en el mapa y admiten barras, treemap y caja de bigotes
 desde su propia barra de herramientas. El tablero pasó a colorear 55 municipios
 con cifra propia en lugar de quince.
 
+Al elegir en un `[urkunina_selector]` una vista que tenga territorio, el gráfico
+**abre en el mapa** aunque su tipo por defecto sean las barras. Quien prefiera
+otro tipo lo cambia en la barra de herramientas y se queda ahí hasta el
+siguiente cambio de vista.
+
 **Los datos son agregados.** No contienen microdatos de los 5.000 participantes,
 resultados de laboratorio individuales ni la identidad de los pacientes con
 cáncer detectado: esa información no está en los documentos fuente.
@@ -230,7 +235,7 @@ cáncer detectado: esa información no está en los documentos fuente.
 ```bash
 npm install          # instala Playwright
 npm run test:datos   # 482 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 65 pruebas de navegador
+npm test             # lo anterior más 69 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los

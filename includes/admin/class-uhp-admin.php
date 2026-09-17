@@ -1800,6 +1800,67 @@ final class UHP_Admin {
 			</div>
 		</section>
 		<?php
+		$this->diag_vistas_vacias();
+	}
+
+	/**
+	 * Vistas que no producen ni una fila.
+	 *
+	 * Una vista vacía casi siempre significa lo mismo: los archivos de
+	 * `data/` instalados se han quedado atrás respecto del código. Pasa
+	 * cuando un despliegue copia `includes/` y se salta `data/`, y no se
+	 * nota hasta que alguien abre la página y ve un mapa entero en gris con
+	 * una leyenda de 0 a 0. Aquí se ve de un vistazo y con el nombre del
+	 * archivo que hay que actualizar.
+	 */
+	private function diag_vistas_vacias() {
+		$catalogo = UHP_Views::lista();
+		$vacias   = array();
+		foreach ( $catalogo as $meta ) {
+			$id    = isset( $meta['id'] ) ? $meta['id'] : '';
+			$vista = '' !== $id ? UHP_Views::obtener( $id ) : null;
+			if ( ! $vista || ! $vista['data'] ) {
+				$vacias[ $id ] = isset( $meta['name'] ) ? $meta['name'] : $id;
+			}
+		}
+		?>
+		<section class="uhpa-card">
+			<header class="uhpa-card__cab">
+				<h2><?php esc_html_e( 'Vistas con datos', 'urkunina-5000' ); ?></h2>
+				<p><?php esc_html_e( 'Cada vista del catálogo se construye a partir de los archivos de data/. Una vista sin filas suele indicar que esos archivos no están al día con esta versión del plugin.', 'urkunina-5000' ); ?></p>
+			</header>
+			<div class="uhpa-card__cuerpo">
+				<?php if ( ! $vacias ) : ?>
+					<p class="uhpa-texto">
+						<span class="uhpa-punto uhpa-punto--ok"></span>
+						<?php
+						printf(
+							/* translators: %d: número de vistas del catálogo. */
+							esc_html__( 'Las %d vistas del catálogo producen datos.', 'urkunina-5000' ),
+							count( $catalogo )
+						);
+						?>
+					</p>
+				<?php else : ?>
+					<p class="uhpa-texto">
+						<span class="uhpa-punto uhpa-punto--error"></span>
+						<?php
+						printf(
+							/* translators: %d: número de vistas sin datos. */
+							esc_html__( '%d vista(s) no producen ninguna fila. Actualice los archivos de data/ a los de esta versión del plugin.', 'urkunina-5000' ),
+							count( $vacias )
+						);
+						?>
+					</p>
+					<ul class="uhpa-lista">
+						<?php foreach ( $vacias as $id => $nombre ) : ?>
+							<li><code><?php echo esc_html( $id ); ?></code> — <?php echo esc_html( $nombre ); ?></li>
+						<?php endforeach; ?>
+					</ul>
+				<?php endif; ?>
+			</div>
+		</section>
+		<?php
 	}
 
 	/**

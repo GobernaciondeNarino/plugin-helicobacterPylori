@@ -484,6 +484,16 @@ Al cambiar de vista, el gráfico **no arrastra el tipo**: «dona» no existe en 
 ranking y «mapa» no existe en una vista sin geometría, de modo que se deja que
 el servidor elija el tipo por defecto de la vista nueva.
 
+**Con una excepción: la vista con territorio abre en el mapa.** Al llegar desde
+el selector, cualquier vista que declare `geo` se dibuja como mapa aunque su
+tipo por defecto sean las barras. Una vista municipal dice mucho más repartida
+sobre Nariño que en una lista de cincuenta y cinco barras, y el resto de tipos
+sigue a un clic en la barra de herramientas. La preferencia se **gasta al
+aplicarla** (`preferenciaDeTipo()` en `uhp-grafico.js`): quien cambia a barras
+se queda en barras hasta que vuelva a cambiar de vista, en vez de verse
+devuelto al mapa en el siguiente redibujo. Una vista sin territorio no se ve
+afectada: vuelve a su propio tipo, no a un mapa vacío.
+
 Se usa `hidden` y no una clase porque es el mecanismo que los lectores de
 pantalla ya entienden: los paneles ocultos quedan fuera del árbol de
 accesibilidad sin depender de que el CSS del plugin haya llegado a cargar. El
@@ -578,6 +588,26 @@ sin dato caería en el mínimo de la escala y se leería como una cifra real.
 Importa más de lo que parece en este proyecto: los informes solo publican los
 diez municipios con mayor prevalencia, y de las trece subregiones documentan
 once. Pintar el resto como si valieran el mínimo sería inventar datos.
+
+### 4.6.1 Un mapa sin valores lo dice
+
+Una vista puede llegar sin un solo valor. No es hipotético: ocurrió en el sitio
+real cuando un despliegue copió `includes/` y se saltó `data/`. La vista existía
+—el código la declaraba— pero el archivo de datos instalado no tenía la serie
+que necesitaba, así que el mapa se dibujaba entero en gris con una leyenda
+rotulada **«0,0 %» a los dos lados**. Eso no se lee como «los datos de este
+sitio están atrasados» sino como «en ningún municipio hay dato publicado», que
+es una afirmación que nadie ha medido.
+
+Ahora, cuando no hay ni una fila, el mapa se dibuja igual —el territorio sigue
+diciendo algo— pero la leyenda sustituye la rampa por «Esta vista no trae ningún
+valor publicado», y el componente deja un aviso en la consola con el nombre de
+la vista, para quien administre el sitio.
+
+El diagnóstico del panel lo señala antes de que nadie abra la página:
+**Diagnóstico → Entorno → Vistas con datos** recorre el catálogo y lista las
+vistas que no producen ninguna fila. Con los archivos al día, las 29 producen
+datos.
 
 ### 4.7 Añadir una vista
 
@@ -1017,7 +1047,7 @@ silencioso:
   Ofrecerlo en una vista sin territorio produciría un mapa vacío; no ofrecerlo
   en una que sí lo tiene esconde la mitad de la lectura.
 
-### 8.2 Navegador — 65 pruebas
+### 8.2 Navegador — 69 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a
@@ -1035,8 +1065,11 @@ los 64 municipios o las 13 subregiones según el nivel de la vista, que colorea
 solo los que traen cifra, que ninguna geometría se invierte —la prueba del
 sentido de giro—, que las subregiones llegan disueltas, que la capa base se
 enciende y se apaga desde el shortcode con su atribución, y que cada topología
-se descarga una sola vez por página, y que la vista de los 55 municipios
-colorea 55 y deja nueve sin dato; que el mapa pinta los 64 municipios sobre OpenStreetMap con su
+se descarga una sola vez por página, que la vista de los 55 municipios
+colorea 55 y deja nueve sin dato, y que **una vista sin un solo valor lo dice**
+en vez de dibujar una rampa de 0 a 0 —la prueba intercepta la respuesta y le
+vacía los valores, que es lo que ocurrió en el sitio real con los datos
+desfasados—; que el mapa pinta los 64 municipios sobre OpenStreetMap con su
 leyenda y su atribución, que cambiar de indicador no vuelve a descargar la
 geometría y que los polígonos son accesibles con teclado; que el tablero ocupa
 el 100 % de ancho y 100vh de alto sin desbordar, que su mapa dibuja los 64
@@ -1074,9 +1107,11 @@ anuncia en una región `aria-live` y que **las dos formas de panel** —el `<div
 con clase y el `<p>` de la descripción dentro del propio selector— salen de
 verdad del árbol de accesibilidad al ocultarse; que un canal de solo selector y
 gráfico funciona **con el selector delante**, que es el orden que hace que su
-script se imprima primero; que el borde del control llega a 3:1 sobre su fondo,
-como exige WCAG 2.1 §1.4.11; y que un selector sin grupo avisa en vez de romper
-la página.
+script se imprima primero; que al cambiar de vista **la que tiene territorio
+abre en el mapa** y la que no lo tiene vuelve a su propio tipo, no a un mapa
+vacío; que cambiar de tipo a mano no devuelve al mapa en el siguiente dibujo;
+que el borde del control llega a 3:1 sobre su fondo, como exige WCAG 2.1
+§1.4.11; y que un selector sin grupo avisa en vez de romper la página.
 
 El entorno de pruebas espeja Three.js, D3plus y Leaflet en local
 (`tests/vendor`, no versionado) para no depender de la red, incluida la ruta

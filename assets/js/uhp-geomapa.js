@@ -224,7 +224,22 @@
         valor: v
       });
     });
-    if (!filas.length) { min = 0; max = 0; }
+    /* Una vista puede no traer ni un valor. Ocurre cuando los archivos de
+       datos instalados se han quedado atrás respecto del código —un
+       despliegue que copia `includes/` y se salta `data/`, por ejemplo—:
+       la vista existe, el mapa se dibuja y sale entero en gris con una
+       rampa de 0 a 0, que es exactamente lo que NO debe leerse como «en
+       ningún municipio hay dato publicado». Se marca el caso para que la
+       leyenda lo diga y se deja traza para quien administre el sitio. */
+    var vacio = !filas.length;
+    if (vacio) {
+      min = 0;
+      max = 0;
+      if (window.console && console.warn) {
+        console.warn('[URKUNINA 5000] la vista «' + (st.view || st.indicador || '?') +
+          '» no devolvió ningún valor: revise que los archivos de data/ estén al día.');
+      }
+    }
 
     var escala = meta.escala || ['#EAF4FF', '#69A8D6', '#3FD26E', '#FFD500', '#C0392B'];
     var rango = (max - min) || 1;
@@ -344,7 +359,7 @@
 
     st.viz = viz;
 
-    if (st.leyenda) { pintarLeyenda(st, escala, min, max, meta); }
+    if (st.leyenda) { pintarLeyenda(st, escala, min, max, meta, vacio); }
   }
 
   /**
@@ -372,13 +387,21 @@
   /* Cromo alrededor del mapa                                           */
   /* ------------------------------------------------------------------ */
 
-  function pintarLeyenda(st, escala, min, max, meta) {
+  function pintarLeyenda(st, escala, min, max, meta, vacio) {
     var caja = st.leyendaCaja || st.fig.querySelector('.uhp-geo__leyenda');
     if (!caja) { return; }
     caja.innerHTML = '';
 
     var t = C.el('strong', '', meta.corto || meta.etiqueta || 'Indicador');
     caja.appendChild(t);
+
+    // Sin un solo valor no hay rampa que enseñar: un degradado rotulado
+    // «0,0 %» en los dos extremos afirma algo que nadie ha medido.
+    if (vacio) {
+      caja.appendChild(C.el('div', 'uhp-geo__vacio',
+        'Esta vista no trae ningún valor publicado.'));
+      return;
+    }
 
     var rampa = C.el('div', 'uhp-geo__escala');
     for (var i = 0; i < 5; i++) {
