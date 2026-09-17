@@ -5,7 +5,8 @@
     "bpin": "2015000100064",
     "fuentes": [
       "Informe_Preliminar_URKUNINA_5000.pdf",
-      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx",
+      "SOCIALIZACION_IDSN_septiembre.pptx"
     ],
     "fecha_extraccion": "2026-09-09",
     "codificacion": "UTF-8",
@@ -13,7 +14,8 @@
     "n": 5000,
     "notas": [
       "Datos agregados de población; no contienen información individual identificable.",
-      "La distribución por género se calcula sobre n = 4.994 con dato registrado."
+      "La distribución por género se calcula sobre n = 4.994 con dato registrado.",
+      "El bloque `corte_preliminar_2022` es de otra fecha y de otra base; va aparte a propósito y no debe sumarse ni compararse con las distribuciones finales."
     ]
   },
   "rango_etario": {
@@ -127,12 +129,12 @@
       {
         "categoria": "Delgadez",
         "porcentaje": 0.4,
-        "personas": null
+        "personas": 18
       },
       {
         "categoria": "Normal",
         "porcentaje": 29.6,
-        "personas": null
+        "personas": 1429
       },
       {
         "categoria": "Sobrepeso",
@@ -145,6 +147,59 @@
         "personas": 1053
       }
     ],
-    "observacion": "7 de cada 10 participantes presentan exceso de peso."
+    "observacion": "7 de cada 10 participantes presentan exceso de peso.",
+    "n_con_dato": 4830
+  },
+  "corte_preliminar_2022": {
+    "advertencia": "Cifras de un corte del informe técnico general fechado en noviembre de 2022, no del cierre. Su base son 4.844 participantes, no los 5.000 finales. Se publican porque documentan variables que ninguna otra fuente desagrega, pero no son comparables con el resto de este archivo.",
+    "n_declarado": 4844,
+    "procedencia": [
+      {
+        "categoria": "Urbana",
+        "porcentaje": 53.3
+      },
+      {
+        "categoria": "Rural",
+        "porcentaje": 46.7
+      }
+    ],
+    "rangos_de_edad_documentados": [
+      {
+        "rango": "40 a 49 años",
+        "porcentaje": 27.2
+      },
+      {
+        "rango": "50 a 59 años",
+        "porcentaje": 32.1
+      }
+    ],
+    "ocupacion": [
+      {
+        "categoria": "Trabajador independiente no profesional",
+        "porcentaje": 38.0
+      }
+    ],
+    "sector_economico": [
+      {
+        "categoria": "Amas de casa",
+        "porcentaje": 41.5
+      },
+      {
+        "categoria": "Agricultura",
+        "porcentaje": 18.0
+      }
+    ],
+    "antecedentes_familiares_de_cancer_gastrico": {
+      "porcentaje": 10.0,
+      "observacion": "El informe subraya que la proporción es baja y que la herencia explica poco el cáncer gástrico: el dato sirve más para indagar la exposición compartida en el hogar que el riesgo familiar."
+    },
+    "sexo_en_ese_corte": {
+      "hombres": 1736,
+      "mujeres": 3108
+    },
+    "notas": [
+      "Los rangos de edad que publica la fuente no cubren el total: solo aparecen los dos más numerosos. El resto del rango de 30 a 70 años queda sin desglose.",
+      "Ocupación y sector económico también son parciales: la fuente destaca las categorías mayoritarias, no la distribución entera."
+    ]
   }
 }

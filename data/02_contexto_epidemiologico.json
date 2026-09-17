@@ -5,7 +5,8 @@
     "bpin": "2015000100064",
     "fuentes": [
       "Informe_Preliminar_URKUNINA_5000.pdf",
-      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx",
+      "SOCIALIZACION_IDSN_septiembre.pptx"
     ],
     "fecha_extraccion": "2026-09-09",
     "codificacion": "UTF-8",
@@ -150,5 +151,31 @@
         "observacion": "El nombre oficial de Tumaco en la DIVIPOLA es «San Andrés de Tumaco»."
       }
     ]
+  },
+  "cascada_de_correa": {
+    "descripcion": "Secuencia de lesiones descrita por el patólogo nariñense Pelayo Correa: el cáncer gástrico no aparece de golpe, sino al final de una cadena de cambios en la mucosa que puede durar décadas. Es lo que hace posible el tamizaje: las etapas intermedias son detectables y tratables.",
+    "etapas": [
+      {
+        "orden": 1,
+        "etapa": "Gastritis crónica no atrófica"
+      },
+      {
+        "orden": 2,
+        "etapa": "Gastritis crónica atrófica"
+      },
+      {
+        "orden": 3,
+        "etapa": "Metaplasia intestinal"
+      },
+      {
+        "orden": 4,
+        "etapa": "Displasia"
+      },
+      {
+        "orden": 5,
+        "etapa": "Cáncer"
+      }
+    ],
+    "lesion_precursora_de_malignidad": "Las etapas intermedias de la cascada —atrofia, metaplasia y displasia— son las que el proyecto cuenta como lesión precursora de malignidad (LPM)."
   }
 }

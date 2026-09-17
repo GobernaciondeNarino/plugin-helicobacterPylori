@@ -1,0 +1,70 @@
+{
+  "_meta": {
+    "conjunto": "Criterios de inclusión y exclusión de los participantes",
+    "proyecto": "URKUNINA 5000",
+    "bpin": "2015000100064",
+    "fuentes": [
+      "SOCIALIZACION_IDSN_septiembre.pptx"
+    ],
+    "fecha_extraccion": "2026-09-16",
+    "codificacion": "UTF-8",
+    "notas": [
+      "Son los criterios con los que se seleccionó a los 5.000 voluntarios. Explican de quién habla cada cifra del conjunto y, sobre todo, de quién no: leer la prevalencia sin ellos lleva a extenderla a población que el estudio nunca examinó.",
+      "La participación fue voluntaria y mediante consentimiento informado firmado."
+    ]
+  },
+  "inclusion": [
+    {
+      "orden": 1,
+      "criterio": "Hombres y mujeres entre 30 y 70 años de edad."
+    },
+    {
+      "orden": 2,
+      "criterio": "Residir en el área urbana o rural de los municipios del área andina de Nariño por un periodo mínimo de diez años."
+    },
+    {
+      "orden": 3,
+      "criterio": "No haber tenido estudio endoscópico e histopatológico en el último año."
+    },
+    {
+      "orden": 4,
+      "criterio": "Desear participar en el estudio firmando el consentimiento informado."
+    }
+  ],
+  "exclusion": [
+    {
+      "orden": 1,
+      "criterio": "Diagnóstico previo de cáncer gástrico o de otro tipo de cáncer."
+    },
+    {
+      "orden": 2,
+      "criterio": "Estar recibiendo tratamiento por enfermedades gastroduodenales al momento de la invitación."
+    },
+    {
+      "orden": 3,
+      "criterio": "Haber tomado o estar tomando antibióticos compuestos de bismuto, inhibidores de bomba de protones, antiinflamatorios no esteroideos (AINES) o anticoagulantes en las dos semanas anteriores a la invitación."
+    },
+    {
+      "orden": 4,
+      "criterio": "Haber recibido tratamiento para la infección por Helicobacter pylori en el mes anterior."
+    },
+    {
+      "orden": 5,
+      "criterio": "Antecedentes de cirugías gástricas."
+    },
+    {
+      "orden": 6,
+      "criterio": "Historia de úlcera gástrica, várices esofágicas u otras condiciones que dificulten el examen de endoscopia."
+    }
+  ],
+  "resumen": {
+    "criterios_de_inclusion": 4,
+    "criterios_de_exclusion": 6,
+    "rango_etario": {
+      "minimo": 30,
+      "maximo": 70,
+      "unidad": "años"
+    },
+    "residencia_minima_anios": 10
+  }
+}

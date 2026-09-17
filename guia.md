@@ -106,7 +106,7 @@ urkunina-5000/
 
 ## 3. El conjunto de datos
 
-Veinte archivos en `data/`: dieciocho JSON del proyecto y dos de cartografía.
+Veintiún archivos en `data/`: diecinueve JSON del proyecto y dos de cartografía.
 
 | Clave | Archivo | Contenido |
 |---|---|---|
@@ -114,7 +114,7 @@ Veinte archivos en `data/`: dieciocho JSON del proyecto y dos de cartografía.
 | `proyecto` | `01_proyecto.json` | BPIN, aprobación, financiación, ejecución |
 | `epidemiologia` | `02_contexto_epidemiologico.json` | Incidencia por zona de riesgo y comparación nacional |
 | `cobertura` | `03_municipios_cobertura.json` | Los 55 municipios priorizados |
-| `prev_municipal` | `04_prevalencia_municipal.json` | Los diez municipios con mayor prevalencia |
+| `prev_municipal` | `04_prevalencia_municipal.json` | La serie completa de los 55 municipios intervenidos, con los extremos que publicó el informe preliminar |
 | `prev_subregion` | `05_prevalencia_subregional.json` | Prevalencia en las once subregiones |
 | `biobanco` | `06_biobanco_muestras.json` | Muestras por tipo |
 | `sociodemografia` | `07_perfil_sociodemografico.json` | Perfil de los participantes |
@@ -128,6 +128,7 @@ Veinte archivos en `data/`: dieciocho JSON del proyecto y dos de cartografía.
 | `mortalidad` | `15_mortalidad_departamental.json` | Fallecimientos anuales por cáncer de estómago, 2019-2022 (IDSN) |
 | `acceso_oncologico` | `16_acceso_servicios_oncologicos.json` | Las seis IPS oncológicas del departamento y la barrera de acceso territorial |
 | `zonas` | `17_zonas_riesgo_subregion.json` | A qué zona de riesgo pertenece cada subregión. **Derivación declarada**, no dato publicado: trae su comprobación contra los territorios de referencia |
+| `criterios` | `18_criterios_participacion.json` | Los cuatro criterios de inclusión y los seis de exclusión de los participantes |
 | `geojson` | `narino_municipios.geojson` | Geometría de los 64 municipios (DANE) |
 | `geojson_subregiones` | `dep-sub-mun.geojson` | Tres capas: departamento, 13 subregiones y los 64 municipios con la subregión de cada uno |
 
@@ -140,7 +141,7 @@ Veinte archivos en `data/`: dieciocho JSON del proyecto y dos de cartografía.
 
 ### 3.2 Discrepancias documentadas
 
-El manifiesto registra ocho discrepancias entre las fuentes que **no se han
+El manifiesto registra trece discrepancias entre las fuentes que **no se han
 resuelto silenciosamente**. Tres merecen mención:
 
 - **Tamaño del biobanco.** Suma 31.190 muestras por tipo, los documentos hablan
@@ -162,11 +163,98 @@ resuelto silenciosamente**. Tres merecen mención:
 
 Ninguna está conciliada: hacerlo requiere validación con las entidades.
 
+Las cinco últimas llegaron con la socialización ante el IDSN y casi todas son de
+la misma clase: **cortes distintos del mismo recuento**. La versión de
+septiembre de 2023 del informe general daba 35,2 % de LPM y 66,9 % de H. pylori;
+el cierre da 35,1 % y 67,4 %. El corte de noviembre de 2022 contaba 1.736
+hombres y 3.108 mujeres; el cierre, 1.790 y 3.204. En los dos casos se conserva
+la cifra de cierre y se anota la anterior, porque saber que una cifra se movió
+—y cuánto— es parte de lo que un portal de datos abiertos debe poder responder.
+
+La quinta es de otro tipo y conviene tenerla presente: el informe técnico
+titula una figura «Características sociodemográficas de los voluntarios de
+Ipiales», pero el infográfico que trae es el del conjunto —suma 4.844 personas,
+y ese mismo informe declara 250 participantes en Ipiales—. El mismo gráfico
+aparece en el informe general rotulado «Principales características de los
+participantes». **No se creó perfil municipal alguno a partir de esa lámina**:
+se leyó como perfil del conjunto y la contradicción quedó anotada.
+
 Los dos archivos de cartografía tienen su propio tope de tamaño
 (`UHP_Security::MAX_GEO_BYTES`, 8 MiB) en vez de compartir el de los archivos de
 cifras (2 MiB): el de subregiones ocupa 3 MiB solo en vértices, y aflojar el
 límite de todos para que quepa uno abriría la puerta a agotar la memoria del
 sitio con un JSON enorme.
+
+### 3.2.1 La serie completa de los 55 municipios
+
+Hasta septiembre de 2026 el conjunto solo conocía los **extremos** de la
+distribución municipal: los diez municipios con más lesión precursora, los diez
+con más infección y los cinco con menos lesión. Quince cifras de cincuenta y
+cinco. El mapa del tablero dejaba al resto con la cifra de su subregión,
+atenuada y diciéndolo.
+
+La socialización ante el IDSN cerró ese hueco. Entre sus láminas hay capturas de
+pantalla del libro de cálculo del proyecto —las hojas «LPM 55» y «Hp 55»— con
+los dos indicadores de los 55 municipios. Están en
+`04_prevalencia_municipal.json`, bajo `serie_completa`.
+
+Lo que cambia:
+
+- El tablero colorea **55 municipios con cifra propia** en vez de quince. Los
+  nueve que no entraron en el estudio siguen sin colorear, con trama
+  discontinua: ahí no falta un dato, faltó el tamizaje.
+- Dos vistas nuevas, `prev_lpm_55` y `prev_hp_55`, abren directamente en el
+  mapa. Los listados de extremos se conservan: son lo que publicó el informe
+  preliminar y **cada uno de sus quince valores coincide con el de la serie**,
+  que es la prueba de que las dos fuentes hablan de lo mismo. Una comprobación
+  cruza los veinticinco valores en cada ejecución.
+- Doce municipios traen además **numerador y denominador** (entre 70 y 90
+  personas examinadas). Es lo único que se sabe del tamaño de cada muestra
+  municipal, y otra comprobación verifica que el porcentaje publicado sale de
+  esos dos números.
+
+Dos advertencias que el archivo lleva escritas. La primera: la numeración de la
+hoja de origen no es un orden estricto —en «Hp 55», Policarpa (72,2) va antes
+que Túquerres (72,0)—, así que aquí se reordena por prevalencia en lugar de
+copiar el desliz. La segunda: el denominador es el número de participantes de
+cada municipio, no su censo, de modo que estas cifras describen a la población
+tamizada y no se extrapolan sin cautela.
+
+### 3.2.2 Lo demás que trajo la socialización
+
+Junto a la serie municipal llegaron seis cosas más, todas repartidas en los
+archivos que ya les correspondían:
+
+- **Criterios de participación** (`18_criterios_participacion.json`, nuevo).
+  Cuatro de inclusión y seis de exclusión. Dicen de quién habla cada cifra del
+  conjunto y, sobre todo, de quién no: sin ellos, la prevalencia se extiende
+  sin querer a población que el estudio nunca examinó.
+- **Objetivos y cronología** (`01_proyecto.json`). El objetivo general, los
+  cuatro específicos y los siete hitos de 2014 a 2022. El reparto de la
+  financiación en porcentaje —85,09 % del SGR, 14,91 % de cofinanciación— no se
+  copió de la lámina: se calcula de los valores que el archivo ya tenía, y una
+  comprobación verifica que sigue saliendo de ellos.
+- **Cascada de Correa** (`02_contexto_epidemiologico.json`). Las cinco etapas de
+  la secuencia que describió el patólogo nariñense, de la gastritis crónica no
+  atrófica al cáncer. Es lo que explica por qué el tamizaje tiene sentido: las
+  etapas intermedias son detectables y tratables.
+- **Diagnóstico de cada uno de los ocho casos** (`09_casos_cancer_detectados.json`).
+  Cinco cánceres gástricos, dos adenocarcinomas de tipo difuso y uno subcardial.
+  Sin ningún dato de identificación, como los publicó la entidad; una
+  comprobación se asegura de que no se cuele ninguno, y otra de que los ocho
+  casos reproducen la distribución municipal y los desenlaces que el archivo ya
+  declaraba.
+- **Las dos cifras que faltaban del estado nutricional**
+  (`07_perfil_sociodemografico.json`): delgadez 18 personas y peso normal 1.429.
+  Estaban en `null` desde el principio. Cuadran con los porcentajes que ya había
+  sobre una base de 4.830.
+- **Un corte preliminar de noviembre de 2022**, en el mismo archivo pero en su
+  propio bloque `corte_preliminar_2022` y con su advertencia. Trae procedencia
+  urbana y rural, dos rangos de edad, ocupación, sector económico y antecedentes
+  familiares: variables que ninguna otra fuente desagrega. **Su base son 4.844
+  participantes, no los 5.000 del cierre**, así que va aparte y no se suma ni se
+  compara con el resto. Una comprobación vigila justamente eso: que ese bloque
+  no haya contaminado las distribuciones de cierre.
 
 ### 3.3 El cruce con la geometría
 
@@ -893,19 +981,29 @@ npm run test:datos   # capa de datos, sin WordPress
 npm test             # lo anterior más las pruebas de navegador
 ```
 
-### 8.1 Capa de datos — 430 comprobaciones
+### 8.1 Capa de datos — 482 comprobaciones
 
 `tests/test-datos.php` ejecuta las clases del plugin fuera de WordPress, con
 sustitutos mínimos de sus funciones (`tests/stubs-wordpress.php`). Comprueba
-que los veinte archivos se leen y cumplen su contrato, que la topología que
+que los veintiún archivos se leen y cumplen su contrato, que la topología que
 consume D3plus se construye bien —anillos cerrados, sentido de giro correcto,
 error de cuantización por debajo del 0,03 % y subregiones disueltas—, que el saneador de CSS
 neutraliza lo peligroso **y conserva intacto lo legítimo**, que los 55
-municipios cruzan con la geometría, que las 27 vistas producen filas con la
+municipios cruzan con la geometría, que las 29 vistas producen filas con la
 forma que declaran, que sus textos llegan a los 375 caracteres, y que las
 cifras cuadran entre sí: los positivos y negativos suman 5.000, la distribución
 municipal de casos suma el total declarado, las muestras por tipo suman el
 inventario y las fuentes de financiación suman el presupuesto.
+
+La serie municipal completa trajo consigo cuatro comprobaciones más, todas del
+mismo espíritu: que sus 55 municipios existen en la cobertura y no se repiten,
+que **los veinticinco valores de los listados de extremos coinciden uno a uno
+con los de la serie** —dos fuentes distintas contando lo mismo—, que el
+porcentaje de los doce municipios con numerador sale de su propio numerador, y
+que la media de los 55 valores no se aparta de la cifra departamental. Esta
+última no dice cómo se calculó el 35,1 % —eso sale de 1.755 sobre 5.000— sino
+que sirve de red: si alguien transcribe mal un municipio, la media se mueve y la
+prueba lo delata.
 
 Dos comprobaciones nuevas merecen mención porque protegen de un error
 silencioso:
@@ -919,7 +1017,7 @@ silencioso:
   Ofrecerlo en una vista sin territorio produciría un mapa vacío; no ofrecerlo
   en una que sí lo tiene esconde la mitad de la lectura.
 
-### 8.2 Navegador — 63 pruebas
+### 8.2 Navegador — 65 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a
@@ -937,7 +1035,8 @@ los 64 municipios o las 13 subregiones según el nivel de la vista, que colorea
 solo los que traen cifra, que ninguna geometría se invierte —la prueba del
 sentido de giro—, que las subregiones llegan disueltas, que la capa base se
 enciende y se apaga desde el shortcode con su atribución, y que cada topología
-se descarga una sola vez por página; que el mapa pinta los 64 municipios sobre OpenStreetMap con su
+se descarga una sola vez por página, y que la vista de los 55 municipios
+colorea 55 y deja nueve sin dato; que el mapa pinta los 64 municipios sobre OpenStreetMap con su
 leyenda y su atribución, que cambiar de indicador no vuelve a descargar la
 geometría y que los polígonos son accesibles con teclado; que el tablero ocupa
 el 100 % de ancho y 100vh de alto sin desbordar, que su mapa dibuja los 64
@@ -945,8 +1044,10 @@ municipios **cada uno con su propia extensión** —la prueba del sentido de
 giro: con los anillos al revés todos medirían lo mismo—, que los siete
 municipios con caso llevan su círculo, que filtrar por zona o por subregión
 recorta la lista, las cifras y el título del mapa, que elegir un municipio
-abre su ficha y lo resalta, que el tablero **dice cuándo la cifra es de la
-subregión y no del municipio**, que cambiar de indicador repinta leyenda,
+abre su ficha y lo resalta, que **los 55 municipios intervenidos llevan ya su
+propia cifra** y ninguno cae en la de su subregión —la comprobación de que la
+serie completa llegó hasta el mapa—, que los nueve municipios fuera del estudio
+siguen sin colorear, que cambiar de indicador repinta leyenda,
 barras y cifras, que la cifra de cada barra se lee sobre el fondo que le toca,
 que «Limpiar» devuelve el estado inicial, que el zoom mueve el mapa, que el
 **perfil de los participantes NO responde a los filtros**, que el cambio se
@@ -980,6 +1081,18 @@ la página.
 El entorno de pruebas espeja Three.js, D3plus y Leaflet en local
 (`tests/vendor`, no versionado) para no depender de la red, incluida la ruta
 absoluta que los complementos de Three.js importan internamente.
+
+### 8.2.1 La suite no sale a la red
+
+Salvo por el espejo de Three.js, ninguna prueba depende de internet. Las
+peticiones a los servidores de capa base —OpenStreetMap y CARTO— se interceptan
+y se responden con una tesela de un píxel: lo que se comprueba es que el
+componente **pide** la capa base y la coloca, no cómo se ve una tesela.
+
+Dos pruebas se saltaban esa regla y salían de verdad a `tile.openstreetmap.org`.
+Pasaban mientras el entorno lo permitiera; con un proxy que intercepta el TLS,
+Chromium rechaza el certificado y esos fallos de red acababan contados como
+errores del plugin. El helper `sinTeselas()` las cubre ahora también.
 
 ### 8.3 Las páginas de prueba no listan sus recursos
 

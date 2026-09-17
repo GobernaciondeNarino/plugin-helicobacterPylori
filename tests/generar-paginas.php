@@ -379,6 +379,15 @@ $paginas['geomapa'] = construir(
 				)
 			) .
 			'</div>' .
+			'<div data-caso="serie-55">' .
+			$sc->sc_geomapa(
+				array(
+					'view'    => 'prev_lpm_55',
+					'alto'    => '420px',
+					'teselas' => 'no',
+				)
+			) .
+			'</div>' .
 			'<div data-caso="subregiones">' .
 			$sc->sc_geomapa(
 				array(

@@ -275,6 +275,41 @@ final class UHP_Views {
 				'grupo'       => 'Prevalencia',
 				'fuente'      => 'Informe preliminar URKUNINA 5000',
 			),
+			'prev_lpm_55'          => array(
+				'name'        => 'Lesión precursora en los 55 municipios',
+				'description' => 'Prevalencia de lesión precursora de malignidad en cada uno de los 55 municipios que intervino el proyecto.',
+				'category'    => 'ranking',
+				'dimensions'  => array( 'municipio' ),
+				'measures'    => array( 'prevalencia' ),
+				// El mapa abre la vista: cincuenta y cinco barras se leen
+				// peor que un departamento coloreado, y la barra sigue a un
+				// clic desde la barra de tipos.
+				'default'     => 'mapa',
+				'heatmap'     => true,
+				'geo'         => array(
+					'nivel'  => 'municipio',
+					'campo'  => 'municipio',
+					'medida' => 'prevalencia',
+				),
+				'grupo'       => 'Prevalencia',
+				'fuente'      => 'Socialización del proyecto ante el IDSN',
+			),
+			'prev_hp_55'           => array(
+				'name'        => 'Infección por H. pylori en los 55 municipios',
+				'description' => 'Prevalencia de infección por Helicobacter pylori en cada uno de los 55 municipios que intervino el proyecto.',
+				'category'    => 'ranking',
+				'dimensions'  => array( 'municipio' ),
+				'measures'    => array( 'prevalencia' ),
+				'default'     => 'mapa',
+				'heatmap'     => true,
+				'geo'         => array(
+					'nivel'  => 'municipio',
+					'campo'  => 'municipio',
+					'medida' => 'prevalencia',
+				),
+				'grupo'       => 'Prevalencia',
+				'fuente'      => 'Socialización del proyecto ante el IDSN',
+			),
 			'prev_lpm_extremos'    => array(
 				'name'        => 'Lesión precursora: los extremos publicados',
 				'description' => 'Los diez municipios con mayor prevalencia de lesión precursora y los cinco con menor, los dos extremos que publica el informe.',
@@ -872,6 +907,12 @@ final class UHP_Views {
 			case 'prev_hp_municipios':
 				return self::filas_top( 'top10_infeccion_h_pylori', 'prevalencia_h_pylori_porcentaje' );
 
+			case 'prev_lpm_55':
+				return self::filas_serie_55( 'prevalencia_lpm_porcentaje' );
+
+			case 'prev_hp_55':
+				return self::filas_serie_55( 'prevalencia_h_pylori_porcentaje' );
+
 			case 'prev_lpm_extremos':
 				$filas  = array();
 				$bloque = array(
@@ -1091,6 +1132,42 @@ final class UHP_Views {
 				'divipola'    => UHP_Municipios::divipola_de( $m['municipio'] ),
 			);
 		}
+		return $filas;
+	}
+
+	/**
+	 * Filas de la serie completa de los 55 municipios intervenidos.
+	 *
+	 * Ordena de mayor a menor, que es como se lee un ranking, y arrastra el
+	 * DIVIPOLA para que el mapa cruce por código y no por nombre. Donde la
+	 * fuente publica denominador, viaja también: un 77,1 % sobre 70 personas
+	 * no se lee igual que un 77,1 % sobre 900.
+	 *
+	 * @param string $campo Campo con el porcentaje.
+	 * @return array<int,array>
+	 */
+	private static function filas_serie_55( $campo ) {
+		$filas = array();
+		foreach ( (array) UHP_Datos::valor( 'prev_municipal', 'serie_completa', array() ) as $m ) {
+			if ( empty( $m['municipio'] ) || ! isset( $m[ $campo ] ) ) {
+				continue;
+			}
+			$filas[] = array(
+				'municipio'   => (string) $m['municipio'],
+				'prevalencia' => (float) $m[ $campo ],
+				'examinados'  => isset( $m['participantes_examinados'] ) ? (int) $m['participantes_examinados'] : null,
+				'divipola'    => UHP_Municipios::divipola_de( $m['municipio'] ),
+			);
+		}
+		usort(
+			$filas,
+			static function ( $a, $b ) {
+				if ( $a['prevalencia'] === $b['prevalencia'] ) {
+					return strcmp( $a['municipio'], $b['municipio'] );
+				}
+				return ( $a['prevalencia'] < $b['prevalencia'] ) ? 1 : -1;
+			}
+		);
 		return $filas;
 	}
 

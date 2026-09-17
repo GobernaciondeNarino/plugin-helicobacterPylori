@@ -5,7 +5,8 @@
     "bpin": "2015000100064",
     "fuentes": [
       "Informe_Preliminar_URKUNINA_5000.pdf",
-      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx"
+      "URKUNINA_5000_-_Presentacio_n_Informe_Final.pptx",
+      "SOCIALIZACION_IDSN_septiembre.pptx"
     ],
     "fecha_extraccion": "2026-09-09",
     "codificacion": "UTF-8",
@@ -14,7 +15,8 @@
     "notas": [
       "Todos los casos se detectaron en personas voluntarias asintomáticas al momento del examen.",
       "El desenlace corresponde a la fecha del último informe disponible.",
-      "No se documentan datos individuales de los pacientes."
+      "No se documentan datos individuales de los pacientes.",
+      "El detalle por caso —diagnóstico histológico y desenlace— procede de la socialización del IDSN, que lo publica sin ningún dato de identificación. Aquí se conserva tal cual: ni nombres, ni edades, ni fechas, ni nada que permita reconocer a una persona."
     ]
   },
   "resumen": {
@@ -65,6 +67,56 @@
       "estado": "Fallecieron",
       "casos": 3,
       "observacion": "Hasta la fecha del último informe disponible"
+    }
+  ],
+  "casos": [
+    {
+      "caso": 1,
+      "municipio": "Belén",
+      "diagnostico": "Cáncer gástrico",
+      "estado": "Falleció"
+    },
+    {
+      "caso": 2,
+      "municipio": "Belén",
+      "diagnostico": "Cáncer gástrico",
+      "estado": "En atención por su EPS"
+    },
+    {
+      "caso": 3,
+      "municipio": "Yacuanquer",
+      "diagnostico": "Cáncer gástrico",
+      "estado": "En atención por su EPS"
+    },
+    {
+      "caso": 4,
+      "municipio": "Chachagüí",
+      "diagnostico": "Cáncer gástrico",
+      "estado": "En atención por su EPS"
+    },
+    {
+      "caso": 5,
+      "municipio": "Ipiales",
+      "diagnostico": "Cáncer gástrico",
+      "estado": "Falleció"
+    },
+    {
+      "caso": 6,
+      "municipio": "La Unión",
+      "diagnostico": "Adenocarcinoma tipo difuso",
+      "estado": "Falleció"
+    },
+    {
+      "caso": 7,
+      "municipio": "Barbacoas",
+      "diagnostico": "Cáncer gástrico subcardial",
+      "estado": "En atención por su EPS"
+    },
+    {
+      "caso": 8,
+      "municipio": "Consacá",
+      "diagnostico": "Adenocarcinoma tipo difuso",
+      "estado": "En atención por su EPS"
     }
   ]
 }

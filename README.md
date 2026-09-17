@@ -15,7 +15,7 @@ conoce al volcán Galeras.
 
 ## Qué hace
 
-Convierte el conjunto de datos del proyecto —dieciocho archivos JSON más la
+Convierte el conjunto de datos del proyecto —diecinueve archivos JSON más la
 cartografía municipal y subregional— en componentes publicables desde el editor
 de WordPress:
 
@@ -23,7 +23,7 @@ de WordPress:
 |---|---|
 | Tablero de resultados: mapa del departamento, filtros y lectura del territorio | `[urkunina_dashboard]` |
 | Recreación 3D de *Helicobacter pylori* con línea de tiempo | `[urkunina_3d desplazar="si\|no"]` |
-| Gráfico de cualquiera de las 27 vistas del catálogo, con el mapa entre sus tipos | `[urkunina_grafico view="…" type="…"]` |
+| Gráfico de cualquiera de las 29 vistas del catálogo, con el mapa entre sus tipos | `[urkunina_grafico view="…" type="…"]` |
 | Mapa coroplético de los 64 municipios sobre OpenStreetMap | `[urkunina_mapa]` |
 | Geomapa de D3plus de una vista territorial, por municipio o por subregión | `[urkunina_geomapa view="…" teselas="si\|no"]` |
 | Tarjetas con las cifras clave del proyecto | `[urkunina_kpi]` |
@@ -202,6 +202,23 @@ GET /wp-json/urkunina/v1/tablero            → todo lo que necesita el tablero
 
 Todas son públicas y de solo lectura, con límite de peticiones por IP.
 
+### Prevalencia de los 55 municipios
+
+Desde septiembre de 2026, `04_prevalencia_municipal.json` trae la serie completa:
+la prevalencia de lesión precursora de malignidad y de infección por *H. pylori*
+de **cada uno de los 55 municipios** que intervino el proyecto, y no solo los
+extremos de la distribución. Doce de ellos publican además cuántas personas se
+examinaron.
+
+```
+[urkunina_grafico view="prev_lpm_55"]   → lesión precursora, los 55 municipios
+[urkunina_grafico view="prev_hp_55"]    → infección por H. pylori, los 55
+```
+
+Las dos vistas abren en el mapa y admiten barras, treemap y caja de bigotes
+desde su propia barra de herramientas. El tablero pasó a colorear 55 municipios
+con cifra propia en lugar de quince.
+
 **Los datos son agregados.** No contienen microdatos de los 5.000 participantes,
 resultados de laboratorio individuales ni la identidad de los pacientes con
 cáncer detectado: esa información no está en los documentos fuente.
@@ -212,8 +229,8 @@ cáncer detectado: esa información no está en los documentos fuente.
 
 ```bash
 npm install          # instala Playwright
-npm run test:datos   # 430 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 63 pruebas de navegador
+npm run test:datos   # 482 comprobaciones de la capa de datos, sin WordPress
+npm test             # lo anterior más 65 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los

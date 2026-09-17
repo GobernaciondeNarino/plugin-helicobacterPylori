@@ -4,7 +4,7 @@
     "proyecto": "URKUNINA 5000",
     "bpin": "2015000100064",
     "entidad": "Gobernación de Nariño — Secretaría TIC, Innovación y Gobierno Abierto",
-    "fecha_generacion": "2026-09-13",
+    "fecha_generacion": "2026-09-16",
     "codificacion": "UTF-8",
     "licencia_sugerida": "Datos abiertos institucionales — verificar con el custodio antes de publicar",
     "cobertura_del_listado": "Todos los archivos del conjunto salvo el propio manifiesto, que no puede declarar su propio hash."
@@ -32,20 +32,37 @@
         "National Cancer Institute (EE. UU.) en la red de aliados",
         "Tres pasos de la próxima fase hacia la plataforma de datos"
       ]
+    },
+    {
+      "archivo": "SOCIALIZACION_IDSN_septiembre.pptx",
+      "tipo": "PPTX (recibido en PDF)",
+      "titulo": "Socialización del proyecto ante el Instituto Departamental de Salud de Nariño",
+      "version": "Recibida el 16 de septiembre de 2026 (13 diapositivas).",
+      "novedades": [
+        "Prevalencia de LPM y de H. pylori de los 55 municipios, la serie completa: hasta ahora solo se conocían los extremos de la distribución",
+        "Numerador y denominador de doce municipios: las primeras cifras de cuántas personas se examinaron en un municipio",
+        "Criterios de inclusión y exclusión de los participantes",
+        "Objetivo general y los cuatro objetivos específicos",
+        "Cascada de Correa: las cinco etapas de la secuencia",
+        "Cronología del proyecto, de 2014 a 2022",
+        "Diagnóstico histológico de cada uno de los ocho casos de cáncer",
+        "Delgadez (18) y peso normal (1.429), las dos cifras que faltaban del estado nutricional"
+      ],
+      "observacion": "Varias láminas son capturas de pantalla de los archivos de trabajo del proyecto —un libro de Excel y dos informes—, con lo que la socialización acaba siendo la fuente más detallada recibida hasta ahora. Una de esas capturas es ajena al proyecto y se descartó."
     }
   ],
   "archivos": [
     {
       "archivo": "01_proyecto.json",
       "contenido": "Identificación, financiación y estado de ejecución del proyecto",
-      "bytes": 2531,
-      "sha256_16": "6cf17f61a3e2895a"
+      "bytes": 5162,
+      "sha256_16": "ce615e86461a6336"
     },
     {
       "archivo": "02_contexto_epidemiologico.json",
       "contenido": "Incidencia de cáncer gástrico por zona de riesgo y comparación nacional",
-      "bytes": 5670,
-      "sha256_16": "4b635b26bfa5f6fd"
+      "bytes": 6643,
+      "sha256_16": "69bff824e7e31e07"
     },
     {
       "archivo": "03_municipios_cobertura.json",
@@ -56,8 +73,8 @@
     {
       "archivo": "04_prevalencia_municipal.json",
       "contenido": "Municipios con mayor prevalencia de lesión precursora de malignidad (LPM) e infección por H. pylori",
-      "bytes": 4147,
-      "sha256_16": "70d5d96b52adf220"
+      "bytes": 14282,
+      "sha256_16": "5ac4ba2096b25e3f"
     },
     {
       "archivo": "05_prevalencia_subregional.json",
@@ -74,8 +91,8 @@
     {
       "archivo": "07_perfil_sociodemografico.json",
       "contenido": "Perfil sociodemográfico y socioeconómico de los participantes",
-      "bytes": 3608,
-      "sha256_16": "acae065e8d0a05d8"
+      "bytes": 5600,
+      "sha256_16": "9df5dac3c2ae0d98"
     },
     {
       "archivo": "08_resultados_tamizaje.json",
@@ -86,8 +103,8 @@
     {
       "archivo": "09_casos_cancer_detectados.json",
       "contenido": "Casos de cáncer gástrico detectados mediante tamizaje endoscópico preventivo",
-      "bytes": 1757,
-      "sha256_16": "ecf290c1c5db22cd"
+      "bytes": 3238,
+      "sha256_16": "1f2562d31eb14828"
     },
     {
       "archivo": "10_actores_institucionales.json",
@@ -136,6 +153,12 @@
       "contenido": "Zona de riesgo de cada subregión. DERIVACIÓN declarada, no dato publicado",
       "bytes": 4625,
       "sha256_16": "c7892f3f8814cb85"
+    },
+    {
+      "archivo": "18_criterios_participacion.json",
+      "contenido": "Criterios de inclusión y exclusión con los que se seleccionó a los participantes",
+      "bytes": 2336,
+      "sha256_16": "e88fddd20723048a"
     },
     {
       "archivo": "dep-sub-mun.geojson",
@@ -217,6 +240,36 @@
       "texto_informe": "«El propio equipo del proyecto identifica cuatro retos técnicos pendientes»",
       "tabla_del_mismo_informe": "La tabla que sigue a esa frase enumera cinco retos",
       "tratamiento": "Se conservan los cinco retos de la tabla; el «cuatro» del texto parece no haberse actualizado al añadirse el repositorio digital."
+    },
+    {
+      "tema": "Prevalencia global de LPM y de H. pylori",
+      "informe_pdf": "35,1 % de LPM y 67,4 % de H. pylori (cifras de cierre)",
+      "presentacion_pptx": "35,2 % de LPM y 66,9 % de H. pylori en la versión de septiembre de 2023 del informe general",
+      "tratamiento": "Se conservan las cifras de cierre. La diferencia es de corte, no de método: 1.755 y 3.370 sobre 5.000 dan exactamente 35,1 % y 67,4 %."
+    },
+    {
+      "tema": "Distribución por sexo",
+      "informe_pdf": "1.790 hombres y 3.204 mujeres sobre 4.994 con dato",
+      "presentacion_pptx": "1.736 hombres y 3.108 mujeres sobre 4.844, en el corte de noviembre de 2022",
+      "tratamiento": "Se conservan las cifras de cierre. Los dos cortes dan el mismo reparto, 35,8 % y 64,2 %; lo que cambia es cuánta gente se había examinado."
+    },
+    {
+      "tema": "El infográfico rotulado «voluntarios de Ipiales»",
+      "informe_pdf": "La Figura 1 del informe técnico general lo titula «Características sociodemográficas de los voluntarios de Ipiales»",
+      "presentacion_pptx": "La misma imagen aparece en el informe general titulada «Principales características de los participantes»",
+      "tratamiento": "Se lee como perfil del conjunto, no de Ipiales: las 4.844 personas que suma no caben en un municipio cuyo informe declara 250 participantes. No se creó perfil municipal alguno a partir de esa lámina."
+    },
+    {
+      "tema": "Infección por H. pylori en Ipiales",
+      "informe_pdf": "61,2 % en la hoja «Hp 55» del libro de cálculo del proyecto",
+      "presentacion_pptx": "66,8 % en el informe técnico de noviembre de 2022, sobre n = 250",
+      "tratamiento": "Se publica 61,2 %, que es la serie de cierre y la que cuadra con el resto de los 55 municipios. La cifra de 2022 queda aquí anotada, no en la serie."
+    },
+    {
+      "tema": "Prevalencia de LPM por subregión dentro del libro de cálculo",
+      "informe_pdf": "La hoja «LPM-Hp» trae un primer bloque con otros valores (Obando 33,6; La Sabana 41,5; Río Mayo 42,7…)",
+      "presentacion_pptx": "El bloque consolidado de la misma hoja y el mapa de la socialización dan Obando 32,2; La Sabana 38,9; Río Mayo 44,3",
+      "tratamiento": "Se conserva el bloque consolidado, que es el que la entidad publicó y el que ya tenía este conjunto: sus once pares de valores coinciden uno a uno."
     }
   ]
 }

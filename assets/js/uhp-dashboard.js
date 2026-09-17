@@ -14,9 +14,10 @@
    TRES REGLAS DE HONESTIDAD QUE EL DIBUJO SOSTIENE:
 
      · Un municipio SIN cifra propia se pinta con la de su subregión, pero
-       atenuado y diciéndolo en el tooltip. El informe solo publica los
-       extremos de la distribución municipal; dejar en gris a los cuarenta
-       y tantos restantes escondería lo que sí se sabe de ellos.
+       atenuado y diciéndolo en el tooltip. Con la serie completa de los 55
+       municipios ya no hace falta para ninguno de ellos, pero la regla se
+       queda: si un día faltara una cifra, el mapa seguiría mostrando lo que
+       sí se sabe en vez de dejar el municipio en gris.
      · Un municipio NO INTERVENIDO no se colorea en absoluto: va con trama
        discontinua. No es que falte el dato, es que el proyecto no estuvo
        allí.
@@ -606,7 +607,7 @@
 
       caja.appendChild(C.el('div', 'uhp-db__nota',
         (m.lpm != null || m.hp != null)
-          ? 'Cifras municipales del informe ejecutivo.'
+          ? 'Cifras propias del municipio, de la serie de los 55 intervenidos.'
           : 'Sin cifra municipal publicada: se muestra la referencia de la subregión ' + m.sub + '.'));
       return;
     }
