@@ -1,23 +1,62 @@
-# Asistente de voz — qué sale del navegador y con qué amparo
+# Asistente del tablero — qué sale del navegador y con qué amparo
 
 Documento de análisis para la Secretaría TIC y para quien audite el sitio. No
 es el aviso que lee el ciudadano: ese lo imprime el plugin y está en
-`UHP_Voz::aviso_bloques()`.
+`UHP_Voz::aviso_bloques()`, que tiene **dos versiones**, una por canal.
 
 ---
 
 ## 1. Qué se envía, exactamente
 
-Cuando un visitante acepta y habla, salen del navegador:
+Depende del canal, y la diferencia es la que importa de todo este documento.
+
+### Canal de voz
 
 - **El audio de su voz**, en tiempo real, mientras la conversación esté abierta.
 - **Su transcripción**, que produce el proveedor.
 - **Los metadatos de la conexión**: dirección IP, agente de usuario, momento.
 
-Y **no** sale nada más. En particular, el plugin **no envía los datos del
-proyecto**: el agente los obtiene llamando a herramientas que corren en el
-propio navegador y leen lo que el tablero ya descargó. Las cifras no viajan al
-proveedor; viajan las preguntas y las respuestas habladas.
+Además, el SDK pide un **bloqueo de pantalla** (`navigator.wakeLock`) mientras
+la conversación esté abierta, y el plugin lo deja puesto a conciencia: durante
+una conversación hablada el visitante no toca el teléfono, y una pantalla que se
+apaga a media respuesta corta la conversación. No sale ningún dato por ahí, pero
+es un efecto sobre el dispositivo del ciudadano y se declara. En el canal
+escrito no ocurre.
+
+### Canal escrito
+
+- **El texto que teclee**, y nada más de él.
+- **Los metadatos de la conexión**: los mismos.
+- **Ninguna muestra de voz.** No se pide el permiso del micrófono, el SDK abre
+  un `TextConversation` que no toca `navigator.mediaDevices` ni crea un
+  `AudioContext`, y una prueba de navegador comprueba que `getUserMedia` no se
+  llama **ni una vez**. No es que el audio no se use: es que no se captura.
+
+La consecuencia jurídica no es menor. La voz de una persona identificada puede
+constituir **dato biométrico**, y por tanto dato sensible del artículo 5 de la
+Ley 1581 de 2012. En el canal escrito ese dato no existe, de modo que pedirle al
+ciudadano que autorice su tratamiento sería recoger una autorización por algo
+que no va a ocurrir: un aviso con un bloque de más informa peor, no mejor. Por
+eso hay dos avisos y **dos autorizaciones guardadas aparte**.
+
+La implicación, que el plugin respeta: aceptar el aviso **escrito** no abre el
+micrófono. Al revés sí, porque el aviso de la voz dice con esas palabras que
+«puede escribir sus preguntas en lugar de hablarlas»: lo ya autorizado incluye
+lo más estrecho. Retirar la autorización retira las dos.
+
+### En los dos canales
+
+El plugin **no envía los datos del proyecto**: el agente los obtiene llamando a
+herramientas que corren en el propio navegador y leen lo que el tablero ya
+descargó. Las cifras no viajan al proveedor; viajan las preguntas y las
+respuestas.
+
+Lo que sí viaja en los dos, y conviene decirlo sin adornos, es **lo que el
+ciudadano decida contar**. Una persona puede escribir «a mi mamá le encontraron
+una lesión» con la misma facilidad con que lo diría, y entonces hay un dato de
+salud de un tercero en la transcripción de un encargado en el exterior. Cambia
+el canal, no el riesgo. Los dos avisos lo advierten, y las instrucciones del
+agente le prohíben pedir o repetir datos personales.
 
 ## 2. A dónde va
 
@@ -43,10 +82,17 @@ exactamente lo que recoge la compuerta.
 - **Artículo 8 de la Ley 1581** — derechos del titular. El botón «Retirar
   autorización» corta la conversación y borra la aceptación en el acto; el
   aviso da el correo y el canal de radicación.
-- **Artículo 5** — la voz puede constituir **dato sensible**. El aviso lo dice y
-  pide expresamente no dictar síntomas, resultados de laboratorio ni datos de
-  terceros. El agente, además, lleva en sus instrucciones no pedirlos y no
-  repetirlos.
+- **Artículo 5** — la voz puede constituir **dato sensible**: es un dato
+  biométrico de una persona identificable. El aviso de voz lo dice.
+- **Artículo 6** — prohibición de tratar datos sensibles salvo excepciones. Se
+  aplica a los dos canales, porque lo que el ciudadano cuente por su cuenta
+  puede serlo. Los dos avisos piden expresamente no dictar ni escribir síntomas,
+  resultados de laboratorio ni datos de terceros. El agente, además, lleva en
+  sus instrucciones no pedirlos y no repetirlos.
+- **Artículo 26, en los dos canales.** Que el dato sea texto en vez de audio no
+  lo mantiene en Colombia. El aviso escrito conserva ese bloque íntegro, y una
+  comprobación de `tests/test-datos.php` lo fija: si alguien lo recortara
+  pensando que «con texto no hace falta», la prueba falla.
 
 ## 4. Lo que el plugin hace para reducir la huella
 
@@ -57,6 +103,13 @@ exactamente lo que recoge la compuerta.
 | La clave de API vive fuera del array que alimenta al front, y mejor en `wp-config.php` | `UHP_Voz::OPCION_CLAVE`, `clave_api()` |
 | Lo que viaja al navegador se arma por lista blanca, nunca por resta | `UHP_Voz::config_front()` |
 | La autorización se guarda en `sessionStorage`, no en `localStorage`: vale para la visita | `claveConsentimiento()` |
+| Una autorización **por canal**: aceptar el escrito no abre el micrófono | `consentido()` en `uhp-voz.js` |
+| El aviso del canal que esta página no ofrece **no viaja** en el HTML | `UHP_Voz::control_html()` |
+| En el canal escrito **no se pide el micrófono ni una vez** | `permisoMicrofono()` en `uhp-voz.js` |
+| En el canal escrito la sesión se declara `text_only` también al servidor, que así no sintetiza —ni factura— un audio que nadie va a oír | `abrir()` en `uhp-voz.js` |
+| El permiso del micrófono se pide **antes** de comprar la credencial: una negativa no gasta cupo | `arrancarSesion()` |
+| La ruta de sesión mira también la **visibilidad**: con el asistente en ensayo no reparte credenciales facturables a visitantes anónimos | `ruta_sesion()` |
+| Solo se envía al proveedor la sustitución que una **verificación** haya confirmado | `UHP_Voz::permite()` |
 | Cerrar el panel mientras conecta cierra también la sesión que llegue tarde | testigo de generación en `uhp-voz.js` |
 | La clave se guarda sin `autoload`: no se carga en cada petición del sitio | `UHP_Activator` |
 | Versionado del aviso: al cambiarlo, las autorizaciones viejas dejan de valer | ajuste `aviso_version` |
@@ -72,6 +125,13 @@ comprada con la clave de la entidad, que abre una conversación facturable desde
 cualquier máquina. Quien la pide es un visitante anónimo, de modo que **no hay a
 quién autenticar**. Las cuatro puertas encarecen el abuso y lo acotan; ninguna
 lo hace imposible:
+
+Y la ruta es **la misma para los dos canales**: el servidor firma la credencial
+sin saber —ni poder saber— si el navegador la va a usar para hablar o para
+escribir. Eso tiene dos consecuencias que conviene no confundir: una sesión
+escrita **gasta una ranura del cupo igual** que una hablada, y el ahorro del
+canal escrito está en lo que el proveedor factura por ella, no en el número de
+sesiones que la entidad reparte.
 
 | Puerta | Frena | No frena |
 |---|---|---|
@@ -113,6 +173,15 @@ palabras. Es la razón por la que el modo privado es el valor por defecto.
    aviso, hash truncado de IP con sal rotatoria) con purga automática.
 4. **La lista de dominios permitidos del agente**, que es la única frontera
    real contra el uso del agente desde otro sitio.
+5. **Las sustituciones habilitadas en el agente.** Si se configura una voz, una
+   velocidad o el canal escrito, hay que habilitar `voice_id`, `speed` y
+   `text_only` en la configuración de seguridad del agente. Habilitar una
+   sustitución significa que **cualquier página que pueda abrir una sesión
+   contra ese agente puede fijar ese valor**; es una razón más para que la lista
+   de dominios permitidos esté cerrada, y para no habilitar las que no se usen.
+6. **Si usa «visible solo para quien pueda editar»**, comprobar que la caché del
+   sitio no sirve una sola copia a todo el mundo. El plugin define
+   `DONOTCACHEPAGE`, pero no puede auditar la CDN de nadie.
 
 ## 6. Qué pasa si se apaga
 

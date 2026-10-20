@@ -1395,7 +1395,7 @@ comprobar(
 	'Con uno público sí, porque el navegador lo necesita para abrir la sesión'
 );
 
-$permitidas = array( 'agente', 'modo', 'transporte', 'texto', 'recordar', 'avisoVersion', 'ruta', 'sdk' );
+$permitidas = array( 'agente', 'modo', 'transporte', 'entrada', 'voz', 'textoServidor', 'texto', 'recordar', 'avisoVersion', 'ruta', 'sdk' );
 $sobran     = array_diff( array_keys( $front ), $permitidas );
 comprobar(
 	! $sobran,
@@ -1423,7 +1423,7 @@ comprobar(
 // separarse: si alguien cambia un parámetro y no regenera el JSON, quien
 // configure el agente pegará una forma que el navegador ya no entiende.
 $defs = UHP_Voz::definiciones_herramientas();
-comprobar( 8 === count( $defs ), sprintf( 'El agente declara ocho herramientas de cliente (%d)', count( $defs ) ) );
+comprobar( 10 === count( $defs ), sprintf( 'El agente declara diez herramientas de cliente (%d)', count( $defs ) ) );
 
 $ruta_json = UHP_DIR . 'docs/voz/herramientas.json';
 $doc       = is_readable( $ruta_json ) ? json_decode( (string) file_get_contents( $ruta_json ), true ) : null;
@@ -1469,6 +1469,18 @@ comprobar(
 	in_array( 'wss://*.livekit.cloud', UHP_Voz::hosts_csp()['connect-src'], true ),
 	'Con transporte WebRTC sí los declara, porque el audio va por ahí'
 );
+// Pero solo en modo PÚBLICO: en privado la sesión se abre siempre con la
+// URL firmada por WebSocket y el ajuste de transporte no se usa. Declarar
+// LiveKit sería pedirle a la entidad cuatro orígenes con comodín en su
+// política para un transporte que su sitio no utiliza.
+$priv_rtc         = $lleno;
+$priv_rtc['modo'] = 'privado';
+update_option( 'uhp_voz', $priv_rtc );
+comprobar(
+	! in_array( 'wss://*.livekit.cloud', UHP_Voz::hosts_csp()['connect-src'], true ),
+	'En modo privado el transporte WebRTC no ensancha la receta, porque no se usa'
+);
+update_option( 'uhp_voz', $lleno );
 
 // Los procesadores de audio del SDK se instalan con AudioWorklet desde
 // una URL blob:, y esa carga la gobierna script-src. Declararla solo en
@@ -1502,6 +1514,456 @@ comprobar(
 	'Uno con la forma correcta se conserva, sin espacios'
 );
 
+/* ---------------------------------------------------------------- */
+echo "\n12. Asistente: canal escrito, voz y visibilidad\n";
+
+// El identificador de la VOZ no es el del agente, y su saneado tampoco.
+comprobar(
+	'' === UHP_Voz::sanear_voz_id( 'agent_abcdefghij' )
+		&& '' === UHP_Voz::sanear_voz_id( '../../etc/passwd' )
+		&& '' === UHP_Voz::sanear_voz_id( 'corta' )
+		&& '' === UHP_Voz::sanear_voz_id( '21m00Tcm4TlvDq8i"onerror=' ),
+	'Un identificador de voz con forma extraña se descarta'
+);
+comprobar(
+	'21m00Tcm4TlvDq8ikWAM' === UHP_Voz::sanear_voz_id( '  21m00Tcm4TlvDq8ikWAM  ' ),
+	'Uno con la forma correcta se conserva'
+);
+
+// La velocidad se DESCARTA fuera de margen en vez de recortarse: dejarle
+// 1,20 a quien escribió 3 le hace creer que se guardó lo que pidió.
+comprobar(
+	0.0 === UHP_Voz::sanear_velocidad( 3 )
+		&& 0.0 === UHP_Voz::sanear_velocidad( 0.1 )
+		&& 0.0 === UHP_Voz::sanear_velocidad( '' )
+		&& 0.0 === UHP_Voz::sanear_velocidad( 'rápido' ),
+	'Una velocidad fuera de margen se descarta, no se recorta'
+);
+comprobar(
+	0.9 === UHP_Voz::sanear_velocidad( '0,9' ),
+	'Y se acepta escrita con coma, como se escribe en Colombia'
+);
+
+comprobar(
+	'ambos' === UHP_Voz::sanear_entrada( 'cualquier cosa' )
+		&& 'texto' === UHP_Voz::sanear_entrada( ' TEXTO ' )
+		&& 'todos' === UHP_Voz::sanear_visibilidad( 'inventado' )
+		&& 'oculto' === UHP_Voz::sanear_visibilidad( 'oculto' ),
+	'Entrada y visibilidad caen en el valor más conservador ante un valor extraño'
+);
+
+/* La receta de CSP del canal escrito. No hay micrófono, no hay
+   AudioContext y no hay worklets: blob: no tiene por qué estar, y una
+   entidad que solo quiera el canal escrito no tiene que abrir su política
+   por un audio que nunca va a sonar. */
+$solo_texto              = $lleno;
+$solo_texto['entrada']   = 'texto';
+$solo_texto['transporte'] = 'webrtc';
+update_option( 'uhp_voz', $solo_texto );
+$csp_txt = UHP_Voz::hosts_csp();
+comprobar(
+	! in_array( 'blob:', $csp_txt['script-src'], true ),
+	'En modo escrito la CSP no necesita blob: en script-src'
+);
+comprobar(
+	! isset( $csp_txt['media-src'] ) && ! isset( $csp_txt['worker-src'] ),
+	'Ni media-src ni worker-src: no hay audio que servir'
+);
+comprobar(
+	! in_array( 'wss://*.livekit.cloud', $csp_txt['connect-src'], true ),
+	'Y tampoco LiveKit, aunque el transporte configurado sea WebRTC: una sesión escrita va por WebSocket'
+);
+
+// En modo escrito el campo de escritura es la ÚNICA entrada: apagarlo
+// dejaría un panel sin forma de preguntar nada.
+$solo_texto['texto'] = 0;
+update_option( 'uhp_voz', $solo_texto );
+comprobar(
+	true === UHP_Voz::config_front()['texto'],
+	'En modo escrito el campo de texto no se puede apagar'
+);
+
+// Y las sustituciones de voz llegan al navegador saneadas, no crudas.
+$solo_texto['voz_id']        = 'MAL';
+$solo_texto['voz_velocidad'] = 9;
+update_option( 'uhp_voz', $solo_texto );
+$fv = UHP_Voz::config_front()['voz'];
+comprobar(
+	'' === $fv['id'] && 0.0 === $fv['velocidad'],
+	'Lo que no pasa el saneado no viaja al navegador ni siquiera como resto'
+);
+
+/* El marcado. Con un solo canal no se imprime el aviso del otro: mandar
+   al navegador un texto que describe algo que no puede pasar en esa
+   página es pedir una autorización que sobra. */
+$solo_texto['voz_id'] = '';
+update_option( 'uhp_voz', $solo_texto );
+$html_txt = UHP_Voz::control_html( 'x' );
+comprobar(
+	false !== strpos( $html_txt, 'data-uhp-voz-canal="texto"' )
+		&& false === strpos( $html_txt, 'data-uhp-voz-canal="voz"' ),
+	'En modo escrito solo se pinta el lanzador del canal escrito'
+);
+comprobar(
+	false !== strpos( $html_txt, 'data-uhp-voz-zona="aviso-texto"' )
+		&& false === strpos( $html_txt, 'data-uhp-voz-zona="aviso"' ),
+	'Y solo viaja su aviso, no el de la voz'
+);
+
+/* Un atributo de página puede ESTRECHAR, nunca ampliar: el contenido de
+   un post lo edita cualquiera con permiso de edición, y por dónde sale la
+   voz de un ciudadano no es una decisión de redacción. */
+comprobar(
+	false === strpos( UHP_Voz::control_html( 'x', array( 'entrada' => 'voz' ) ), 'data-uhp-voz-canal="voz"' ),
+	'Un atributo de página no puede encender el micrófono donde el sitio no lo permite'
+);
+$ambos            = $lleno;
+$ambos['entrada'] = 'ambos';
+update_option( 'uhp_voz', $ambos );
+$h_ambos = UHP_Voz::control_html( 'x' );
+comprobar(
+	false !== strpos( $h_ambos, 'data-uhp-voz-canal="voz"' )
+		&& false !== strpos( $h_ambos, 'data-uhp-voz-canal="texto"' ),
+	'Con los dos canales se pintan los dos lanzadores'
+);
+comprobar(
+	false === strpos( UHP_Voz::control_html( 'x', array( 'entrada' => 'texto' ) ), 'data-uhp-voz-canal="voz"' ),
+	'Pero una página concreta sí puede quedarse solo con el escrito'
+);
+
+// Visibilidad «oculto»: el panel se carga y el botón no se pinta, para que
+// la plantilla pueda abrirlo desde un control propio.
+$oculto                = $ambos;
+$oculto['visibilidad'] = 'oculto';
+update_option( 'uhp_voz', $oculto );
+$h_oculto = UHP_Voz::control_html( 'x' );
+comprobar(
+	false === strpos( $h_oculto, 'data-uhp-voz-accion="abrir"' )
+		&& false !== strpos( $h_oculto, 'data-uhp-voz-zona="panel"' ),
+	'Oculto: sin botón pero con panel'
+);
+comprobar(
+	false === strpos( $h_oculto, 'uhp-voz__aviso-corto' ),
+	'Y sin el rótulo corto, que anunciaría un envío al exterior junto a un hueco sin nada que pulsar'
+);
+// Sin lanzador, el bloque no puede quedarse como una caja invisible de
+// 360 px con z-index 600 encima del mapa: los municipios de esa esquina
+// dejarían de responder al clic y nadie sabría describir el fallo.
+comprobar(
+	false !== strpos( $h_oculto, 'uhp-voz--sin-lanzador' )
+		&& false === strpos( $h_oculto, 'uhp-voz__botones' ),
+	'Y marcado para que no intercepte los punteros del mapa'
+);
+
+// Visibilidad «editores»: sin capacidad no se pinta NADA, y la página sale
+// como si el asistente no existiera.
+$solo_ed                = $ambos;
+$solo_ed['visibilidad'] = 'editores';
+update_option( 'uhp_voz', $solo_ed );
+comprobar(
+	! UHP_Voz::permitido_para_usuario() && '' === UHP_Voz::control_html( 'x' ),
+	'Editores: el visitante sin capacidad no recibe ni el panel'
+);
+comprobar(
+	UHP_Voz::salida_por_usuario(),
+	'Y el plugin sabe que esa salida depende del usuario, para pedirle a la caché que no la guarde'
+);
+$ambos['visibilidad'] = 'todos';
+update_option( 'uhp_voz', $ambos );
+comprobar(
+	! UHP_Voz::salida_por_usuario(),
+	'Con visibilidad para todos la salida vuelve a ser la misma para cualquiera'
+);
+
+/* Los dos avisos. El escrito no puede prometer un micrófono que no se
+   enciende, y tiene que seguir advirtiendo de la transferencia al
+   exterior: que el dato sea texto no la hace desaparecer. */
+$av_voz = wp_json_encode( UHP_Voz::aviso_bloques( 'voz' ) );
+$av_txt = wp_json_encode( UHP_Voz::aviso_bloques( 'texto' ) );
+comprobar(
+	false !== strpos( $av_voz, 'permiso para usar el micr' )
+		&& false === strpos( $av_txt, 'permiso para usar el micr' ),
+	'El aviso escrito no anuncia un micrófono que no se va a encender'
+);
+comprobar(
+	false !== strpos( $av_txt, 'NO se le pide el micr' ),
+	'Y lo dice con esas palabras, porque es la diferencia que importa'
+);
+comprobar(
+	false !== strpos( $av_txt, 'art' ) && false !== strpos( $av_txt, '26' ),
+	'El aviso escrito sigue advirtiendo de la transferencia internacional'
+);
+comprobar(
+	false !== strpos( $av_txt, 'art' ) && false !== strpos( $av_txt, ' 6 ' ),
+	'Y advierte de los datos sensibles que nadie pidió, que ahora llegarían escritos'
+);
+comprobar(
+	false !== strpos( $av_txt, 'quiero escribir' )
+		&& false === strpos( $av_txt, 'quiero hablar' ),
+	'Cada aviso nombra el botón que de verdad lo autoriza'
+);
+
+/* LA COMPROBACIÓN QUE SALVA UNA SESIÓN: el prompt del agente interpola
+   variables entre llaves, y el navegador manda un conjunto fijo. Si el
+   prompt escribe una que el navegador no manda, el proveedor rechaza la
+   conversación y nadie sabe por qué. Las dos listas tienen que coincidir. */
+preg_match_all( '/\{\{\s*([a-z_]+)\s*\}\}/', UHP_Voz::prompt_agente(), $m );
+$en_prompt = array_values( array_unique( $m[1] ) );
+sort( $en_prompt );
+
+$js        = (string) file_get_contents( UHP_DIR . 'assets/js/uhp-voz.js' );
+$trozo     = substr( $js, (int) strpos( $js, 'function variables(v, e)' ) );
+$trozo     = substr( $trozo, 0, (int) strpos( $trozo, "\n  }" ) );
+preg_match_all( '/^\s{6}([a-z_]+):/m', $trozo, $m2 );
+$en_js = array_values( array_unique( $m2[1] ) );
+sort( $en_js );
+
+comprobar(
+	$en_prompt === $en_js,
+	sprintf(
+		'El prompt interpola exactamente las variables que manda el navegador (prompt: %s | js: %s)',
+		implode( ',', $en_prompt ),
+		implode( ',', $en_js )
+	)
+);
+
+/* Y la novena herramienta: la que lee el gráfico de barras. */
+$nombres = array();
+foreach ( UHP_Voz::definiciones_herramientas() as $d ) {
+	$nombres[] = $d['name'];
+}
+comprobar(
+	in_array( 'uhp_comparar_subregiones', $nombres, true ),
+	'El agente declara la herramienta que lee el gráfico de barras'
+);
+foreach ( UHP_Voz::definiciones_herramientas() as $d ) {
+	if ( 'uhp_comparar_subregiones' === $d['name'] ) {
+		comprobar(
+			true === $d['espera'],
+			'Y espera respuesta, porque el agente necesita el dato para seguir hablando'
+		);
+		comprobar(
+			false !== strpos( $d['description'], 'SUBREGIONALES' )
+				&& false !== strpos( $d['description'], 'sin cifra' ),
+			'Su descripción le advierte al agente de qué cifra es y de qué falta'
+		);
+	}
+}
+
+/* Las trece subregiones del departamento frente a las once publicadas. */
+$ref = new ReflectionMethod( 'GobernacionNarino\\Urkunina\\UHP_Rest', 'subregiones_sin_cifra' );
+$ref->setAccessible( true );
+$faltan = $ref->invoke( null );
+comprobar(
+	array( 'Pacífico Sur', 'Sanquianga' ) === $faltan,
+	'El tablero sabe qué dos subregiones de Nariño no tienen cifra publicada'
+);
+comprobar(
+	13 === count( UHP_Subregiones::declaradas() ) && 11 === count( UHP_Datos::valor( 'prev_subregion', 'subregiones', array() ) ),
+	'Trece declaradas y once publicadas: la diferencia es un dato, no un descuido'
+);
+
+/* Participantes examinados por municipio. El informe los publica en doce
+   de los cincuenta y cinco, y hasta ahora no viajaban: la tarjeta de
+   participantes mostraba un prorrateo de 5.000 entre 55 también para esos
+   doce, y para Pupiales decía 91 donde el informe publica 80. */
+$carga_tab = UHP_Rest::carga_tablero();
+$con_part  = 0;
+$pupiales  = null;
+$sin_part  = null;
+foreach ( $carga_tab['features'] as $f ) {
+	$pr = $f['properties'];
+	if ( null !== $pr['part'] ) {
+		$con_part++;
+		if ( 'Pupiales' === $pr['n'] ) {
+			$pupiales = $pr;
+		}
+	} elseif ( ! empty( $pr['int'] ) && null === $sin_part ) {
+		$sin_part = $pr;
+	}
+}
+comprobar( 12 === $con_part, sprintf( 'Doce municipios traen sus participantes publicados (%d)', $con_part ) );
+comprobar(
+	is_array( $pupiales ) && 80 === $pupiales['part'] && 57 === $pupiales['pos'],
+	'Pupiales trae los 80 examinados y los 57 positivos que publica el informe, no un prorrateo de 91'
+);
+comprobar(
+	is_array( $sin_part ) && null === $sin_part['part'] && 0 === $sin_part['casos'],
+	'Donde no se publica, participantes es null y NO cero: que no se publique cuántos examinó no significa que no examinara a nadie, mientras que cero casos de cáncer sí es un dato'
+);
+$perfil = $carga_tab['meta']['perfil'];
+comprobar(
+	'departamental' === $perfil['ambito'] && 5 === count( $perfil['bloques'] ),
+	'El perfil de los 5.000 viaja con su ámbito pegado y sus cinco bloques'
+);
+$genero = null;
+foreach ( $perfil['bloques'] as $b ) {
+	if ( 'genero' === $b['clave'] ) {
+		$genero = $b;
+	}
+}
+comprobar(
+	is_array( $genero ) && 4994 === $genero['n_con_dato'] && 3204 === $genero['filas'][0]['personas'],
+	'Y con el denominador: 4.994 de los 5.000 tienen el campo de género, no los 5.000'
+);
+$etnia = null;
+$nutri = null;
+foreach ( $perfil['bloques'] as $b ) {
+	if ( 'pertenencia_etnica' === $b['clave'] ) {
+		$etnia = $b;
+	}
+	if ( 'estado_nutricional' === $b['clave'] ) {
+		$nutri = $b;
+	}
+}
+comprobar(
+	is_array( $etnia ) && 4 === count( $etnia['filas'] ) && is_array( $nutri ) && 4 === count( $nutri['filas'] ),
+	'Y con TODAS las categorías publicadas: el bloque de la pantalla se dejaba fuera «Otro / no reportado» y «Delgadez»'
+);
+
+
+/* ---------------------------------------------------------------- */
+echo "\n13. Asistente: verificación del agente\n";
+
+/* «Configurar la API» consistía en pegar una cadena a ciegas. Esto
+   comprueba que el plugin le pregunta al proveedor y que actúa según la
+   respuesta, porque una sustitución que el agente no admite NO degrada la
+   conversación: la tumba. */
+$verif_base            = $lleno;
+$verif_base['modo']    = 'privado';
+$verif_base['entrada'] = 'ambos';
+$verif_base['voz_id']  = '21m00Tcm4TlvDq8ikWAM';
+$verif_base['voz_velocidad'] = 0.9;
+update_option( 'uhp_voz', $verif_base );
+update_option( 'uhp_voz_clave', 'sk_clave_de_prueba' );
+delete_transient( UHP_Voz::VERIF );
+
+// Sin verificar, NO se envía ninguna sustitución.
+$fv = UHP_Voz::config_front();
+comprobar(
+	'' === $fv['voz']['id'] && 0.0 === $fv['voz']['velocidad'] && false === $fv['textoServidor'],
+	'Sin verificar no viaja ninguna sustitución: arriesgar la conversación de cada visitante por un timbre no vale la pena'
+);
+comprobar(
+	3 === count( UHP_Voz::avisos_sustituciones() ),
+	'Y el panel tiene tres cosas que advertir, no cero'
+);
+
+// Clave mala.
+uhp_test_http( array( array( 'response' => array( 'code' => 401 ), 'body' => '{}' ) ) );
+$inf = UHP_Voz::verificar();
+comprobar(
+	! $inf['ok'] && false !== strpos( $inf['mensaje'], 'no sirve' ),
+	'Una clave que no sirve se dice con esas palabras'
+);
+
+// Agente que no existe: y se nombra la confusión más probable.
+uhp_test_http( array( array( 'response' => array( 'code' => 404 ), 'body' => '{}' ) ) );
+$inf = UHP_Voz::verificar();
+comprobar(
+	! $inf['ok'] && false !== strpos( $inf['mensaje'], 'identificador de la voz' ),
+	'Un agente inexistente apunta al error más fácil de cometer: pegar el ID de la voz en el campo del agente'
+);
+
+// Agente existente con las sustituciones APAGADAS, que es como vienen.
+$cuerpo_apagado = wp_json_encode(
+	array(
+		'platform_settings'   => array(
+			'overrides' => array(
+				'conversation_config_override' => array(
+					'tts'          => array( 'voice_id' => false, 'speed' => false ),
+					'conversation' => array( 'text_only' => false ),
+				),
+			),
+		),
+		'conversation_config' => array(
+			'agent' => array( 'language' => 'es' ),
+			'tts'   => array( 'model_id' => 'eleven_multilingual_v2', 'voice_id' => 'otraVozDelAgente0000' ),
+		),
+	)
+);
+uhp_test_http( array( array( 'response' => array( 'code' => 200 ), 'body' => $cuerpo_apagado ) ) );
+$inf = UHP_Voz::verificar();
+comprobar(
+	$inf['ok'] && ! $inf['permite']['voice_id'] && ! $inf['permite']['speed'] && ! $inf['permite']['text_only'],
+	'Un agente con las sustituciones apagadas se reporta como tal'
+);
+comprobar(
+	'es' === $inf['idioma'] && 'eleven_multilingual_v2' === $inf['modelo'],
+	'Y se lee su idioma y su modelo de voz, que es lo que decide si puede hablar español'
+);
+$fv = UHP_Voz::config_front();
+comprobar(
+	'' === $fv['voz']['id'] && 0.0 === $fv['voz']['velocidad'] && false === $fv['textoServidor'],
+	'Con las sustituciones apagadas no se envía ninguna: el asistente habla con la voz del agente en vez de no abrir'
+);
+
+// La petición lleva la clave en su cabecera y el agente en la ruta.
+$peticiones = uhp_test_http_peticiones();
+$ultima     = end( $peticiones );
+comprobar(
+	isset( $ultima['args']['headers']['xi-api-key'] )
+		&& 'sk_clave_de_prueba' === $ultima['args']['headers']['xi-api-key']
+		&& false !== strpos( $ultima['url'], '/v1/convai/agents/agent_abcdefghij' ),
+	'La verificación pregunta por el agente configurado y se autentica con la clave guardada'
+);
+
+// Y con las sustituciones ENCENDIDAS sí viajan.
+$cuerpo_ok = wp_json_encode(
+	array(
+		'platform_settings'   => array(
+			'overrides' => array(
+				'conversation_config_override' => array(
+					'tts'          => array( 'voice_id' => true, 'speed' => true ),
+					'conversation' => array( 'text_only' => true ),
+				),
+			),
+		),
+		'conversation_config' => array(
+			'agent'        => array( 'language' => 'es' ),
+			'tts'          => array( 'model_id' => 'eleven_multilingual_v2' ),
+			'conversation' => array( 'text_only' => false ),
+		),
+	)
+);
+uhp_test_http( array( array( 'response' => array( 'code' => 200 ), 'body' => $cuerpo_ok ) ) );
+UHP_Voz::verificar();
+$fv = UHP_Voz::config_front();
+comprobar(
+	'21m00Tcm4TlvDq8ikWAM' === $fv['voz']['id'] && 0.9 === $fv['voz']['velocidad'] && true === $fv['textoServidor'],
+	'Confirmadas, las sustituciones sí viajan al navegador'
+);
+comprobar(
+	! UHP_Voz::avisos_sustituciones(),
+	'Y el panel no tiene nada que advertir'
+);
+
+// Un agente que es SOLO TEXTO en su propia configuración: el canal
+// hablado no va a funcionar contra él, y hay que decirlo.
+$cuerpo_solo_txt = str_replace( '"text_only":false', '"text_only":true', $cuerpo_ok );
+uhp_test_http( array( array( 'response' => array( 'code' => 200 ), 'body' => $cuerpo_solo_txt ) ) );
+comprobar(
+	true === UHP_Voz::verificar()['solo_txt'],
+	'Un agente configurado como solo texto se detecta, porque el canal hablado no funcionará contra él'
+);
+
+// En modo público no hay clave con la que preguntar: se envía lo
+// configurado y la advertencia queda en el panel.
+delete_transient( UHP_Voz::VERIF );
+$verif_pub         = $verif_base;
+$verif_pub['modo'] = 'publico';
+update_option( 'uhp_voz', $verif_pub );
+$fv = UHP_Voz::config_front();
+comprobar(
+	'21m00Tcm4TlvDq8ikWAM' === $fv['voz']['id'] && true === $fv['textoServidor'],
+	'En modo público se envía lo configurado, porque no hay forma de verificarlo'
+);
+comprobar(
+	1 === count( UHP_Voz::avisos_sustituciones() ),
+	'Y el panel advierte de que ahí nadie comprobó nada'
+);
+
+delete_transient( UHP_Voz::VERIF );
 update_option( 'uhp_voz', $voz_antes );
 delete_option( 'uhp_voz_clave' );
 

@@ -439,6 +439,39 @@ function uhp_test_resolver( $tipo ) {
 function uhp_test_limpiar_encolados() {
 	$GLOBALS['uhp_test_encolados'] = array();
 	$GLOBALS['uhp_test_faltantes'] = array();
+	/* Los bloques en línea vuelven a su LÍNEA BASE, que no es «vacío».
+
+	   En WordPress, `UHP_Assets::registrar()` corre en cada petición y es
+	   quien engancha `window.UHP` al núcleo. El generador la llama una
+	   sola vez, antes de pintar nada, de modo que ese bloque pertenece a
+	   todas las páginas y no a la primera. Vaciar el registro a secas se lo
+	   llevaba: las páginas salían completas, con su script y su marcado, y
+	   sin la configuración del núcleo —que es de donde sale la base de la
+	   API—, así que el tablero pedía «/tablero» en vez de
+	   «/wp-json/urkunina/v1/tablero» y se quedaba sin datos.
+
+	   Lo que sí hay que limpiar es lo que añade CADA página, como la
+	   configuración del asistente: sin eso, la de la primera se reemitía
+	   en todas las siguientes. */
+	$GLOBALS['uhp_test_inline'] = isset( $GLOBALS['uhp_test_inline_base'] )
+		? $GLOBALS['uhp_test_inline_base']
+		: array(
+			'before' => array(),
+			'after'  => array(),
+		);
+}
+
+/**
+ * Fija la línea base de bloques en línea: lo que engancha el registro de
+ * assets, que en WordPress ocurre en cada petición.
+ */
+function uhp_test_fijar_inline_base() {
+	$GLOBALS['uhp_test_inline_base'] = isset( $GLOBALS['uhp_test_inline'] )
+		? $GLOBALS['uhp_test_inline']
+		: array(
+			'before' => array(),
+			'after'  => array(),
+		);
 }
 
 function esc_url( $url ) {
@@ -491,6 +524,89 @@ function disabled( $deshabilitado, $actual = true, $mostrar = true ) {
 		echo $salida; // phpcs:ignore WordPress.Security.EscapeOutput
 	}
 	return $salida;
+}
+
+/* ------------------------------------------------------------------ */
+/* API HTTP                                                            */
+/* ------------------------------------------------------------------ */
+
+/* La suite NO sale a internet: la respuesta la pone la prueba en
+   $GLOBALS['uhp_test_http'], una cola que se consume en orden. Verificar
+   el agente contra ElevenLabs de verdad haría que la suite dependiera de
+   una cuenta, de una clave y de la red, y además gastaría cuota ajena. */
+
+class WP_Error {
+
+	/** @var string */
+	public $codigo;
+	/** @var string */
+	public $mensaje;
+	/** @var array */
+	public $datos;
+
+	public function __construct( $codigo = '', $mensaje = '', $datos = array() ) {
+		$this->codigo  = (string) $codigo;
+		$this->mensaje = (string) $mensaje;
+		$this->datos   = $datos;
+	}
+
+	public function get_error_code() {
+		return $this->codigo;
+	}
+
+	public function get_error_message() {
+		return $this->mensaje;
+	}
+
+	public function get_error_data() {
+		return $this->datos;
+	}
+}
+
+function untrailingslashit( $cadena ) {
+	return rtrim( (string) $cadena, '/\\' );
+}
+
+function trailingslashit( $cadena ) {
+	return untrailingslashit( $cadena ) . '/';
+}
+
+function is_wp_error( $cosa ) {
+	return $cosa instanceof WP_Error;
+}
+
+function uhp_test_http( $respuestas ) {
+	$GLOBALS['uhp_test_http'] = $respuestas;
+	$GLOBALS['uhp_test_http_peticiones'] = array();
+}
+
+function uhp_test_http_peticiones() {
+	return isset( $GLOBALS['uhp_test_http_peticiones'] ) ? $GLOBALS['uhp_test_http_peticiones'] : array();
+}
+
+function wp_remote_get( $url, $args = array() ) {
+	$GLOBALS['uhp_test_http_peticiones'][] = array(
+		'url'  => $url,
+		'args' => $args,
+	);
+	if ( empty( $GLOBALS['uhp_test_http'] ) ) {
+		return new WP_Error( 'sin_doble', 'La prueba no preparó ninguna respuesta HTTP.' );
+	}
+	return array_shift( $GLOBALS['uhp_test_http'] );
+}
+
+function wp_remote_retrieve_response_code( $r ) {
+	if ( is_wp_error( $r ) || ! is_array( $r ) ) {
+		return 0;
+	}
+	return isset( $r['response']['code'] ) ? (int) $r['response']['code'] : 0;
+}
+
+function wp_remote_retrieve_body( $r ) {
+	if ( is_wp_error( $r ) || ! is_array( $r ) ) {
+		return '';
+	}
+	return isset( $r['body'] ) ? (string) $r['body'] : '';
 }
 
 /**

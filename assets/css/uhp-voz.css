@@ -26,6 +26,15 @@
   font-family: "IBM Plex Sans", system-ui, sans-serif;
 }
 
+/* Sin lanzador —visibilidad «oculto»— el bloque sigue en la página para
+   que una plantilla pueda abrirlo desde su propio control. Pero entonces
+   no puede quedarse encima del mapa comiéndose los clics: una caja
+   invisible de 360 px con z-index 600 que intercepta punteros deja los
+   municipios de esa esquina sin responder, y es un fallo que nadie sabría
+   describir. El panel recupera los punteros cuando se abre. */
+.uhp-voz--sin-lanzador { pointer-events: none; }
+.uhp-voz--sin-lanzador .uhp-voz__panel { pointer-events: auto; }
+
 /* ---------- Lanzador ---------- */
 .uhp-voz__barra {
   display: grid;
@@ -33,6 +42,18 @@
   justify-items: end;
   text-align: right;
   max-width: 100%;
+}
+
+/* Los dos lanzadores en una fila que se parte cuando no cabe. Sin esta
+   caja la rejilla de la barra les daba una fila a cada uno y el panel
+   empezaba cuarenta píxeles más abajo. Ninguno de los dos es secundario:
+   el canal escrito no es un plan B que haya que buscar, es la alternativa
+   equivalente que pide la Resolución 1519 de 2020. */
+.uhp-voz__botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .uhp-voz__abrir {
@@ -314,6 +335,10 @@
     justify-items: stretch;
   }
   .uhp-voz__barra { justify-items: stretch; text-align: left; }
+  .uhp-voz__botones { justify-content: stretch; }
+  /* A lo ancho del panel y uno debajo de otro: dos píldoras de 44 px de
+     alto no caben a la vez en 320 px sin partir los rótulos. */
+  .uhp-voz__botones > .uhp-voz__abrir { flex: 1 1 100%; }
   .uhp-voz__abrir { justify-content: center; }
   .uhp-voz__aviso-corto { max-width: none; }
   .uhp-voz__panel { max-height: min(70vh, 420px); }

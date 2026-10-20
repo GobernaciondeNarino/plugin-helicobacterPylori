@@ -56,6 +56,11 @@ add_filter(
 
 $assets = new UHP_Assets();
 $assets->registrar();          // registra el grafo real de dependencias
+/* Lo que acaba de engancharse —entre otras cosas `window.UHP`, de donde
+   sale la base de la API— pertenece a TODAS las páginas: en WordPress el
+   registro corre en cada petición. Se fija como línea base para que la
+   limpieza de cada página no se lo lleve. */
+uhp_test_fijar_inline_base();
 $GLOBALS['uhp_sc'] = new UHP_Shortcodes();
 $GLOBALS['uhp_test_faltantes'] = array();
 
@@ -195,6 +200,12 @@ body{margin:0;font-family:system-ui,sans-serif;background:#fff;}
  */
 function construir( $nombre, $titulo, $pintar, $shortcodes = '' ) {
 	uhp_test_limpiar_encolados();
+	// Cada página de la suite finge una PETICIÓN nueva, y este proceso
+	// pinta diecisiete seguidas. Sin esto, los dos bloques que el plugin
+	// imprime «una vez por petición» —las URLs de Three.js y la
+	// configuración del asistente— se quedaban con el valor de la primera
+	// página y las demás heredaban una configuración que no era la suya.
+	UHP_Shortcodes::reiniciar_peticion();
 
 	/* Primero la pasada TEMPRANA, la que en WordPress corre en
 	   `wp_enqueue_scripts` antes de que wp_head imprima. Lo que se encole
@@ -289,6 +300,11 @@ update_option(
 		'modo'            => 'publico',
 		'transporte'      => 'websocket',
 		'cuota_dia'       => 200,
+		// Esta página ejercita el canal HABLADO y nada más: un solo
+		// lanzador, para que las pruebas que ya existían sigan apuntando a
+		// un único botón. Los dos canales y el escrito a secas tienen cada
+		// uno su propia página más abajo.
+		'entrada'         => 'voz',
 		'texto'           => 1,
 		'recordar'        => 1,
 		'aviso_version'   => 1,
@@ -309,6 +325,79 @@ $paginas['voz'] = construir(
 	},
 	'[urkunina_dashboard]'
 );
+
+/* La misma configuración, con los DOS canales y con sustituciones de voz
+   puestas: dos lanzadores, dos avisos distintos en el HTML y un evento de
+   inicio que lleva overrides.tts. */
+update_option(
+	'uhp_voz',
+	array_merge(
+		get_option( 'uhp_voz' ),
+		array(
+			'entrada'       => 'ambos',
+			'voz_id'        => 'VozDePruebaDeLaSuite00',
+			'voz_velocidad' => 0.9,
+		)
+	)
+);
+
+$paginas['voz-dos'] = construir(
+	'voz-dos',
+	'Tablero con los dos canales',
+	function ( $sc ) {
+		return $sc->sc_dashboard( array() );
+	},
+	'[urkunina_dashboard]'
+);
+
+/* Y solo escrito. Aquí no tiene que haber ni botón de micrófono, ni
+   aviso de voz en el HTML, ni llamada a getUserMedia. */
+update_option(
+	'uhp_voz',
+	array_merge(
+		get_option( 'uhp_voz' ),
+		array( 'entrada' => 'texto' )
+	)
+);
+
+$paginas['voz-texto'] = construir(
+	'voz-texto',
+	'Tablero con asistente escrito',
+	function ( $sc ) {
+		return $sc->sc_dashboard( array() );
+	},
+	'[urkunina_dashboard]'
+);
+
+/* Y el modo PRIVADO, que es el recomendado y hasta ahora no tenía página:
+   el navegador no conoce el identificador del agente y abre la sesión con
+   la URL firmada que le entrega el servidor. Sin verificación guardada, no
+   viaja ninguna sustitución. */
+update_option(
+	'uhp_voz',
+	array_merge(
+		get_option( 'uhp_voz' ),
+		array(
+			'modo'    => 'privado',
+			'entrada' => 'ambos',
+		)
+	)
+);
+/* Un agente privado sin clave no se publica: publicar el botón sería
+   ofrecer algo que falla al pulsarlo. Y de paso, esta página es la que
+   comprueba que la clave NO aparece en el HTML. */
+update_option( 'uhp_voz_clave', 'sk_clave_que_no_debe_salir_nunca' );
+
+$paginas['voz-privado'] = construir(
+	'voz-privado',
+	'Tablero con asistente privado',
+	function ( $sc ) {
+		return $sc->sc_dashboard( array() );
+	},
+	'[urkunina_dashboard]'
+);
+
+delete_option( 'uhp_voz_clave' );
 
 // El resto de páginas vuelven a verlo apagado: el tablero de siempre no
 // puede cambiar porque exista esta función.

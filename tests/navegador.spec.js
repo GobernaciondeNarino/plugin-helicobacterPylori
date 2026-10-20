@@ -199,21 +199,65 @@ test.describe('Asistente de voz', () => {
      y no baja el megabyte del CDN. Guarda las opciones con las que se
      abrió la sesión —ahí van las herramientas de cliente— y deja que la
      prueba dispare los callbacks como si hablara el agente. */
-  async function conDoble(page) {
-    await page.addInitScript(() => {
-      window.__UHP_STUB = { abierta: 0, opciones: null, enviados: [], contexto: [], cerrada: 0 };
+  async function conDoble(page, ajustes) {
+    const cfg = Object.assign({ microfono: true }, ajustes || {});
+    await page.addInitScript((cfg) => {
+      window.__UHP_STUB = {
+        abierta: 0, opciones: null, enviados: [], contexto: [], cerrada: 0,
+        // Cuántas veces se pidió el micrófono y cuántas pistas quedaron
+        // abiertas: en el canal escrito las dos tienen que ser cero, y en
+        // el hablado la segunda tiene que volver a cero.
+        microfono: 0, pistasVivas: 0, tipo: null
+      };
+
+      /* El micrófono. Un Chromium sin tarjeta de sonido no se comporta
+         como el equipo de un visitante, así que se sustituye por un doble
+         que CUENTA. Una de las cosas que hay que verificar es que en el
+         canal escrito no se llama ni una vez: es la diferencia entre
+         «no hay audio» y «no se pide permiso para el audio». */
+      const falso = {
+        getUserMedia: function () {
+          window.__UHP_STUB.microfono++;
+          if (!cfg.microfono) {
+            const e = new Error('Permission denied');
+            e.name = 'NotAllowedError';
+            return Promise.reject(e);
+          }
+          window.__UHP_STUB.pistasVivas++;
+          return Promise.resolve({
+            getTracks: function () {
+              return [{ stop: function () { window.__UHP_STUB.pistasVivas--; } }];
+            }
+          });
+        }
+      };
+      try {
+        Object.defineProperty(navigator, 'mediaDevices', { value: falso, configurable: true });
+      } catch (e) { window.navigator.mediaDevices = falso; }
+
       window.ElevenLabsClient = {
         Conversation: {
           startSession: function (opciones) {
             window.__UHP_STUB.abierta++;
             window.__UHP_STUB.opciones = opciones;
+            const esTexto = opciones.textOnly === true;
+            window.__UHP_STUB.tipo = esTexto ? 'text' : 'voice';
             const conv = {
+              type: esTexto ? 'text' : 'voice',
               endSession: function () { window.__UHP_STUB.cerrada++; },
               sendUserMessage: function (t) { window.__UHP_STUB.enviados.push(t); },
               sendContextualUpdate: function (t) { window.__UHP_STUB.contexto.push(t); },
               sendUserActivity: function () {},
               getId: function () { return 'conv_prueba'; },
-              setVolume: function () {}
+              /* Como el SDK real: en un TextConversation estas dos LANZAN.
+                 Si el plugin las llamara en el canal escrito, la prueba lo
+                 vería en vez de pasar de largo. */
+              setVolume: function () {
+                if (esTexto) { throw new Error('setVolume is not supported in text conversations'); }
+              },
+              setMicMuted: function () {
+                if (esTexto) { throw new Error('setMicMuted is not supported in text conversations'); }
+              }
             };
             // Como el SDK real: avisa de que conectó en cuanto puede.
             if (opciones.onConnect) { setTimeout(() => opciones.onConnect({}), 0); }
@@ -221,7 +265,7 @@ test.describe('Asistente de voz', () => {
           }
         }
       };
-    });
+    }, cfg);
   }
 
   /** Llama a una herramienta de cliente como la llamaría el agente. */
@@ -242,6 +286,14 @@ test.describe('Asistente de voz', () => {
   async function conversar(page) {
     await page.locator('[data-uhp-voz-accion="abrir"]').click();
     await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
+  }
+
+  /** Lo mismo por el canal escrito, que tiene su propio aviso y su propio
+   *  botón de aceptación: aceptar uno no acepta el otro. */
+  async function conversarEscribiendo(page) {
+    await page.locator('[data-uhp-voz-canal="texto"]').click();
+    await page.getByRole('button', { name: 'Acepto y quiero escribir' }).click();
     await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
   }
 
@@ -764,6 +816,440 @@ test.describe('Asistente de voz', () => {
     comprobar(await medir([
       '.uhp-voz__quien', '.uhp-voz__turno', '.uhp-voz__estado-txt', '.uhp-voz__cab h3'
     ]));
+  });
+
+  /* ---------------------------------------------------------------- */
+  /* Canal escrito                                                    */
+  /* ---------------------------------------------------------------- */
+
+  test('en modo solo escrito no hay botón de micrófono ni aviso de voz', async ({ page }) => {
+    await page.goto(BASE + '/paginas/voz-texto.html');
+
+    // Un solo lanzador, y es el del canal escrito.
+    await expect(page.locator('[data-uhp-voz-accion="abrir"]')).toHaveCount(1);
+    await expect(page.locator('[data-uhp-voz-canal="texto"]')).toHaveCount(1);
+    await expect(page.locator('[data-uhp-voz-canal="voz"]')).toHaveCount(0);
+
+    // Y el aviso de la voz no viaja: describe algo que en esta página no
+    // puede ocurrir, y pedir autorización para tratar una muestra de voz
+    // que nunca se captura es recoger una autorización que sobra.
+    await expect(page.locator('template[data-uhp-voz-zona="aviso"]')).toHaveCount(0);
+    await expect(page.locator('template[data-uhp-voz-zona="aviso-texto"]')).toHaveCount(1);
+
+    const corto = page.locator('.uhp-voz__aviso-corto');
+    await expect(corto).toContainText('Lo que escriba');
+    await expect(corto).not.toContainText('Su voz');
+  });
+
+  test('el canal escrito no pide el micrófono ni una vez', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-texto.html');
+    await listo(page);
+    await conversarEscribiendo(page);
+
+    const st = await page.evaluate(() => ({
+      microfono: window.__UHP_STUB.microfono,
+      tipo: window.__UHP_STUB.tipo,
+      textOnly: window.__UHP_STUB.opciones.textOnly,
+      overrides: window.__UHP_STUB.opciones.overrides,
+      transporte: window.__UHP_STUB.opciones.connectionType
+    }));
+
+    // La diferencia entre «no hay audio» y «no se pide permiso para el
+    // audio»: lo segundo es lo que convierte esto en una alternativa de
+    // verdad para quien no puede o no quiere hablar.
+    expect(st.microfono).toBe(0);
+    expect(st.tipo).toBe('text');
+
+    // Las DOS mitades. Sin la sustitución, el proveedor sintetizaría un
+    // audio que el navegador tira a la basura y que se factura igual.
+    expect(st.textOnly).toBe(true);
+    expect(st.overrides.conversation.textOnly).toBe(true);
+
+    // Y nada de voz: ni identificador ni velocidad, aunque el sitio los
+    // tenga configurados, porque en este canal no hay voz que ajustar.
+    expect(st.overrides.tts).toBeUndefined();
+
+    // WebSocket: WebRTC arrastraría LiveKit para no llevar un solo byte
+    // de audio.
+    expect(st.transporte).toBe('websocket');
+  });
+
+  test('el canal escrito dice «escriba», no «escuchando»', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-texto.html');
+    await listo(page);
+    await conversarEscribiendo(page);
+
+    // Quien no ve la pantalla depende de este rótulo: decirle
+    // «escuchando» a quien está teclando le describe algo que no existe.
+    const estado = page.locator('.uhp-voz__estado-txt');
+    await expect(estado).toContainText('Escriba su pregunta');
+    await expect(estado).not.toContainText('Escuchando');
+    await expect(page.locator('.uhp-voz__cab h3')).toContainText('escrito');
+
+    // El campo está desde el primer momento: es la única entrada.
+    await expect(page.locator('.uhp-voz__campo')).toBeVisible();
+  });
+
+  test('aceptar el aviso escrito NO autoriza el micrófono', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+
+    await conversarEscribiendo(page);
+    await page.keyboard.press('Escape');
+
+    // El aviso del canal hablado incluye el tratamiento de una muestra de
+    // voz, que es un dato biométrico. Si aceptar el pequeño abriera el
+    // grande, la autorización del artículo 9 dejaría de estar informada.
+    await page.locator('[data-uhp-voz-canal="voz"]').click();
+    await expect(page.getByRole('button', { name: 'Acepto y quiero hablar' })).toBeVisible();
+    expect(await page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
+  });
+
+  test('aceptar el aviso de voz sí cubre el canal escrito', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+
+    await conversar(page);
+    await page.keyboard.press('Escape');
+
+    // En este sentido sí: el aviso de la voz dice con esas palabras que
+    // «puede escribir sus preguntas en lugar de hablarlas». Volver a
+    // pedirlo sería fricción por algo más estrecho de lo ya autorizado.
+    await page.locator('[data-uhp-voz-canal="texto"]').click();
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(2);
+    await expect(page.getByRole('button', { name: 'Acepto y quiero escribir' })).toHaveCount(0);
+  });
+
+  test('los dos lanzadores declaran el mismo estado del panel', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+
+    const voz = page.locator('[data-uhp-voz-canal="voz"]');
+    const txt = page.locator('[data-uhp-voz-canal="texto"]');
+    await expect(voz).toHaveAttribute('aria-expanded', 'false');
+    await expect(txt).toHaveAttribute('aria-expanded', 'false');
+
+    await txt.click();
+    // Los dos gobiernan el MISMO panel: quien llegue tabulando al otro
+    // botón tiene que enterarse de que está abierto, no creer que lo abre.
+    await expect(txt).toHaveAttribute('aria-expanded', 'true');
+    await expect(voz).toHaveAttribute('aria-expanded', 'true');
+
+    await page.keyboard.press('Escape');
+    await expect(voz).toHaveAttribute('aria-expanded', 'false');
+    await expect(txt).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('el canal hablado manda las sustituciones de voz configuradas', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    const o = await page.evaluate(() => window.__UHP_STUB.opciones);
+    expect(o.overrides.tts.voiceId).toBe('VozDePruebaDeLaSuite00');
+    expect(o.overrides.tts.speed).toBe(0.9);
+    expect(o.textOnly).toBeUndefined();
+    expect(o.useWakeLock).toBe(true);
+  });
+
+  test('el micrófono se pide una vez y la pista se suelta en seguida', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    const st = await page.evaluate(() => ({
+      pedido: window.__UHP_STUB.microfono,
+      vivas: window.__UHP_STUB.pistasVivas
+    }));
+    expect(st.pedido).toBe(1);
+    // Se para en cuanto llega la respuesta: dejarla abierta mantendría el
+    // indicador de grabación encendido mientras todavía se descarga el SDK.
+    expect(st.vivas).toBe(0);
+  });
+
+  test('denegar el micrófono no gasta una conversación y ofrece escribir', async ({ page }) => {
+    await conDoble(page, { microfono: false });
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+
+    await page.locator('[data-uhp-voz-canal="voz"]').click();
+    await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
+
+    await expect(page.locator('.uhp-voz__estado-txt')).toContainText('micrófono');
+
+    /* LO QUE IMPORTA: ninguna sesión. El permiso se pide ANTES de pedirle
+       credenciales al servidor, de modo que una negativa no se lleva una
+       ranura del cupo diario —que es facturable— ni una URL firmada. */
+    expect(await page.evaluate(() => window.__UHP_STUB.abierta)).toBe(0);
+
+    // Y queda un camino, no solo un mensaje.
+    const salida = page.getByRole('button', { name: 'Escribir en vez de hablar' });
+    await expect(salida).toBeVisible();
+    await salida.click();
+    await page.getByRole('button', { name: 'Acepto y quiero escribir' }).click();
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
+    expect(await page.evaluate(() => window.__UHP_STUB.tipo)).toBe('text');
+  });
+
+  test('las variables dinámicas viajan siempre y dicen por qué canal', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-texto.html');
+    await listo(page);
+    await conversarEscribiendo(page);
+
+    const dv = await page.evaluate(() => window.__UHP_STUB.opciones.dynamicVariables);
+    // El prompt del agente las interpola entre llaves. Si falta una sola,
+    // el proveedor rechaza la sesión: por eso van todas, siempre.
+    for (const k of ['canal', 'indicador', 'zona', 'subregion', 'municipio',
+      'municipios_visibles', 'casos_visibles', 'promedio_visible']) {
+      expect(dv[k], 'falta la variable ' + k).toBeTruthy();
+    }
+    expect(dv.canal).toBe('texto');
+  });
+
+  /* ---------------------------------------------------------------- */
+  /* El gráfico de barras                                             */
+  /* ---------------------------------------------------------------- */
+
+  test('el asistente lee el gráfico de barras y nombra lo que no sale en él', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    const r = await herramienta(page, 'uhp_comparar_subregiones', {});
+
+    // La cifra de una barra es SUBREGIONAL y publicada como tal. No es el
+    // promedio de los municipios intervenidos, porque la subregión
+    // incluye municipios donde el proyecto no estuvo.
+    expect(r).toContain('cifras de la subregión');
+    expect(r).toContain('no de los municipios');
+    expect(r).toContain('NO es el promedio');
+    expect(r).toContain('uhp_consultar_municipio');
+
+    // Río Mayo es la más alta de lesión precursora, 44,3 %.
+    expect(r).toContain('La más alta');
+    expect(r).toContain('Río Mayo');
+
+    /* Y LO QUE IMPORTA: Nariño tiene trece subregiones y el informe
+       publica once. Las dos de la costa no se dibujan porque no hay barra
+       que dibujar; un asistente que leyera solo lo que se ve diría «las
+       subregiones de Nariño» habiendo borrado dos del departamento. */
+    expect(r).toContain('13 subregiones');
+    expect(r).toContain('Pacífico Sur');
+    expect(r).toContain('Sanquianga');
+    expect(r).toContain('NO filtrables');
+  });
+
+  test('por voz el ranking no enumera once subregiones seguidas', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    const r = await herramienta(page, 'uhp_comparar_subregiones', {});
+    // Una enumeración hablada de once elementos no se retiene: por voz van
+    // los extremos y un par más, y quien quiera la lista entera la pide.
+    const nombradas = ['Río Mayo', 'La Sabana', 'Occidente', 'La Cordillera',
+      'Los Abades', 'Juanambú', 'Guambuyaco', 'Obando', 'Telembí', 'Centro',
+      'Piedemonte Costero'].filter((n) => r.includes(n));
+    expect(nombradas.length).toBeLessThanOrEqual(5);
+    expect(r).toContain('Piedemonte Costero');
+
+    const todas = await herramienta(page, 'uhp_comparar_subregiones', { cuantas: 11 });
+    expect(todas).toContain('Guambuyaco');
+  });
+
+  test('por escrito el rótulo viaja pegado a cada cifra', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-texto.html');
+    await listo(page);
+    await conversarEscribiendo(page);
+
+    const r = await herramienta(page, 'uhp_comparar_subregiones', {});
+
+    /* Lo que se copia de una conversación escrita sale sin el resto del
+       párrafo. Una cifra suelta sin su territorio se convierte en un dato
+       falso en cuanto alguien la pega en otra parte, así que el rótulo va
+       en CADA línea y no solo en la cabecera. */
+    expect(r.match(/\(cifra de la subregión\)/g).length).toBeGreaterThanOrEqual(11);
+
+    // Y el denominador de la cobertura, que es el que falta en la barra:
+    // Telembí encabeza H. pylori con una cifra de subregión mientras el
+    // proyecto intervino uno de sus tres municipios.
+    expect(r).toContain('municipios intervenidos');
+
+    // Por escrito se puede releer: van las once.
+    expect(r).toContain('Río Mayo');
+    expect(r).toContain('Piedemonte Costero');
+  });
+
+  test('dos subregiones con la misma cifra comparten puesto', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-texto.html');
+    await listo(page);
+    await conversarEscribiendo(page);
+
+    const r = await herramienta(page, 'uhp_comparar_subregiones', {});
+
+    /* Occidente y La Cordillera están las dos en 37,7 % de lesión
+       precursora. Numerarlas «3.» y «4.» inventa una diferencia que el
+       dato no tiene. */
+    expect(r).toContain('empatada en este puesto');
+    const puestoDe = (n) => Number((r.match(new RegExp('(\\d+)\\. ' + n)) || [])[1]);
+    expect(puestoDe('Occidente')).toBe(puestoDe('La Cordillera'));
+    // Y el siguiente salta: tras dos empatados en el 3, el 5.
+    expect(puestoDe('Los Abades')).toBe(5);
+  });
+
+  test('el asistente lee el perfil de los 5.000 y da el denominador', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-texto.html');
+    await listo(page);
+    await conversarEscribiendo(page);
+
+    const r = await herramienta(page, 'uhp_consultar_perfil', {});
+
+    // El perfil está publicado para el CONJUNTO del estudio. Con el
+    // tablero filtrado por una subregión no cambia, y presentarlo como el
+    // perfil de la selección sería inventar un dato.
+    expect(r).toContain('DEPARTAMENTAL');
+    expect(r).toContain('no es el perfil de los municipios seleccionados');
+
+    expect(r).toContain('Mujeres');
+    expect(r).toContain('3204 personas');
+
+    /* El denominador. En género son 4.994 de los 5.000 los que tienen el
+       campo: reparted los porcentajes sobre 5.000 convertiría seis
+       ausencias en seis personas. */
+    expect(r).toContain('4994');
+    expect(r).toContain('no se les registró');
+
+    // Y las dos categorías que el bloque de la pantalla se había dejado
+    // fuera: tres barras que sumaban 99,6 sin decir que faltaba una.
+    expect(r).toContain('Delgadez');
+    expect(r).toContain('Otro / no reportado');
+  });
+
+  test('se puede pedir solo una parte del perfil', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-texto.html');
+    await listo(page);
+    await conversarEscribiendo(page);
+
+    const r = await herramienta(page, 'uhp_consultar_perfil', { aspecto: 'genero' });
+    expect(r).toContain('Mujeres');
+    expect(r).not.toContain('Sobrepeso');
+
+    const mal = await herramienta(page, 'uhp_consultar_perfil', { aspecto: 'horóscopo' });
+    // Lo que no conoce se rechaza enumerando lo que sí, en vez de adivinar.
+    expect(mal).toContain('No tengo ese aspecto');
+    expect(mal).toContain('Estado nutricional');
+  });
+
+  test('en modo privado la credencial la pone el servidor y no se sustituye nada sin verificar', async ({ page }) => {
+    await conDoble(page);
+    await page.route('**/voz/sesion', (r) => r.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ url: 'wss://api.elevenlabs.io/firmada-de-prueba' })
+    }));
+    await page.goto(BASE + '/paginas/voz-privado.html');
+    await listo(page);
+    await conversarEscribiendo(page);
+
+    const o = await page.evaluate(() => window.__UHP_STUB.opciones);
+
+    // El navegador NO conoce el identificador del agente: abre con la URL
+    // firmada que le dio el servidor. Publicarlo solo serviría para que
+    // alguien intentara usar el agente por su cuenta.
+    expect(o.signedUrl).toBe('wss://api.elevenlabs.io/firmada-de-prueba');
+    expect(o.agentId).toBeUndefined();
+
+    /* Y sin verificación guardada, NINGUNA sustitución. El canal escrito
+       funciona igual —el navegador no abre el micrófono ni reproduce
+       nada—; lo que no se hace es arriesgar la conversación de cada
+       visitante por un ajuste que nadie confirmó. */
+    expect(o.textOnly).toBe(true);
+    expect(o.overrides).toBeUndefined();
+  });
+
+  test('la clave de API no aparece en la página de un agente privado', async ({ page }) => {
+    await page.goto(BASE + '/paginas/voz-privado.html');
+    const html = await page.content();
+    expect(html).not.toContain('sk_clave_que_no_debe_salir_nunca');
+    expect(html.toLowerCase()).not.toContain('xi-api-key');
+  });
+
+  test('un participante publicado no se sustituye por uno prorrateado', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+
+    /* Sin filtro, doce municipios traen su cifra publicada y cuarenta y
+       tres no: el pie nombra las dos partes en vez de llamar «est.» a
+       todo o «publicado» a nada. */
+    const kpi = page.locator('.uhp-db__kpi', { hasText: 'Participantes' }).first();
+    await expect(kpi).toContainText('publicados');
+    await expect(kpi).toContainText('prorrateados');
+
+    /* Y el total del departamento sigue siendo el que publica el informe.
+       Prorratear 5.000 entre 55 y sumarle aparte los doce publicados daba
+       4.849: los doce que se conocen están por debajo de la media, de modo
+       que el prorrateo se reparte entre lo que QUEDA —4.060 entre 43— y no
+       entre los 55. Dos datos publicados restringen el estimado. */
+    await expect(kpi.locator('.val')).toHaveText('5.000');
+
+    await conversar(page);
+
+    /* Y con Pupiales seleccionado, la tarjeta dice 80 —lo que publica el
+       informe— y no 91, que es lo que daba el prorrateo de 5.000 entre 55
+       antes de que estos datos viajaran. */
+    const r = await herramienta(page, 'uhp_seleccionar_municipio', { municipio: 'Pupiales' });
+    expect(r).toContain('Pupiales');
+    await expect(kpi).toContainText('80');
+    await expect(kpi).toContainText('dato publicado');
+    await expect(kpi).not.toContainText('91');
+
+    // El agente también lo dice, y dice de dónde sale.
+    const ficha = await herramienta(page, 'uhp_consultar_municipio', { municipio: 'Pupiales' });
+    expect(ficha).toContain('80 participantes examinados');
+    expect(ficha).toContain('57 positivos');
+    expect(ficha).toContain('dato publicado');
+
+    // Donde no se publica, no se inventa: ni cifra ni cero.
+    const sinDato = await herramienta(page, 'uhp_consultar_municipio', { municipio: 'Túquerres' });
+    expect(sinDato).not.toContain('participantes examinados');
+  });
+
+  test('el perfil de la pantalla no se deja fuera ninguna categoría publicada', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero.html');
+    const tarjeta = page.locator('.uhp-db__card', { hasText: 'Perfil de los 5.000' });
+
+    /* Tres barras que sumaban 99,6 y nada que dijera que faltaba una
+       cuarta. Dieciocho personas no son un redondeo. */
+    await expect(tarjeta).toContainText('Delgadez');
+    await expect(tarjeta).toContainText('Otro o no reportado');
+  });
+
+  test('una subregión que no se puede filtrar se explica, no se niega', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    const r = await herramienta(page, 'uhp_filtrar_subregion', { subregion: 'Sanquianga' });
+    // «No encuentro esa subregión» a secas sería falso: existe. Lo que no
+    // hay es cifra publicada ni municipio intervenido.
+    expect(r).toContain('Sanquianga');
+    expect(r).toContain('no se pueden filtrar');
   });
 });
 

@@ -53,11 +53,53 @@ final class UHP_Voz {
 	/** Base de la API de ElevenLabs. */
 	const API = 'https://api.elevenlabs.io';
 
+	/** Transitorio con el resultado de la última verificación del agente. */
+	const VERIF = 'uhp_voz_verif';
+
+	/* Límites de la velocidad de habla. Fuera de este margen la voz deja
+	   de ser inteligible, y el proveedor rechaza el valor. 0 significa «no
+	   sustituir»: la velocidad que tenga puesta el agente. */
+	const VEL_MIN = 0.70;
+	const VEL_MAX = 1.20;
+
 	/**
 	 * Engancha la ruta REST.
 	 */
 	public function __construct() {
 		add_action( 'rest_api_init', array( $this, 'registrar_rutas' ) );
+		// Antes de que se envíen las cabeceras, no durante el contenido:
+		// cuando el shortcode se pinta ya es tarde para una cabecera.
+		add_action( 'template_redirect', array( $this, 'cabeceras_sin_cache' ) );
+	}
+
+	/**
+	 * Le dice a la caché que no guarde esta página cuando su salida
+	 * depende de quién la pide.
+	 *
+	 * Solo ocurre con la visibilidad en «editores», que es un estado de
+	 * ensayo: ahí el visitante anónimo recibe el tablero sin asistente y
+	 * quien puede editar lo recibe con él. Una copia compartida serviría
+	 * uno de los dos a todo el mundo.
+	 *
+	 * `DONOTCACHEPAGE` es el acuerdo que respetan las capas de caché de
+	 * WordPress; `nocache_headers()` es para las que están por delante y no
+	 * saben nada de ese acuerdo. Y las dos se envían SOLO en las páginas
+	 * que llevan el tablero: marcar el sitio entero como no cacheable por
+	 * un ajuste de un componente sería desproporcionado, y en un sitio
+	 * público el costo lo paga el ciudadano en tiempo de carga.
+	 */
+	public function cabeceras_sin_cache() {
+		if ( ! self::salida_por_usuario() || ! self::configurada() ) {
+			return;
+		}
+		$contenido = UHP_Shortcodes::contenido_de_la_entrada();
+		if ( '' === $contenido || ! has_shortcode( $contenido, 'urkunina_dashboard' ) ) {
+			return;
+		}
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		nocache_headers();
 	}
 
 	/* ================================================================= */
@@ -72,10 +114,20 @@ final class UHP_Voz {
 	public static function por_defecto() {
 		return array(
 			'activo'           => 0,
+			// Visible para quién. Es un eje DISTINTO de «activo»: la
+			// entidad necesita poder dejarlo configurado y funcionando
+			// sin abrirlo todavía al ciudadano.
+			'visibilidad'      => 'todos',
 			'agente'           => '',
+			// El identificador de la VOZ, que no es el del agente. Vacío
+			// deja hablar al agente con la voz que tenga puesta.
+			'voz_id'           => '',
+			'voz_velocidad'    => 0,
 			'modo'             => 'privado',
 			'transporte'       => 'websocket',
 			'cuota_dia'        => 200,
+			// Por dónde se puede entrar: hablando, escribiendo o ambas.
+			'entrada'          => 'ambos',
 			'texto'            => 1,
 			'recordar'         => 1,
 			'aviso_version'    => 1,
@@ -146,6 +198,57 @@ final class UHP_Voz {
 	}
 
 	/**
+	 * ¿Se le pinta el lanzador a QUIEN está pidiendo esta página?
+	 *
+	 * «Activo» y «visible» son dos ejes distintos y hacen falta los dos.
+	 * Una entidad necesita poder dejar el asistente configurado, con su
+	 * clave puesta y su agente creado, y ensayarlo en el sitio de verdad
+	 * —no en una copia— antes de ponerlo delante de un ciudadano. Con un
+	 * solo interruptor eso no se puede: o está apagado y no se puede
+	 * probar, o está encendido para todo el mundo.
+	 *
+	 *   todos     el lanzador se pinta para cualquiera.
+	 *   editores  solo para quien pueda editar contenido. El visitante
+	 *             anónimo recibe el tablero exactamente como hoy.
+	 *   oculto    no se pinta para nadie. El panel sigue en la página y
+	 *             lo abre quien lo llame por programa, que es lo que
+	 *             necesita un botón propio de la entidad en otra parte
+	 *             de la plantilla.
+	 *
+	 * CUIDADO CON LA CACHÉ. Con «editores» la salida de la página depende
+	 * de quién la pide, y eso solo es seguro porque las capas de caché de
+	 * página completa dejan de servir copia a quien trae la cookie de
+	 * sesión de WordPress. Si la instalación tiene una caché que sirve una
+	 * sola copia a todo el mundo, «editores» no protege nada y hay que usar
+	 * «oculto». El panel de administración lo advierte.
+	 *
+	 * @return bool
+	 */
+	public static function permitido_para_usuario() {
+		$v = self::sanear_visibilidad( self::cfg()['visibilidad'] );
+		if ( 'editores' === $v ) {
+			return function_exists( 'current_user_can' ) && current_user_can( 'edit_posts' );
+		}
+		// «oculto» SÍ pasa por aquí: el asistente se carga, lo que no se
+		// pinta es su botón. Quien no pasa es el visitante anónimo de un
+		// sitio en «editores», y para él la página sale byte a byte como
+		// si el asistente no existiera.
+		return true;
+	}
+
+	/**
+	 * ¿Depende la salida de quién pide la página?
+	 *
+	 * Lo pregunta el shortcode para decirle a la caché que no guarde esta
+	 * respuesta. Es la única salida del plugin que depende del usuario.
+	 *
+	 * @return bool
+	 */
+	public static function salida_por_usuario() {
+		return 'editores' === self::sanear_visibilidad( self::cfg()['visibilidad'] );
+	}
+
+	/**
 	 * Qué le falta para poder publicarse, en lenguaje llano.
 	 *
 	 * @return array<int,string>
@@ -189,8 +292,9 @@ final class UHP_Voz {
 	 * @return array{agente:string,modo:string,transporte:string,texto:bool,recordar:bool,avisoVersion:int,ruta:string}
 	 */
 	public static function config_front() {
-		$c    = self::cfg();
-		$modo = 'publico' === $c['modo'] ? 'publico' : 'privado';
+		$c       = self::cfg();
+		$modo    = 'publico' === $c['modo'] ? 'publico' : 'privado';
+		$entrada = self::sanear_entrada( $c['entrada'] );
 		return array(
 			// En modo privado el navegador NO necesita el identificador:
 			// la sesión la abre con la URL firmada que le da el servidor.
@@ -199,12 +303,93 @@ final class UHP_Voz {
 			'agente'       => 'publico' === $modo ? (string) $c['agente'] : '',
 			'modo'         => $modo,
 			'transporte'   => 'webrtc' === $c['transporte'] ? 'webrtc' : 'websocket',
-			'texto'        => ! empty( $c['texto'] ),
+			'entrada'      => $entrada,
+			// Sustituciones de la voz. Van al navegador porque es él quien
+			// las manda al proveedor en el evento de inicio; no son una
+			// credencial —sin la clave de la cuenta un identificador de voz
+			// no abre nada— y el agente tiene que permitirlas o no surten
+			// efecto. Se envían solo si hay algo que sustituir: un evento de
+			// sustitución vacío contra un agente que no las admite es una
+			// sesión rechazada sin motivo.
+			'voz'          => self::sustituciones_tts( $modo ),
+			// ¿Puede la sesión declararse «solo texto» también al SERVIDOR?
+			// Si no, el canal escrito sigue funcionando —el navegador no
+			// abre el micrófono ni reproduce nada— pero el proveedor
+			// sintetiza un audio que nadie oye y lo factura. El panel lo
+			// dice; aquí no se puede hacer más.
+			'textoServidor' => 'publico' === $modo || self::permite( 'text_only' ),
+			// En modo solo texto el campo de escritura es la ÚNICA entrada:
+			// apagarlo dejaría un panel sin forma de preguntar nada.
+			'texto'        => 'texto' === $entrada ? true : ! empty( $c['texto'] ),
 			'recordar'     => ! empty( $c['recordar'] ),
 			'avisoVersion' => (int) $c['aviso_version'],
 			'ruta'         => '/voz/sesion',
 			'sdk'          => UHP_Assets::voz_urls(),
 		);
+	}
+
+	/**
+	 * Las sustituciones de voz que de verdad se van a enviar.
+	 *
+	 * Una sustitución que el agente no admite no degrada la conversación:
+	 * la tumba. De modo que solo viaja lo CONFIRMADO por `verificar()`. Lo
+	 * configurado y no confirmado se queda en el servidor y el panel lo
+	 * dice con todas las letras: preferimos un asistente que funciona con
+	 * la voz del agente a uno que no abre por un ajuste de timbre.
+	 *
+	 * En modo público no hay clave con la que preguntar; ahí se envía lo
+	 * configurado y la advertencia está en el panel.
+	 *
+	 * @param string $modo publico|privado
+	 * @return array{id:string,velocidad:float}
+	 */
+	private static function sustituciones_tts( $modo ) {
+		$c  = self::cfg();
+		$id = self::sanear_voz_id( $c['voz_id'] );
+		$v  = self::sanear_velocidad( $c['voz_velocidad'] );
+
+		if ( 'publico' !== $modo ) {
+			if ( ! self::permite( 'voice_id' ) ) {
+				$id = '';
+			}
+			if ( ! self::permite( 'speed' ) ) {
+				$v = 0.0;
+			}
+		}
+
+		return array(
+			'id'        => $id,
+			'velocidad' => $v,
+		);
+	}
+
+	/**
+	 * Lo que el panel debe advertir sobre las sustituciones configuradas.
+	 *
+	 * @return array<int,string>
+	 */
+	public static function avisos_sustituciones() {
+		$c     = self::cfg();
+		$avisa = array();
+		$modo  = 'publico' === $c['modo'] ? 'publico' : 'privado';
+
+		if ( 'publico' === $modo ) {
+			if ( '' !== self::sanear_voz_id( $c['voz_id'] ) || self::sanear_velocidad( $c['voz_velocidad'] ) ) {
+				$avisa[] = __( 'Con un agente público el plugin no puede verificar nada: la voz y la velocidad se envían tal cual. Si el agente no las admite, la conversación no abrirá.', 'urkunina-5000' );
+			}
+			return $avisa;
+		}
+
+		if ( '' !== self::sanear_voz_id( $c['voz_id'] ) && ! self::permite( 'voice_id' ) ) {
+			$avisa[] = __( 'La voz configurada NO se está enviando, porque no está confirmado que el agente admita esa sustitución. El asistente habla con la voz del agente. Habilite «Voice ID» en la pestaña de seguridad del agente y vuelva a verificar.', 'urkunina-5000' );
+		}
+		if ( self::sanear_velocidad( $c['voz_velocidad'] ) && ! self::permite( 'speed' ) ) {
+			$avisa[] = __( 'La velocidad configurada NO se está enviando, por lo mismo. Habilite «Speed» en la pestaña de seguridad del agente y vuelva a verificar.', 'urkunina-5000' );
+		}
+		if ( 'voz' !== self::sanear_entrada( $c['entrada'] ) && ! self::permite( 'text_only' ) ) {
+			$avisa[] = __( 'El canal escrito funciona, pero el proveedor está sintetizando —y facturando— un audio que nadie oye: no está confirmado que el agente admita la sustitución «Text-only mode». Habilítela en la pestaña de seguridad del agente y vuelva a verificar.', 'urkunina-5000' );
+		}
+		return $avisa;
 	}
 
 	/**
@@ -215,21 +400,34 @@ final class UHP_Voz {
 	public static function textos() {
 		return array(
 			'abrir'        => __( 'Preguntar por voz', 'urkunina-5000' ),
+			'abrir_texto'  => __( 'Preguntar por escrito', 'urkunina-5000' ),
 			'cerrar'       => __( 'Cerrar el asistente', 'urkunina-5000' ),
 			'reanudar'     => __( 'Volver a preguntar', 'urkunina-5000' ),
 			'aviso_fase'   => __( 'Lea el aviso antes de continuar.', 'urkunina-5000' ),
 			'confirmar'    => __( 'Hay un municipio por confirmar.', 'urkunina-5000' ),
 			'no'           => __( 'No', 'urkunina-5000' ),
 			'aviso_corto'  => __( 'Su voz se envía a un proveedor en el exterior. El tablero funciona igual sin el asistente.', 'urkunina-5000' ),
+			'aviso_c_txt'  => __( 'Lo que escriba se envía a un proveedor en el exterior. El tablero funciona igual sin el asistente.', 'urkunina-5000' ),
+			'aviso_c_dos'  => __( 'Su voz, o lo que escriba, se envía a un proveedor en el exterior. El tablero funciona igual sin el asistente.', 'urkunina-5000' ),
 			'titulo'       => __( 'Asistente de voz', 'urkunina-5000' ),
+			'titulo_txt'   => __( 'Asistente por escrito', 'urkunina-5000' ),
+			'titulo_dos'   => __( 'Asistente del tablero', 'urkunina-5000' ),
 			'aceptar'      => __( 'Acepto y quiero hablar', 'urkunina-5000' ),
+			'aceptar_txt'  => __( 'Acepto y quiero escribir', 'urkunina-5000' ),
 			'cancelar'     => __( 'Cancelar', 'urkunina-5000' ),
 			'retirar'      => __( 'Retirar autorización', 'urkunina-5000' ),
 			'terminar'     => __( 'Terminar conversación', 'urkunina-5000' ),
-			'escribir'     => __( 'Escribir en vez de hablar', 'urkunina-5000' ),
+			'escribir'     => __( 'Escriba su pregunta', 'urkunina-5000' ),
+			'pasar_texto'  => __( 'Escribir en vez de hablar', 'urkunina-5000' ),
 			'enviar'       => __( 'Enviar', 'urkunina-5000' ),
 			'conectando'   => __( 'Conectando…', 'urkunina-5000' ),
 			'escuchando'   => __( 'Escuchando. Hable cuando quiera.', 'urkunina-5000' ),
+			// El modo escrito necesita sus propios rótulos: decirle
+			// «escuchando» a quien está teclando, o anunciarle que el
+			// asistente «responde» cuando lo que hace es escribir, es
+			// describirle una pantalla que no tiene delante.
+			'escribiendo'  => __( 'Escriba su pregunta y pulse Enviar.', 'urkunina-5000' ),
+			'redactando'   => __( 'El asistente está escribiendo la respuesta.', 'urkunina-5000' ),
 			'hablando'     => __( 'El asistente está respondiendo.', 'urkunina-5000' ),
 			'cerrada'      => __( 'Conversación terminada.', 'urkunina-5000' ),
 			'retirada'     => __( 'Autorización retirada. No se enviará nada más.', 'urkunina-5000' ),
@@ -239,6 +437,7 @@ final class UHP_Voz {
 			'ocupado'      => __( 'El micrófono lo está usando otra aplicación.', 'urkunina-5000' ),
 			'sin_sdk'      => __( 'No se pudo cargar el asistente de voz.', 'urkunina-5000' ),
 			'sin_sesion'   => __( 'No se pudo abrir la conversación. Inténtelo más tarde.', 'urkunina-5000' ),
+			'pista_sust'   => __( 'Si acaba de configurar una voz o una velocidad, compruebe que el agente tiene habilitadas esas sustituciones.', 'urkunina-5000' ),
 			'sin_cuota'    => __( 'El asistente alcanzó su límite de conversaciones de hoy.', 'urkunina-5000' ),
 			'demasiado'    => __( 'He hecho demasiados cambios seguidos. Dígame uno concreto.', 'urkunina-5000' ),
 			'usted'        => __( 'Usted', 'urkunina-5000' ),
@@ -258,15 +457,32 @@ final class UHP_Voz {
 	 * de ElevenLabs pueda traer: lo que el ciudadano lee antes de autorizar
 	 * no puede depender de la configuración de una cuenta ajena.
 	 *
+	 * HAY DOS AVISOS, uno por canal, y la diferencia no es cosmética. El de
+	 * voz pide autorización para tratar una muestra de la voz, que es un
+	 * dato biométrico; el escrito no trata ninguna. Pedirle a quien va a
+	 * teclear que autorice el tratamiento de su voz sería recoger una
+	 * autorización por algo que no va a ocurrir, y eso no es un aviso
+	 * informado: es un aviso que sobra. Al contrario, servirle el aviso
+	 * corto del canal escrito a quien va a encender el micrófono dejaría la
+	 * autorización sin informar de lo que importa.
+	 *
+	 * Lo que NO cambia entre los dos: quién responde, para qué, el
+	 * encargado y su país —la transferencia internacional del artículo 26
+	 * existe igual con texto— y los derechos del titular.
+	 *
+	 * @param string $modo 'voz' o 'texto'.
 	 * @return array<int,array{t:string,p:string}>
 	 */
-	public static function aviso_bloques() {
-		$c = self::cfg();
+	public static function aviso_bloques( $modo = 'voz' ) {
+		$c   = self::cfg();
+		$txt = 'texto' === $modo;
 
 		$bloques = array(
 			array(
 				't' => __( 'Qué va a pasar', 'urkunina-5000' ),
-				'p' => __( 'Si acepta, el navegador le pedirá permiso para usar el micrófono. Mientras la conversación esté abierta, su voz se envía a un proveedor externo que la convierte en texto, responde por voz y, cuando usted se lo pide, cambia los filtros de este tablero.', 'urkunina-5000' ),
+				'p' => $txt
+					? __( 'Si acepta, se abre una conversación escrita. Lo que usted teclee se envía a un proveedor externo que lo lee, responde por escrito y, cuando usted se lo pide, cambia los filtros de este tablero. NO se le pide el micrófono y no se captura ni se envía ninguna grabación de su voz.', 'urkunina-5000' )
+					: __( 'Si acepta, el navegador le pedirá permiso para usar el micrófono. Mientras la conversación esté abierta, su voz se envía a un proveedor externo que la convierte en texto, responde por voz y, cuando usted se lo pide, cambia los filtros de este tablero.', 'urkunina-5000' ),
 			),
 			array(
 				't' => __( 'Quién responde por sus datos', 'urkunina-5000' ),
@@ -274,7 +490,9 @@ final class UHP_Voz {
 			),
 			array(
 				't' => __( 'Qué se trata', 'urkunina-5000' ),
-				'p' => __( 'El audio de lo que usted diga, su transcripción en texto y los datos técnicos de la conexión. No se le pide su nombre, ni su documento, ni su historia clínica, y el asistente no los necesita.', 'urkunina-5000' ),
+				'p' => $txt
+					? __( 'El texto de lo que usted escriba y los datos técnicos de la conexión. No se trata ninguna muestra de su voz. No se le pide su nombre, ni su documento, ni su historia clínica, y el asistente no los necesita.', 'urkunina-5000' )
+					: __( 'El audio de lo que usted diga, su transcripción en texto y los datos técnicos de la conexión. No se le pide su nombre, ni su documento, ni su historia clínica, y el asistente no los necesita.', 'urkunina-5000' ),
 			),
 			array(
 				't' => __( 'Para qué', 'urkunina-5000' ),
@@ -282,16 +500,32 @@ final class UHP_Voz {
 			),
 			array(
 				't' => __( 'Quién lo procesa y dónde', 'urkunina-5000' ),
+				// La transferencia internacional NO desaparece porque el
+				// dato sea texto: sigue saliendo de Colombia y el artículo
+				// 26 sigue aplicando igual. Decir lo contrario sería el
+				// tipo de atajo que un aviso no se puede permitir.
 				'p' => __( 'ElevenLabs Inc., con servidores fuera de Colombia. Esto es una transferencia internacional de sus datos, prevista en el artículo 26 de la Ley 1581 de 2012.', 'urkunina-5000' ) . ' ' . trim( (string) $c['retencion'] ),
 			),
 			array(
 				't' => __( 'Con qué fundamento', 'urkunina-5000' ),
-				'p' => __( 'Con su autorización previa, expresa e informada, que es lo que usted da al pulsar «Acepto y quiero hablar» (artículo 9 de la Ley 1581 de 2012). Es voluntaria: puede negarse y no pierde nada.', 'urkunina-5000' ),
+				'p' => $txt
+					? __( 'Con su autorización previa, expresa e informada, que es lo que usted da al pulsar «Acepto y quiero escribir» (artículo 9 de la Ley 1581 de 2012). Es voluntaria: puede negarse y no pierde nada.', 'urkunina-5000' )
+					: __( 'Con su autorización previa, expresa e informada, que es lo que usted da al pulsar «Acepto y quiero hablar» (artículo 9 de la Ley 1581 de 2012). Es voluntaria: puede negarse y no pierde nada.', 'urkunina-5000' ),
 			),
-			array(
-				't' => __( 'La voz puede ser un dato sensible', 'urkunina-5000' ),
-				'p' => __( 'No dicte datos personales ni de salud. El asistente solo conoce cifras agregadas y públicas: no le cuente sus síntomas, sus resultados de laboratorio ni los de otra persona. No puede ayudarle con eso y esa información quedaría en la transcripción.', 'urkunina-5000' ),
-			),
+			$txt
+				? array(
+					// En modo escrito no hay dato biométrico, pero el
+					// riesgo de que el ciudadano cuente de más no se va:
+					// cambia de canal. El artículo 6 prohíbe tratar datos
+					// sensibles salvo excepciones, y lo que nadie pidió
+					// tampoco se quiere recibir.
+					't' => __( 'No escriba datos personales ni de salud', 'urkunina-5000' ),
+					'p' => __( 'Lo que teclee queda en la transcripción. No escriba su nombre, su documento, sus síntomas, sus resultados de laboratorio ni los de otra persona: son datos sensibles en el sentido del artículo 6 de la Ley 1581 de 2012, el asistente no puede ayudarle con ellos y esta entidad no los está pidiendo.', 'urkunina-5000' ),
+				)
+				: array(
+					't' => __( 'La voz puede ser un dato sensible', 'urkunina-5000' ),
+					'p' => __( 'No dicte datos personales ni de salud. El asistente solo conoce cifras agregadas y públicas: no le cuente sus síntomas, sus resultados de laboratorio ni los de otra persona. No puede ayudarle con eso y esa información quedaría en la transcripción.', 'urkunina-5000' ),
+				),
 			array(
 				't' => __( 'Sus derechos', 'urkunina-5000' ),
 				'p' => sprintf(
@@ -302,10 +536,15 @@ final class UHP_Voz {
 					trim( (string) $c['politica'] )
 				),
 			),
-			array(
-				't' => __( 'Sin micrófono también funciona', 'urkunina-5000' ),
-				'p' => __( 'Puede escribir sus preguntas en lugar de hablarlas. Y los filtros del tablero —indicador, zona, subregión y municipio— se manejan con el teclado y con el ratón, sin asistente alguno.', 'urkunina-5000' ),
-			),
+			$txt
+				? array(
+					't' => __( 'El tablero funciona sin esto', 'urkunina-5000' ),
+					'p' => __( 'Los filtros del tablero —indicador, zona, subregión y municipio— se manejan con el teclado y con el ratón, sin asistente alguno. Si no acepta, no pierde ni una cifra.', 'urkunina-5000' ),
+				)
+				: array(
+					't' => __( 'Sin micrófono también funciona', 'urkunina-5000' ),
+					'p' => __( 'Puede escribir sus preguntas en lugar de hablarlas. Y los filtros del tablero —indicador, zona, subregión y municipio— se manejan con el teclado y con el ratón, sin asistente alguno.', 'urkunina-5000' ),
+				),
 		);
 
 		$extra = trim( (string) $c['aviso_extra'] );
@@ -329,61 +568,174 @@ final class UHP_Voz {
 	 * la alternativa escrita tienen que estar en la página aunque el script
 	 * no llegue a cargar.
 	 *
-	 * @param string $id Identificador del tablero que lo contiene.
+	 * @param string $id  Identificador del tablero que lo contiene.
+	 * @param array  $opc Ajustes de ESTA página: 'entrada' y 'visible'.
+	 *                    Solo pueden estrechar lo que permite el sitio.
 	 * @return string
 	 */
-	public static function control_html( $id ) {
+	public static function control_html( $id, $opc = array() ) {
 		if ( ! self::configurada() ) {
 			return '';
 		}
-		$t       = self::textos();
-		$bloques = self::aviso_bloques();
-		$idv     = $id . '-voz';
+		$c = self::cfg();
+
+		/* Un atributo del shortcode puede ESTRECHAR lo que el sitio
+		   permite; nunca ampliarlo. Si la entidad decidió que en este
+		   sitio solo se entra por escrito, una página no puede encender
+		   el micrófono escribiendo un atributo en el contenido de un
+		   post: el contenido lo edita cualquiera con permiso de edición,
+		   y la decisión sobre el canal por el que sale la voz de un
+		   ciudadano no es una decisión de redacción. */
+		$entrada = self::sanear_entrada( $c['entrada'] );
+		if ( 'ambos' === $entrada && isset( $opc['entrada'] ) ) {
+			$entrada = self::sanear_entrada( $opc['entrada'] );
+		}
+
+		/* Lo mismo con la visibilidad: el atributo solo puede ocultar.
+
+		   Y hay dos cosas distintas aquí. En «editores» no se pinta NADA
+		   para el visitante anónimo: si se pintara el panel sin su botón,
+		   la página le quedaría anunciando «su voz se envía a un proveedor
+		   en el exterior» junto a un hueco donde no hay nada que pulsar.
+		   En «oculto» sí se pinta el panel y se calla el botón, porque eso
+		   es justo lo que necesita una plantilla que quiera abrirlo desde
+		   un botón propio en otra parte de la página. */
+		$vis = self::sanear_visibilidad( $c['visibilidad'] );
+		if ( isset( $opc['visible'] ) && ! $opc['visible'] ) {
+			$vis = 'oculto';
+		}
+		if ( 'editores' === $vis && ! self::permitido_para_usuario() ) {
+			return '';
+		}
+		$visible = ( 'oculto' !== $vis );
+
+		$con_voz   = 'texto' !== $entrada;
+		$con_texto = 'voz' !== $entrada;
+
+		$t   = self::textos();
+		$idv = $id . '-voz';
+
+		// El rótulo corto nombra lo que de verdad va a salir del
+		// navegador. Con los dos canales abiertos, los dos.
+		if ( 'ambos' === $entrada ) {
+			$corto = $t['aviso_c_dos'];
+		} elseif ( $con_voz ) {
+			$corto = $t['aviso_corto'];
+		} else {
+			$corto = $t['aviso_c_txt'];
+		}
+
+		// Con los dos canales abiertos, un rótulo que no prometa solo uno:
+		// quien navega por regiones oye este nombre antes de elegir.
+		if ( 'ambos' === $entrada ) {
+			$titulo = $t['titulo_dos'];
+		} elseif ( $con_voz ) {
+			$titulo = $t['titulo'];
+		} else {
+			$titulo = $t['titulo_txt'];
+		}
 
 		ob_start();
 		?>
-		<div class="uhp-voz" id="<?php echo esc_attr( $idv ); ?>" data-uhp-voz
+		<div class="uhp-voz<?php echo $visible ? '' : ' uhp-voz--sin-lanzador'; ?>"
+			id="<?php echo esc_attr( $idv ); ?>" data-uhp-voz
+			data-uhp-voz-entrada="<?php echo esc_attr( $entrada ); ?>"
 			role="complementary"
-			aria-label="<?php echo esc_attr( $t['titulo'] ); ?>">
+			aria-label="<?php echo esc_attr( $titulo ); ?>">
 
 			<div class="uhp-voz__barra">
+				<?php if ( $visible ) : ?>
+				<div class="uhp-voz__botones">
+				<?php endif; ?>
 				<?php
-				/* Sale DESHABILITADO y lo habilita el script al cablearlo.
-				   Un botón de micrófono que se puede pulsar y no hace nada
-				   porque el JavaScript no llegó es peor que no tenerlo:
-				   promete algo que no va a ocurrir. */
+				/* Salen DESHABILITADOS y los habilita el script al
+				   cablearlos. Un botón de micrófono que se puede pulsar y
+				   no hace nada porque el JavaScript no llegó es peor que
+				   no tenerlo: promete algo que no va a ocurrir.
+
+				   Los dos gobiernan el MISMO panel, así que los dos
+				   declaran aria-controls contra él y el script mantiene
+				   los dos aria-expanded a la vez: quien llegue al segundo
+				   botón con el panel ya abierto tiene que enterarse de
+				   que está abierto, no creer que lo va a abrir. */
+				if ( $visible && $con_voz ) :
+					?>
+					<button type="button" class="uhp-voz__abrir" data-uhp-voz-accion="abrir"
+						data-uhp-voz-canal="voz" disabled
+						aria-expanded="false" aria-controls="<?php echo esc_attr( $idv ); ?>-panel">
+						<span class="uhp-voz__icono" aria-hidden="true">
+							<svg viewBox="0 0 16 16" width="16" height="16" focusable="false">
+								<path d="M8 1.6a2.2 2.2 0 0 1 2.2 2.2v4a2.2 2.2 0 0 1-4.4 0v-4A2.2 2.2 0 0 1 8 1.6Z"/>
+								<path d="M3.4 7.2v.6a4.6 4.6 0 0 0 9.2 0v-.6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+								<path d="M8 12.4v2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+							</svg>
+						</span>
+						<span><?php echo esc_html( $t['abrir'] ); ?></span>
+					</button>
+					<?php
+				endif;
+				if ( $visible && $con_texto ) :
+					?>
+					<button type="button" class="uhp-voz__abrir uhp-voz__abrir--texto"
+						data-uhp-voz-accion="abrir" data-uhp-voz-canal="texto" disabled
+						aria-expanded="false" aria-controls="<?php echo esc_attr( $idv ); ?>-panel">
+						<span class="uhp-voz__icono" aria-hidden="true">
+							<svg viewBox="0 0 16 16" width="16" height="16" focusable="false">
+								<path d="M2.4 3.2h11.2v7.2H6.8L4 13v-2.6H2.4Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+								<path d="M5 6.4h6M5 8.4h4" fill="none" stroke="currentColor" stroke-width="1.5"/>
+							</svg>
+						</span>
+						<span><?php echo esc_html( $t['abrir_texto'] ); ?></span>
+					</button>
+					<?php
+				endif;
 				?>
-				<button type="button" class="uhp-voz__abrir" data-uhp-voz-accion="abrir" disabled
-					aria-expanded="false" aria-controls="<?php echo esc_attr( $idv ); ?>-panel">
-					<span class="uhp-voz__icono" aria-hidden="true">
-						<svg viewBox="0 0 16 16" width="16" height="16" focusable="false">
-							<path d="M8 1.6a2.2 2.2 0 0 1 2.2 2.2v4a2.2 2.2 0 0 1-4.4 0v-4A2.2 2.2 0 0 1 8 1.6Z"/>
-							<path d="M3.4 7.2v.6a4.6 4.6 0 0 0 9.2 0v-.6" fill="none" stroke="currentColor" stroke-width="1.5"/>
-							<path d="M8 12.4v2" fill="none" stroke="currentColor" stroke-width="1.5"/>
-						</svg>
-					</span>
-					<span><?php echo esc_html( $t['abrir'] ); ?></span>
-				</button>
-				<p class="uhp-voz__aviso-corto"><?php echo esc_html( $t['aviso_corto'] ); ?></p>
+				<?php if ( $visible ) : ?>
+				</div>
+					<p class="uhp-voz__aviso-corto"><?php echo esc_html( $corto ); ?></p>
+				<?php endif; ?>
 			</div>
 
 			<div class="uhp-voz__panel" id="<?php echo esc_attr( $idv ); ?>-panel"
 				data-uhp-voz-zona="panel" hidden></div>
 
-			<!-- El aviso completo viaja en el HTML y lo imprime PHP, no lo
-				 compone el script ni llega de la configuración de una
-				 cuenta ajena: así puede auditarse en el código fuente de
-				 la página. Va en un <template> porque solo se muestra al
-				 pulsar; sin JavaScript el botón sale deshabilitado y lo
-				 que queda visible es el aviso corto de arriba. -->
-			<template data-uhp-voz-zona="aviso">
-				<?php foreach ( $bloques as $b ) : ?>
-					<section class="uhp-voz__bloque">
-						<h4><?php echo esc_html( $b['t'] ); ?></h4>
-						<p><?php echo esc_html( $b['p'] ); ?></p>
-					</section>
-				<?php endforeach; ?>
-			</template>
+			<?php
+			/* El aviso completo viaja en el HTML y lo imprime PHP, no lo
+			   compone el script ni llega de la configuración de una
+			   cuenta ajena: así puede auditarse en el código fuente de
+			   la página. Va en un <template> porque solo se muestra al
+			   pulsar; sin JavaScript los botones salen deshabilitados y
+			   lo que queda visible es el aviso corto de arriba.
+
+			   Uno por canal, y solo los de los canales que esta página
+			   ofrece: enviar el aviso de la voz a una página donde no se
+			   puede hablar es mandar al navegador un texto que nadie va a
+			   leer y que describe algo que no va a pasar. */
+			if ( $con_voz ) :
+				?>
+				<template data-uhp-voz-zona="aviso">
+					<?php foreach ( self::aviso_bloques( 'voz' ) as $b ) : ?>
+						<section class="uhp-voz__bloque">
+							<h4><?php echo esc_html( $b['t'] ); ?></h4>
+							<p><?php echo esc_html( $b['p'] ); ?></p>
+						</section>
+					<?php endforeach; ?>
+				</template>
+				<?php
+			endif;
+			if ( $con_texto ) :
+				?>
+				<template data-uhp-voz-zona="aviso-texto">
+					<?php foreach ( self::aviso_bloques( 'texto' ) as $b ) : ?>
+						<section class="uhp-voz__bloque">
+							<h4><?php echo esc_html( $b['t'] ); ?></h4>
+							<p><?php echo esc_html( $b['p'] ); ?></p>
+						</section>
+					<?php endforeach; ?>
+				</template>
+				<?php
+			endif;
+			?>
 
 			<p class="uhp-voz__sr" data-uhp-voz-zona="estado" role="status" aria-live="polite"></p>
 		</div>
@@ -394,6 +746,158 @@ final class UHP_Voz {
 	/* ================================================================= */
 	/* Ruta de sesión                                                    */
 	/* ================================================================= */
+
+	/* ================================================================= */
+	/* Verificación del agente                                           */
+	/* ================================================================= */
+
+	/**
+	 * Le pregunta a ElevenLabs si esto está como el plugin cree.
+	 *
+	 * POR QUÉ EXISTE. «Configurar la API» consistía en pegar una cadena a
+	 * ciegas: no se comprobaba que la clave sirviera, ni que el agente
+	 * existiera, ni —lo que de verdad rompe— qué sustituciones admite. Y
+	 * las sustituciones vienen DESACTIVADAS por omisión en la pestaña de
+	 * seguridad del agente, de modo que configurar aquí una voz y no
+	 * habilitarla allí no degrada nada: tumba la conversación entera, con
+	 * un «Override is not allowed for this AI agent» que el visitante no ve
+	 * y el administrador no sabe dónde buscar.
+	 *
+	 * El resultado se guarda en un transitorio y `config_front()` lo usa
+	 * para NO enviar una sustitución que no esté confirmada. Preferimos un
+	 * asistente que funciona con la voz del agente, y un panel que lo dice
+	 * con todas las letras, a un asistente que no abre.
+	 *
+	 * @return array Informe; 'ok' => bool.
+	 */
+	public static function verificar() {
+		$c     = self::cfg();
+		$clave = self::clave_api();
+
+		$informe = array(
+			'ok'       => false,
+			'mensaje'  => '',
+			'permite'  => array(
+				'voice_id'  => false,
+				'speed'     => false,
+				'text_only' => false,
+			),
+			'idioma'   => '',
+			'modelo'   => '',
+			'voz'      => '',
+			'solo_txt' => false,
+			'momento'  => time(),
+		);
+
+		if ( '' === $c['agente'] ) {
+			$informe['mensaje'] = __( 'Falta el identificador del agente.', 'urkunina-5000' );
+			set_transient( self::VERIF, $informe, DAY_IN_SECONDS );
+			return $informe;
+		}
+		if ( '' === $clave ) {
+			$informe['mensaje'] = __( 'No hay clave de API, así que no hay forma de preguntarle nada al proveedor. En modo público el plugin no puede verificar: lo que usted configure se envía tal cual.', 'urkunina-5000' );
+			set_transient( self::VERIF, $informe, DAY_IN_SECONDS );
+			return $informe;
+		}
+
+		$r = wp_remote_get(
+			self::api_base() . '/v1/convai/agents/' . rawurlencode( $c['agente'] ),
+			array(
+				'timeout' => 12,
+				'headers' => array(
+					'xi-api-key' => $clave,
+					'Accept'     => 'application/json',
+				),
+			)
+		);
+
+		if ( is_wp_error( $r ) ) {
+			/* El mensaje del transporte se resume y NO se imprime tal cual:
+			   puede traer la URL completa, y la URL de esta petición lleva
+			   el identificador del agente. */
+			$informe['mensaje'] = __( 'No se pudo contactar con ElevenLabs. Revise la salida a internet del servidor.', 'urkunina-5000' );
+			set_transient( self::VERIF, $informe, HOUR_IN_SECONDS );
+			return $informe;
+		}
+
+		$codigo = (int) wp_remote_retrieve_response_code( $r );
+		if ( 401 === $codigo || 403 === $codigo ) {
+			$informe['mensaje'] = __( 'La clave de API no sirve, o no tiene permiso sobre este agente.', 'urkunina-5000' );
+			set_transient( self::VERIF, $informe, HOUR_IN_SECONDS );
+			return $informe;
+		}
+		if ( 404 === $codigo ) {
+			$informe['mensaje'] = __( 'La clave sirve, pero ese agente no existe en esta cuenta. Compruebe que no pegó el identificador de la voz en el campo del agente.', 'urkunina-5000' );
+			set_transient( self::VERIF, $informe, HOUR_IN_SECONDS );
+			return $informe;
+		}
+		if ( 200 !== $codigo ) {
+			/* translators: %d: código HTTP. */
+			$informe['mensaje'] = sprintf( __( 'ElevenLabs respondió %d. Inténtelo más tarde.', 'urkunina-5000' ), $codigo );
+			set_transient( self::VERIF, $informe, HOUR_IN_SECONDS );
+			return $informe;
+		}
+
+		$d = json_decode( (string) wp_remote_retrieve_body( $r ), true );
+		if ( ! is_array( $d ) ) {
+			$informe['mensaje'] = __( 'ElevenLabs respondió algo que no es JSON.', 'urkunina-5000' );
+			set_transient( self::VERIF, $informe, HOUR_IN_SECONDS );
+			return $informe;
+		}
+
+		$sust = isset( $d['platform_settings']['overrides']['conversation_config_override'] )
+			? (array) $d['platform_settings']['overrides']['conversation_config_override']
+			: array();
+
+		$informe['ok']      = true;
+		$informe['mensaje'] = __( 'La clave sirve y el agente existe.', 'urkunina-5000' );
+		$informe['permite'] = array(
+			'voice_id'  => ! empty( $sust['tts']['voice_id'] ),
+			'speed'     => ! empty( $sust['tts']['speed'] ),
+			'text_only' => ! empty( $sust['conversation']['text_only'] ),
+		);
+
+		$cc                 = isset( $d['conversation_config'] ) ? (array) $d['conversation_config'] : array();
+		$informe['idioma']  = isset( $cc['agent']['language'] ) ? (string) $cc['agent']['language'] : '';
+		$informe['modelo']  = isset( $cc['tts']['model_id'] ) ? (string) $cc['tts']['model_id'] : '';
+		$informe['voz']     = isset( $cc['tts']['voice_id'] ) ? (string) $cc['tts']['voice_id'] : '';
+		$informe['solo_txt'] = ! empty( $cc['conversation']['text_only'] );
+
+		set_transient( self::VERIF, $informe, 12 * HOUR_IN_SECONDS );
+		return $informe;
+	}
+
+	/**
+	 * Lo último que dijo la verificación, o null si nunca se hizo.
+	 *
+	 * @return array|null
+	 */
+	public static function verificacion() {
+		$v = get_transient( self::VERIF );
+		return is_array( $v ) ? $v : null;
+	}
+
+	/**
+	 * ¿Está CONFIRMADO que el agente admite esta sustitución?
+	 *
+	 * Sin verificación devuelve false, y eso es deliberado: enviar una
+	 * sustitución sin confirmar es arriesgar la conversación entera de cada
+	 * visitante por un ajuste de timbre.
+	 *
+	 * En modo público no hay clave con la que preguntar, de modo que ahí se
+	 * envía lo configurado y la responsabilidad es de quien lo configuró;
+	 * el panel lo advierte.
+	 *
+	 * @param string $cual voice_id|speed|text_only
+	 * @return bool
+	 */
+	public static function permite( $cual ) {
+		$v = self::verificacion();
+		if ( ! is_array( $v ) || empty( $v['ok'] ) ) {
+			return false;
+		}
+		return ! empty( $v['permite'][ $cual ] );
+	}
 
 	/**
 	 * Registra POST /voz/sesion en el namespace del plugin.
@@ -447,6 +951,24 @@ final class UHP_Voz {
 		$c = self::cfg();
 
 		if ( ! self::configurada() || 'privado' !== $c['modo'] ) {
+			return new \WP_Error(
+				'uhp_voz_inactivo',
+				__( 'El asistente de voz no está disponible.', 'urkunina-5000' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		/* Y la visibilidad, que es una puerta de GASTO y no solo de
+		   maquetación. Sin esto, un sitio con la visibilidad en «editores»
+		   —«lo tengo configurado pero todavía no lo abro al público»—
+		   seguía repartiendo URLs firmadas facturables a cualquier
+		   visitante anónimo: el eje protegía el botón y no el bolsillo, y
+		   `origen_valido()` pasa sin problema porque el navegador manda
+		   `Origin` en cualquier POST del propio dominio.
+
+		   «Oculto» sí pasa, y debe pasar: ahí el asistente está publicado
+		   y lo que falta es el botón, que lo pone la plantilla. */
+		if ( ! self::permitido_para_usuario() ) {
 			return new \WP_Error(
 				'uhp_voz_inactivo',
 				__( 'El asistente de voz no está disponible.', 'urkunina-5000' ),
@@ -728,6 +1250,71 @@ final class UHP_Voz {
 	}
 
 	/**
+	 * Sanea el identificador de la VOZ, que no es el del agente.
+	 *
+	 * Son dos cosas distintas y se confunden con facilidad: el agente es la
+	 * conversación —su prompt, sus herramientas, su idioma— y la voz es
+	 * solo el timbre con que la lee. El del agente empieza por «agent_»;
+	 * el de la voz es una cadena alfanumérica sin prefijo. Un panel que los
+	 * llamara igual acabaría con el identificador equivocado en el campo
+	 * equivocado y con una sesión que falla sin decir por qué.
+	 *
+	 * Solo letras y números: este valor viaja al navegador y de allí al
+	 * proveedor dentro de un JSON. No es una credencial —sin la clave de la
+	 * cuenta no sirve de nada—, pero tampoco tiene por qué admitir nada más.
+	 *
+	 * @param string $texto Valor crudo.
+	 * @return string Identificador válido, o cadena vacía.
+	 */
+	public static function sanear_voz_id( $texto ) {
+		$v = is_string( $texto ) ? trim( $texto ) : '';
+		return preg_match( '/^[A-Za-z0-9]{16,48}$/', $v ) ? $v : '';
+	}
+
+	/**
+	 * Sanea la velocidad de habla. Fuera del margen, se descarta.
+	 *
+	 * Descartar y no recortar: si alguien escribe 3 queriendo decir algo,
+	 * dejarle 1,20 le hace creer que se guardó lo que pidió. Un campo
+	 * vacío dice la verdad —no se sustituye nada— y el panel lo explica.
+	 *
+	 * @param mixed $valor Valor crudo.
+	 * @return float 0 si no se sustituye.
+	 */
+	public static function sanear_velocidad( $valor ) {
+		if ( ! is_scalar( $valor ) || '' === trim( (string) $valor ) ) {
+			return 0.0;
+		}
+		$v = (float) str_replace( ',', '.', (string) $valor );
+		if ( $v < self::VEL_MIN || $v > self::VEL_MAX ) {
+			return 0.0;
+		}
+		return round( $v, 2 );
+	}
+
+	/**
+	 * Normaliza el canal de entrada.
+	 *
+	 * @param mixed $valor Valor crudo.
+	 * @return string ambos|voz|texto
+	 */
+	public static function sanear_entrada( $valor ) {
+		$v = is_string( $valor ) ? strtolower( trim( $valor ) ) : '';
+		return in_array( $v, array( 'voz', 'texto' ), true ) ? $v : 'ambos';
+	}
+
+	/**
+	 * Normaliza la visibilidad.
+	 *
+	 * @param mixed $valor Valor crudo.
+	 * @return string todos|editores|oculto
+	 */
+	public static function sanear_visibilidad( $valor ) {
+		$v = is_string( $valor ) ? strtolower( trim( $valor ) ) : '';
+		return in_array( $v, array( 'editores', 'oculto' ), true ) ? $v : 'todos';
+	}
+
+	/**
 	 * Definiciones de las herramientas que el agente debe declarar.
 	 *
 	 * Fuente única: de aquí salen el bloque copiable del panel y el
@@ -843,6 +1430,36 @@ final class UHP_Voz {
 					'required'   => array(),
 				),
 			),
+			array(
+				'name'        => 'uhp_consultar_perfil',
+				'description' => 'El perfil de los 5.000 participantes del estudio: género, pertenencia étnica, nivel educativo, régimen de salud y estado nutricional, con el rango de edades. Úsela para «quiénes participaron», «cuántas mujeres» o «qué edades». Es una cifra DEPARTAMENTAL del conjunto del estudio: no cambia con el filtro del tablero y no es el perfil de los municipios seleccionados. Cuando el informe solo registró el dato a parte de los participantes, la respuesta lo dice y da el denominador.',
+				'espera'      => true,
+				'parameters'  => array(
+					'type'       => 'object',
+					'properties' => array(
+						'aspecto' => array(
+							'type'        => 'string',
+							'description' => 'Qué parte del perfil: «genero», «etnia», «educativo», «salud», «nutricional». Omítalo o use «todo» para recibirlo completo.',
+						),
+					),
+					'required'   => array(),
+				),
+			),
+			array(
+				'name'        => 'uhp_comparar_subregiones',
+				'description' => 'Lee el gráfico de barras: el orden de las subregiones por el indicador activo, de mayor a menor. Úsela para «cuál está peor», «compare las subregiones» o «qué dice la gráfica». Devuelve cifras SUBREGIONALES publicadas, que NO son el promedio de los municipios intervenidos ni el promedio de la selección, con cuántos municipios de cada subregión intervino el proyecto, con los empates marcados, y nombrando las subregiones sin cifra publicada en vez de omitirlas. La respuesta viene formateada para el canal de la conversación: por voz da los extremos y un par más, por escrito la lista entera con el rótulo pegado a cada cifra.',
+				'espera'      => true,
+				'parameters'  => array(
+					'type'       => 'object',
+					'properties' => array(
+						'cuantas' => array(
+							'type'        => 'integer',
+							'description' => 'Cuántas subregiones devolver, de la más alta hacia abajo. Omítalo para el valor por omisión del canal: por voz tres, porque una enumeración hablada de once no se retiene; por escrito todas. Si recorta, la respuesta dice cuántas quedaron fuera.',
+						),
+					),
+					'required'   => array(),
+				),
+			),
 		);
 	}
 
@@ -858,20 +1475,31 @@ final class UHP_Voz {
 				'Eres el asistente del tablero de datos abiertos del proyecto URKUNINA 5000, de la Gobernación de Nariño (Colombia). El proyecto estudió la prevalencia de lesiones precursoras de malignidad gástrica y de infección por Helicobacter pylori en 5.000 voluntarios de 55 municipios del área andina de Nariño, entre 2018 y 2023.',
 				'',
 				'CÓMO HABLAS',
-				'- En español de Colombia, de usted, claro y breve. Frases cortas: esto se escucha, no se lee.',
-				'- Las cifras, dichas como se dicen: «treinta y cinco coma uno por ciento».',
+				'- En español de Colombia, de usted, claro y breve.',
 				'- No inventas NUNCA una cifra ni un nombre de municipio. Si no lo tienes, lo dices.',
+				'',
+				'DOS CANALES. ESTA CONVERSACIÓN VA POR: {{canal}}',
+				'- Si dice «voz», el visitante te escucha: frases cortas, y las cifras dichas como se dicen, «treinta y cinco coma uno por ciento». Nada de listas largas: una enumeración hablada de trece elementos no se retiene.',
+				'- Si dice «texto», el visitante te LEE y puede copiar lo que escribas. Entonces: cifras en dígitos («35,1 %»), listas cortas si ayudan, y cada vez que des una cifra nombra de qué territorio es y de qué indicador. Lo que se copia viaja sin el resto de la conversación: una cifra suelta sin su rótulo se vuelve un dato falso en cuanto alguien la pega en otra parte.',
+				'',
+				'CÓMO ESTABA EL TABLERO AL EMPEZAR',
+				'- Indicador {{indicador}}; zona {{zona}}; subregión {{subregion}}; municipio {{municipio}}; {{municipios_visibles}} municipios a la vista; {{casos_visibles}} casos de cáncer gástrico en la selección; promedio {{promedio_visible}}.',
+				'- Eso es el estado INICIAL y no se actualiza solo. En cuanto el visitante toque algo —o lo toques tú— esos números dejan de valer: vuelve a llamar a uhp_leer_estado_tablero antes de describir la pantalla.',
 				'',
 				'DE DÓNDE SACAS LOS DATOS',
 				'- Del tablero, con las herramientas. Nunca de tu memoria.',
 				'- Antes de describir lo que se está viendo, llama a uhp_leer_estado_tablero.',
 				'- Antes de nombrar varios municipios, llama a uhp_listar_municipios.',
+				'- Para comparar subregiones, o cuando te pregunten cuál está peor o qué dice la gráfica, llama a uhp_comparar_subregiones. Eso es lo que dibuja el gráfico de barras del tablero.',
+				'- Para quiénes participaron —género, etnia, educación, régimen de salud, estado nutricional, edades—, llama a uhp_consultar_perfil. Esas cifras son del conjunto del estudio y NO cambian con el filtro: no las presentes como el perfil de los municipios seleccionados.',
 				'- Si te preguntan por un dato sin pedir verlo, usa uhp_consultar_municipio y NO muevas la pantalla.',
 				'',
 				'LAS TRES REGLAS DE HONESTIDAD DEL PROYECTO',
 				'1. Un cero es un dato, no un hueco. «Ningún caso detectado» no es «sin información».',
 				'2. Nueve de los 64 municipios de Nariño no entraron en el estudio. Ahí no falta el dato: faltó el tamizaje. Dilo con esas palabras.',
-				'3. Cuando una herramienta te devuelva una cifra marcada como «de la subregión, no del municipio», dilo en voz alta. No la presentes como propia del municipio.',
+				'3. Cuando una herramienta te devuelva una cifra marcada como «de la subregión, no del municipio», dilo. No la presentes como propia del municipio.',
+				'4. El gráfico de barras lleva cifras SUBREGIONALES publicadas. No son el promedio de los municipios que el proyecto intervino —la subregión incluye municipios donde no estuvo— y no son el «promedio» que te da uhp_leer_estado_tablero, que sí se calcula sobre la selección. Son tres cosas distintas y no se intercambian.',
+				'5. Si uhp_comparar_subregiones te nombra subregiones sin cifra publicada, nómbralas también tú. No digas «estas son las subregiones» cuando son las que tienen dato.',
 				'',
 				'MUNICIPIOS QUE SE PARECEN',
 				'- Hay tres pares de municipios intervenidos que se confunden al dictarlos: Pupiales e Ipiales, Albán y Aldana, Iles e Imués. Si la herramienta te avisa de un municipio de nombre parecido, pregunta cuál quería ANTES de leer ninguna cifra.',
@@ -894,13 +1522,27 @@ final class UHP_Voz {
 	 * @return array<string,array<int,string>>
 	 */
 	public static function hosts_csp() {
-		$c     = self::cfg();
-		$webrtc = 'webrtc' === $c['transporte'];
+		$c       = self::cfg();
+		$entrada = self::sanear_entrada( $c['entrada'] );
+
+		// En modo solo texto no hay micrófono, no hay AudioContext y no hay
+		// worklets: la receta se encoge de verdad, no por optimismo. Una
+		// entidad que solo quiera el canal escrito no tiene por qué abrir
+		// blob: en su política por un audio que nunca va a sonar.
+		$con_voz = 'texto' !== $entrada;
+
+		/* WebRTC solo se usa de verdad en modo PÚBLICO. En privado,
+		   `credenciales()` abre siempre con la URL firmada por WebSocket y
+		   el ajuste de transporte se ignora; declarar LiveKit en la receta
+		   sería pedirle a la entidad que abra cuatro orígenes con comodín
+		   en su política para un transporte que su sitio no usa. */
+		$webrtc = $con_voz && 'webrtc' === $c['transporte'] && 'publico' === $c['modo'];
 
 		$connect = array( 'https://api.elevenlabs.io', 'wss://api.elevenlabs.io' );
 		if ( $webrtc ) {
 			// El transporte WebRTC va por LiveKit: lo declara la propia
-			// dependencia del SDK. Con WebSocket no hace falta ninguno.
+			// dependencia del SDK. Con WebSocket no hace falta ninguno, y
+			// una sesión de solo texto es siempre WebSocket.
 			$connect[] = 'https://*.livekit.cloud';
 			$connect[] = 'wss://*.livekit.cloud';
 			$connect[] = 'https://*.livekit.run';
@@ -915,16 +1557,30 @@ final class UHP_Voz {
 		$esq  = wp_parse_url( $sdk['sdk'], PHP_URL_SCHEME );
 		$origen_sdk = ( $host && $esq ) ? $esq . '://' . $host : 'https://cdn.jsdelivr.net';
 
-		return array(
+		$receta = array(
+			'script-src'  => array( $origen_sdk ),
+			'connect-src' => $connect,
+		);
+
+		if ( $con_voz ) {
 			// blob: va en script-src y no solo en worker-src: los
 			// procesadores de audio del SDK se instalan con
 			// AudioWorklet.addModule() desde una URL blob:, y esa carga la
 			// gobierna script-src en los navegadores que la aplican. Sin
 			// ella, el asistente conecta y no se oye nada.
-			'script-src'  => array( $origen_sdk, 'blob:' ),
-			'connect-src' => $connect,
-			'worker-src'  => array( "'self'", 'blob:' ),
-			'media-src'   => array( "'self'", 'blob:' ),
-		);
+			//
+			// El SDK tiene un segundo recurso: si blob: falla, reintenta
+			// con data:. NO se añade data: a la receta. Permitido blob:, el
+			// segundo recurso no se usa nunca, y data: en script-src abre
+			// una puerta que no hace falta abrir. Quien necesite una
+			// política sin blob: puede auto-hospedar los dos worklets y
+			// pasarlos en `workletPaths`; está explicado en
+			// docs/voz/puesta-en-marcha.md.
+			$receta['script-src'][] = 'blob:';
+			$receta['worker-src']   = array( "'self'", 'blob:' );
+			$receta['media-src']    = array( "'self'", 'blob:' );
+		}
+
+		return $receta;
 	}
 }

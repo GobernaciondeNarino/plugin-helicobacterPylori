@@ -49,6 +49,12 @@
 
   var ZONA_ORDEN = ['roja', 'amarilla', 'verde'];
 
+  /* Los participantes que el proyecto publica para el conjunto. No es una
+     estimación: es la cifra del informe, y por eso RESTRINGE el prorrateo
+     de los municipios cuyo desglose no se publica, en vez de calcularse a
+     partir de él. */
+  var PARTICIPANTES = 5000;
+
   var reducirMovimiento = window.matchMedia &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -74,6 +80,8 @@
       feats: [],
       muns: [],
       subs: {},
+      sinCifra: [],
+      perfil: null,
       fichasZona: {},
       // Quien quiera enterarse de los cambios; ver mando().alCambiar().
       oyentes: [],
@@ -126,6 +134,23 @@
         var v = meta.subregional[nombre];
         st.subs[nombre] = { lpm: v.lpm, hp: v.hp, zona: zonaDe[nombre] || '' };
       });
+
+      /* Las subregiones del departamento SIN cifra publicada. No entran en
+         st.subs porque no se pueden filtrar —el proyecto no intervino
+         ningún municipio suyo— y no se dibujan porque no hay barra que
+         dibujar. Viajan para poder NOMBRARLAS: Nariño tiene trece
+         subregiones y el informe publica once, y quien lea el gráfico
+         contando barras diría «las subregiones de Nariño» habiendo dejado
+         dos fuera del departamento. */
+      st.sinCifra = (meta.sin_cifra || []).slice();
+
+      /* El perfil de los 5.000. Está a la vista en la pantalla y hasta
+         ahora sus cifras vivían escritas a mano en el PHP del shortcode,
+         fuera del estado: nada podía leerlas. Viaja con su ámbito pegado
+         —departamental— porque con el tablero filtrado por una subregión
+         estas cifras siguen siendo las mismas, y presentarlas como el
+         perfil de la selección sería inventar un dato. */
+      st.perfil = (meta.perfil && typeof meta.perfil === 'object') ? meta.perfil : null;
 
       st.muns = st.feats.filter(function (f) { return f.properties && f.properties.int; })
         .map(function (f) { return f.properties; });
@@ -561,15 +586,67 @@
       conCifra++;
     });
     var promedio = conCifra ? (suma / conCifra) : null;
-    // Prorrateo, y el rótulo lo dice. El proyecto NO publica cuántos
-    // participantes aportó cada municipio: repartir los 5.000 a partes
-    // iguales es una estimación, no un dato, y por eso la tarjeta se
-    // titula «estimados» y su pie nombra el método.
-    var partic = Math.round(5000 * lista.length / 55);
+
+    /* PARTICIPANTES. Esta tarjeta decía antes, siempre, un prorrateo de
+       5.000 entre 55. Y el informe publica cuántos examinó en DOCE de los
+       cincuenta y cinco municipios: para Pupiales publica 80 donde el
+       prorrateo decía 91. Un dato publicado no se sustituye por uno
+       estimado, por mucho que el rótulo diga «est.».
+
+       Así que se suma lo publicado y se prorratea solo el resto, y el pie
+       dice exactamente qué parte es cada cosa. Tres casos:
+         · todos publicados   → la suma, y se llama «examinados».
+         · ninguno publicado  → el prorrateo de antes, con su rótulo.
+         · mezcla             → la suma más el prorrateo del resto, y el
+                                pie nombra las dos partes. */
+    var publicados = 0;
+    var sumaPart = 0;
+    lista.forEach(function (m) {
+      if (m.part != null) { publicados++; sumaPart += m.part; }
+    });
+    var sinPublicar = lista.length - publicados;
+
+    /* El prorrateo se reparte entre lo que QUEDA, no entre los 55. Es la
+       diferencia entre dos números y uno de los dos está mal: repartir
+       5.000 entre 55 da 90,9 por municipio, pero los doce con cifra
+       publicada suman 940 —una media de 78,3—, de modo que sumar 940 y
+       prorratear el resto a 90,9 daba 4.849 participantes para el
+       departamento entero. El informe publica 5.000.
+
+       Repartiendo los 4.060 no desglosados entre los 43 municipios que no
+       tienen cifra, la vista sin filtro vuelve a dar exactamente los 5.000
+       publicados, y la estimación de un municipio cualquiera pasa de 91 a
+       94: más alta, porque los doce que se conocen están por debajo de la
+       media. Dos datos publicados —el total y los doce municipales—
+       restringen el estimado, y usarlos es lo que lo hace estimado y no
+       inventado. */
+    var totalPub = 0;
+    var munsPub = 0;
+    st.muns.forEach(function (m) {
+      if (m.part != null) { munsPub++; totalPub += m.part; }
+    });
+    var restoMuns = st.muns.length - munsPub;
+    var restoPart = PARTICIPANTES - totalPub;
+    var porMun = restoMuns > 0 ? (restoPart / restoMuns) : 0;
+    var prorrateo = Math.round(porMun * sinPublicar);
+    var partic = sumaPart + prorrateo;
+
+    var rotuloPart;
+    var piePart;
+    if (lista.length && publicados === lista.length) {
+      rotuloPart = 'Participantes';
+      piePart = 'examinados, dato publicado';
+    } else if (!publicados) {
+      rotuloPart = 'Participantes est.';
+      piePart = 'prorrateo de ' + C.num(restoPart, 0) + ' entre ' + restoMuns;
+    } else {
+      rotuloPart = 'Participantes';
+      piePart = C.num(sumaPart, 0) + ' publicados + ' + C.num(prorrateo, 0) + ' prorrateados';
+    }
 
     caja.innerHTML = '';
     caja.appendChild(kpi('Municipios', String(lista.length), 'de 55 priorizados', 'acc'));
-    caja.appendChild(kpi('Participantes est.', C.num(partic, 0), 'prorrateo sobre 5.000', ''));
+    caja.appendChild(kpi(rotuloPart, C.num(partic, 0), piePart, ''));
     caja.appendChild(kpi(
       (st.ind === 'hp' ? 'H. pylori' : 'LPM') + ' promedio',
       cifra(promedio) + '%',
@@ -884,9 +961,12 @@
     var lista = seleccion(st);
     var suma = 0;
     var conCifra = 0;
+    var publicados = 0;
+    var sumaPart = 0;
     lista.forEach(function (m) {
       var sb = st.subs[m.sub] || {};
       var v = (m[st.ind] != null) ? m[st.ind] : sb[st.ind];
+      if (m.part != null) { publicados++; sumaPart += m.part; }
       if (v == null) { return; }
       suma += v;
       conCifra++;
@@ -902,7 +982,120 @@
       visibles: lista.length,
       casos: lista.reduce(function (a, m) { return a + m.casos; }, 0),
       promedio: conCifra ? Math.round(suma / conCifra * 10) / 10 : null,
-      conCifra: conCifra
+      conCifra: conCifra,
+      // Lo mismo que dice la tarjeta de participantes, y CON su
+      // procedencia: cuántos de los seleccionados traen cifra publicada.
+      // Sin eso, quien lea este resumen no puede saber si el número que
+      // tiene delante es un dato o una estimación.
+      participantesPublicados: publicados,
+      participantes: sumaPart
+    };
+  }
+
+  /* Lo que dice el gráfico de barras, en datos y no en píxeles.
+
+     Dos cuidados que no son adorno:
+
+       · Estas cifras son SUBREGIONALES y están publicadas como tales. No
+         son el promedio de sus municipios y no se pueden presentar como si
+         lo fueran: la subregión incluye municipios que el proyecto no
+         intervino.
+
+       · El gráfico solo dibuja las subregiones CON cifra. Aquí van todas,
+         con `valor: null` donde no hay dato publicado, porque un agente
+         que leyera nada más lo que se ve omitiría dos subregiones de la
+         costa sin decir que las omite. */
+  function rankingSubs(st) {
+    var visibles = {};
+    seleccion(st).forEach(function (m) { visibles[m.sub] = true; });
+
+    /* Intervenidos SOBRE el total de la subregión. El total hace falta,
+       no es adorno: Telembí encabeza el gráfico de H. pylori con 82,0 %, y
+       allí el proyecto intervino UN municipio de sus tres. Leer «Telembí,
+       82 %» sin ese denominador invita a entender que el proyecto midió la
+       subregión, cuando la cifra es la que el informe publica para el
+       territorio y la cobertura del proyecto es otra cosa. */
+    var intervenidos = {};
+    var total = {};
+    st.muns.forEach(function (m) {
+      intervenidos[m.sub] = (intervenidos[m.sub] || 0) + 1;
+    });
+    st.feats.forEach(function (f) {
+      var p = f.properties || {};
+      if (p.sub) { total[p.sub] = (total[p.sub] || 0) + 1; }
+    });
+
+    var filas = Object.keys(st.subs).map(function (k) {
+      var s = st.subs[k];
+      return {
+        subregion: k,
+        zona: s.zona || null,
+        valor: (s[st.ind] == null) ? null : s[st.ind],
+        intervenidos: intervenidos[k] || 0,
+        municipios: total[k] || 0,
+        visible: !!visibles[k],
+        seleccionada: st.sub === k,
+        filtrable: true
+      };
+    });
+
+    // Y las que el departamento tiene sin cifra publicada, con el mismo
+    // formato y `filtrable: false`: existen, no se pueden filtrar, y
+    // callarlas sería contar once subregiones donde hay trece.
+    (st.sinCifra || []).forEach(function (nombre) {
+      filas.push({
+        subregion: nombre,
+        zona: null,
+        valor: null,
+        intervenidos: intervenidos[nombre] || 0,
+        municipios: total[nombre] || 0,
+        visible: false,
+        seleccionada: false,
+        filtrable: false
+      });
+    });
+
+    // Con cifra primero y de mayor a menor, que es el orden del gráfico.
+    // Las que no la tienen van al final y por nombre, no revueltas entre
+    // las demás como si valieran cero.
+    filas.sort(function (a, b) {
+      if (a.valor == null && b.valor == null) { return a.subregion < b.subregion ? -1 : 1; }
+      if (a.valor == null) { return 1; }
+      if (b.valor == null) { return -1; }
+      return b.valor - a.valor;
+    });
+
+    /* El puesto se calcula por VALOR, no por índice. Occidente y La
+       Cordillera están las dos en 37,7 % de lesión precursora: numerarlas
+       «3.» y «4.» inventa una diferencia que el dato no tiene. Las
+       empatadas comparten número, y el siguiente salta. */
+    var conCifra = 0;
+    var puesto = 0;
+    var anterior = null;
+    filas.forEach(function (f, i) {
+      if (f.valor == null) { f.puesto = null; return; }
+      conCifra++;
+      if (anterior === null || f.valor !== anterior) { puesto = i + 1; }
+      f.puesto = puesto;
+      anterior = f.valor;
+    });
+    // Y se marca el empate, para que quien lo lea no tenga que comparar
+    // cifras de memoria.
+    var cuantos = {};
+    filas.forEach(function (f) {
+      if (f.puesto) { cuantos[f.puesto] = (cuantos[f.puesto] || 0) + 1; }
+    });
+    filas.forEach(function (f) { f.empatada = !!(f.puesto && cuantos[f.puesto] > 1); });
+
+    return {
+      indicador: st.ind,
+      indicadorEtiqueta: st.ind === 'hp' ? 'infección por H. pylori' : 'lesión precursora de malignidad',
+      // Lo lleva el dato y no el comentario: quien consuma esto tiene que
+      // poder decir en voz alta de qué territorio es la cifra.
+      origen: 'subregional',
+      total: filas.length,
+      conCifra: conCifra,
+      filas: filas
     };
   }
 
@@ -1039,6 +1232,13 @@
       lpm: dato('lpm'),
       hp: dato('hp'),
       casos: m.casos,
+      /* Participantes examinados y positivos, cuando el informe los
+         publica para este municipio —lo hace en doce de los 55—. `null`
+         significa que no los publica, no que no examinara a nadie: por eso
+         no es 0, a diferencia de los casos de cáncer, donde el cero sí es
+         un dato porque el tamizaje pasó por ahí y no encontró ninguno. */
+      participantes: (m.part != null) ? m.part : null,
+      positivosHp: (m.pos != null) ? m.pos : null,
       intervenido: true
     };
   }
@@ -1067,10 +1267,16 @@
           indicadores: ['lpm', 'hp'],
           zonas: ZONA_ORDEN.slice(),
           subregiones: Object.keys(st.subs).sort(),
+          // Las que existen pero el tablero no puede filtrar. Quien
+          // consuma el catálogo tiene que poder distinguirlas de las que
+          // no existen, que es lo que pasaba cuando no estaban.
+          subregionesSinCifra: (st.sinCifra || []).slice(),
           municipios: st.muns.map(function (m) { return m.n; }).sort()
         };
       },
       resolver: function (texto) { return resolver(st, texto); },
+      rankingSubregiones: function () { return rankingSubs(st); },
+      perfil: function () { return st.perfil; },
       ficha: function (nombre) {
         var m = municipioDe(st, nombre);
         return m ? ficha(st, m) : null;
