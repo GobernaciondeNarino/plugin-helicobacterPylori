@@ -63,6 +63,7 @@ final class UHP_Activator {
 		self::sembrar( 'uhp_estilo', UHP_Estilos::por_defecto() );
 		self::sembrar( 'uhp_dashboard', self::dashboard_por_defecto() );
 		self::sembrar( 'uhp_3d', self::tresd_por_defecto() );
+		self::sembrar( UHP_Voz::OPCION, UHP_Voz::por_defecto() );
 	}
 
 	/**

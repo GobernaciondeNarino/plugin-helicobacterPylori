@@ -17,6 +17,7 @@ uhp_cargar_shortcodes();
 use GobernacionNarino\Urkunina\UHP_Shortcodes;
 use GobernacionNarino\Urkunina\UHP_Estilos;
 use GobernacionNarino\Urkunina\UHP_Assets;
+use GobernacionNarino\Urkunina\UHP_Voz;
 
 $destino = isset( $argv[1] ) ? rtrim( $argv[1], '/' ) : __DIR__ . '/paginas';
 if ( ! is_dir( $destino ) ) {
@@ -141,18 +142,28 @@ function pagina( $titulo, $cuerpo, $temprano = null ) {
 		}
 		// El mismo criterio que UHP_Assets::marcar_modulos() en producción.
 		$modulo   = ( UHP_Assets::P . '3d' === $handle );
+		// Lo que el plugin añade con wp_add_inline_script va donde lo
+		// pondría WordPress: antes o después de su etiqueta. Es lo que
+		// lleva al navegador window.UHP, window.UHP3D y window.UHPVoz.
+		$antes   = uhp_test_inline( $handle, 'before' );
+		$despues = uhp_test_inline( $handle, 'after' );
+
+		if ( '' !== $antes ) {
+			$scripts .= '<script data-inline="' . $handle . '-before">' . $antes . '</script>' . "\n";
+		}
 		$scripts .= '<script ' . ( $modulo ? 'type="module" ' : '' ) .
 			'src="' . $url . '" data-handle="' . $handle . '"></script>' . "\n";
+		if ( '' !== $despues ) {
+			$scripts .= '<script data-inline="' . $handle . '-after">' . $despues . '</script>' . "\n";
+		}
 	}
 
-	$config = json_encode(
-		array(
-			'rest'      => '/wp-json/urkunina/v1',
-			'pluginUrl' => '/',
-			'locale'    => 'es-CO',
-		)
-	);
-	$three = json_encode( array( 'urls' => UHP_Assets::three_urls() ) );
+	// window.UHP, window.UHP3D y window.UHPVoz ya NO se escriben aquí: los
+	// emite el propio plugin con wp_add_inline_script y el bucle de arriba
+	// los imprime donde WordPress los pondría. Mientras estuvieron
+	// escritos a mano, todo lo que viaja por esa vía quedaba fuera de la
+	// suite: un módulo que se apaga en su primera línea por falta de
+	// configuración habría pasado las pruebas sin ejecutar una sola.
 
 	return '<!DOCTYPE html>
 <html lang="es">
@@ -167,7 +178,6 @@ function pagina( $titulo, $cuerpo, $temprano = null ) {
 body{margin:0;font-family:system-ui,sans-serif;background:#fff;}
 .pagina{max-width:1400px;margin:0 auto;padding:0 16px;}
 </style>
-<script>window.UHP=' . $config . ';window.UHP3D=' . $three . ';</script>
 </head>
 <body>
 ' . $cuerpo . '
@@ -259,6 +269,50 @@ $paginas['objeto-3d-desplazamiento'] = construir(
 	},
 	'[urkunina_3d]'
 );
+
+/* El tablero CON el asistente de voz encendido.
+
+   Se configura aquí y no en la opción por defecto porque el asistente
+   nace apagado: encenderlo exige, además del interruptor, los cuatro
+   campos del aviso de habeas data y la firma de la evaluación de
+   accesibilidad. Esta página comprueba justamente eso, que el bloque solo
+   aparece cuando la configuración está completa.
+
+   Modo público a propósito: así la sesión no pasa por el servidor y la
+   prueba puede ejercitar el módulo entero con un doble del SDK, sin
+   inventar una respuesta firmada. */
+update_option(
+	'uhp_voz',
+	array(
+		'activo'          => 1,
+		'agente'          => 'agent_pruebadelasuite0000',
+		'modo'            => 'publico',
+		'transporte'      => 'websocket',
+		'cuota_dia'       => 200,
+		'texto'           => 1,
+		'recordar'        => 1,
+		'aviso_version'   => 1,
+		'politica'        => 'https://ejemplo.narino.gov.co/politica',
+		'correo'          => 'datos@narino.gov.co',
+		'canal'           => 'Calle 19 No. 23-78, Pasto',
+		'retencion'       => 'El proveedor declara conservar las grabaciones 30 días.',
+		'aviso_extra'     => '',
+		'evaluacion_a11y' => 1,
+	)
+);
+
+$paginas['voz'] = construir(
+	'voz',
+	'Tablero con asistente de voz',
+	function ( $sc ) {
+		return $sc->sc_dashboard( array() );
+	},
+	'[urkunina_dashboard]'
+);
+
+// El resto de páginas vuelven a verlo apagado: el tablero de siempre no
+// puede cambiar porque exista esta función.
+update_option( 'uhp_voz', UHP_Voz::por_defecto() );
 
 $paginas['tablero'] = construir(
 	'tablero',

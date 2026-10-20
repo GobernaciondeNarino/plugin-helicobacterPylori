@@ -190,6 +190,432 @@ test.describe('Objeto 3D', () => {
 });
 
 /* ================================================================== */
+test.describe('Asistente de voz', () => {
+
+  /* Doble del SDK de ElevenLabs.
+
+     Se instala ANTES de que corra ningún script de la página, de modo que
+     el cargador del asistente encuentra window.ElevenLabsClient ya puesto
+     y no baja el megabyte del CDN. Guarda las opciones con las que se
+     abrió la sesión —ahí van las herramientas de cliente— y deja que la
+     prueba dispare los callbacks como si hablara el agente. */
+  async function conDoble(page) {
+    await page.addInitScript(() => {
+      window.__UHP_STUB = { abierta: 0, opciones: null, enviados: [], contexto: [], cerrada: 0 };
+      window.ElevenLabsClient = {
+        Conversation: {
+          startSession: function (opciones) {
+            window.__UHP_STUB.abierta++;
+            window.__UHP_STUB.opciones = opciones;
+            const conv = {
+              endSession: function () { window.__UHP_STUB.cerrada++; },
+              sendUserMessage: function (t) { window.__UHP_STUB.enviados.push(t); },
+              sendContextualUpdate: function (t) { window.__UHP_STUB.contexto.push(t); },
+              sendUserActivity: function () {},
+              getId: function () { return 'conv_prueba'; },
+              setVolume: function () {}
+            };
+            // Como el SDK real: avisa de que conectó en cuanto puede.
+            if (opciones.onConnect) { setTimeout(() => opciones.onConnect({}), 0); }
+            return Promise.resolve(conv);
+          }
+        }
+      };
+    });
+  }
+
+  /** Llama a una herramienta de cliente como la llamaría el agente. */
+  async function herramienta(page, nombre, args) {
+    return page.evaluate(([n, a]) => {
+      const t = window.__UHP_STUB.opciones.clientTools;
+      return Promise.resolve(t[n](a));
+    }, [nombre, args || {}]);
+  }
+
+  /** El tablero ya terminó de cargar sus datos. */
+  async function listo(page) {
+    await expect(page.locator('.uhp-db__muni')).toHaveCount(64, { timeout: 25000 });
+    await expect(page.locator('.uhp-db__mrow')).toHaveCount(55);
+  }
+
+  /** Abre el panel y acepta el aviso. */
+  async function conversar(page) {
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
+  }
+
+  test('el tablero sin asistente configurado sale exactamente como antes', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero.html');
+    await listo(page);
+    // Nace apagado: mientras falte un solo campo del aviso de habeas data
+    // o la firma de accesibilidad, el botón no se imprime.
+    await expect(page.locator('[data-uhp-voz]')).toHaveCount(0);
+  });
+
+  test('el aviso corto viaja en el HTML, sin depender del JavaScript', async ({ page }) => {
+    await page.context().route('**/*.js', (r) => r.abort());
+    await page.goto(BASE + '/paginas/voz.html');
+
+    // Lo primero que debe saber quien se plantea pulsar está servido por
+    // PHP: que su voz sale a un tercero y que el tablero funciona sin esto.
+    const aviso = page.locator('.uhp-voz__aviso-corto');
+    await expect(aviso).toContainText('proveedor en el exterior');
+    await expect(aviso).toContainText('funciona igual sin el asistente');
+  });
+
+  test('pulsar abre el aviso completo y no abre sesión hasta que se acepta', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+
+    const abrir = page.locator('[data-uhp-voz-accion="abrir"]');
+    await expect(abrir).toHaveAttribute('aria-expanded', 'false');
+    await abrir.click();
+    await expect(abrir).toHaveAttribute('aria-expanded', 'true');
+
+    const panel = page.locator('[data-uhp-voz-zona="panel"]');
+    await expect(panel).toHaveAttribute('role', 'dialog');
+    await expect(panel).toHaveAttribute('aria-modal', 'true');
+
+    // Los puntos que la Ley 1581 obliga a informar antes de recoger la
+    // autorización. Si alguno desaparece del aviso, esto falla.
+    for (const texto of [
+      'Quién responde por sus datos',
+      'transferencia internacional',
+      'artículo 9 de la Ley 1581',
+      'No dicte datos personales',
+      'Sus derechos',
+      'Sin micrófono también funciona'
+    ]) {
+      await expect(panel).toContainText(texto);
+    }
+
+    // Nada se ha abierto todavía.
+    expect(await page.evaluate(() => window.__UHP_STUB.abierta)).toBe(0);
+
+    await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
+  });
+
+  test('cancelar el aviso no abre nada y devuelve el foco', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    await page.getByRole('button', { name: 'Cancelar' }).click();
+
+    expect(await page.evaluate(() => window.__UHP_STUB.abierta)).toBe(0);
+    await expect(page.locator('[data-uhp-voz-accion="abrir"]')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeHidden();
+  });
+
+  test('la sesión registra las ocho herramientas y el estado de la pantalla', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    const o = await page.evaluate(() => ({
+      tools: Object.keys(window.__UHP_STUB.opciones.clientTools).sort(),
+      vars: window.__UHP_STUB.opciones.dynamicVariables,
+      agente: window.__UHP_STUB.opciones.agentId
+    }));
+
+    expect(o.tools).toEqual([
+      'uhp_cambiar_indicador',
+      'uhp_consultar_municipio',
+      'uhp_filtrar_subregion',
+      'uhp_filtrar_zona_riesgo',
+      'uhp_leer_estado_tablero',
+      'uhp_limpiar_tablero',
+      'uhp_listar_municipios',
+      'uhp_seleccionar_municipio'
+    ]);
+    // El agente arranca sabiendo qué hay en pantalla: sin esto, la
+    // primera pregunta obliga a una llamada antes de poder responder.
+    expect(o.vars.municipios_visibles).toBe('55');
+    expect(o.vars.indicador).toContain('lesión precursora');
+    expect(o.agente).toBe('agent_pruebadelasuite0000');
+  });
+
+  test('las herramientas mueven el tablero de verdad', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    // Indicador. Pasa por la misma función que el clic, de modo que el
+    // aria-pressed de las pestañas se mueve con él.
+    const r1 = await herramienta(page, 'uhp_cambiar_indicador', { indicador: 'hp' });
+    expect(r1).toContain('H. pylori');
+    await expect(page.locator('[data-uhp-ind="hp"]')).toHaveAttribute('aria-pressed', 'true');
+
+    await page.waitForTimeout(800); // el presupuesto de cambios
+
+    const r2 = await herramienta(page, 'uhp_filtrar_zona_riesgo', { zona: 'amarilla' });
+    expect(r2).toMatch(/10 municipios/);
+    await expect(page.locator('.uhp-db__mrow')).toHaveCount(10);
+
+    await page.waitForTimeout(800);
+
+    const r3 = await herramienta(page, 'uhp_seleccionar_municipio', { municipio: 'Pasto' });
+    expect(r3).toContain('52001');
+    await expect(page.locator('[data-uhp-zona="detalle"] .big')).toHaveText('Pasto');
+
+    // Y el cambio se anuncia atribuyéndolo al asistente.
+    await expect(page.locator('[data-uhp-zona="estado"]')).toContainText('El asistente');
+
+    await page.waitForTimeout(800);
+    await herramienta(page, 'uhp_limpiar_tablero', {});
+    await expect(page.locator('.uhp-db__mrow')).toHaveCount(55);
+  });
+
+  test('un municipio que no cruza exacto NO se selecciona: se confirma a mano', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    // Albán y Aldana están a dos cambios de distancia y los dos existen.
+    // Dejar que el modelo acierte por parecido significa leer en voz alta
+    // la cifra de cáncer gástrico de otro pueblo.
+    const r = await herramienta(page, 'uhp_seleccionar_municipio', { municipio: 'Albano' });
+    expect(r).toMatch(/¿Quiso decir/);
+    expect(r).toContain('botón');
+
+    // El tablero NO se movió.
+    await expect(page.locator('.uhp-db__muni.sel')).toHaveCount(0);
+
+    // La confirmación es una pulsación, no una frase del modelo.
+    const confirmar = page.locator('.uhp-voz__confirmar');
+    await expect(confirmar).toBeVisible();
+    await confirmar.getByRole('button', { name: /^Sí, / }).click();
+    await expect(page.locator('.uhp-db__muni.sel')).toHaveCount(1);
+  });
+
+  test('el modelo no puede autoconfirmar su propia sugerencia', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    const pregunta = await herramienta(page, 'uhp_seleccionar_municipio', { municipio: 'Albano' });
+    const sugerido = /¿Quiso decir ([^?]+)\?/.exec(pregunta)[1];
+    await page.waitForTimeout(800);
+
+    // Nada impide al modelo llamar acto seguido con el nombre que él mismo
+    // sugirió, y entonces ya sería una coincidencia exacta. La salvaguarda
+    // tiene que vivir en el plugin, no en la obediencia del modelo.
+    const r = await herramienta(page, 'uhp_seleccionar_municipio', { municipio: sugerido });
+    expect(r).toMatch(/Necesito que confirme/i);
+    await expect(page.locator('.uhp-db__muni.sel')).toHaveCount(0);
+
+    // Con la pulsación sí.
+    await page.locator('.uhp-voz__confirmar').getByRole('button', { name: /^Sí, / }).click();
+    await expect(page.locator('.uhp-db__muni.sel')).toHaveCount(1);
+  });
+
+  test('un municipio fuera del estudio se dice, no se inventa', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    // Tumaco es de Nariño y no entró en el estudio. No falta el dato:
+    // faltó el tamizaje, y esa diferencia es la regla del conjunto.
+    const r = await herramienta(page, 'uhp_seleccionar_municipio', { municipio: 'Tumaco' });
+    expect(r).toContain('no entró en el estudio');
+    expect(r).toContain('faltó el estudio');
+    await expect(page.locator('.uhp-db__muni.sel')).toHaveCount(0);
+  });
+
+  test('una ráfaga de llamadas no repinta el tablero cien veces', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    // Las herramientas que mutan no esperan respuesta: el agente puede
+    // encadenarlas sin frenar, y un modelo atascado dispara decenas.
+    const respuestas = await page.evaluate(async () => {
+      const t = window.__UHP_STUB.opciones.clientTools;
+      const salida = [];
+      for (let i = 0; i < 12; i++) {
+        salida.push(await t.uhp_cambiar_indicador({ indicador: i % 2 ? 'hp' : 'lpm' }));
+      }
+      return salida;
+    });
+
+    const frenadas = respuestas.filter((r) => /demasiados cambios/i.test(r));
+    expect(frenadas.length).toBeGreaterThan(8);
+  });
+
+  test('lo que dice el agente se pinta como texto, nunca como HTML', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    await page.evaluate(() => {
+      window.__UHP_STUB.opciones.onMessage({
+        source: 'ai',
+        message: '<img src=x onerror="window.__INYECTADO=1"> y <b>negrita</b>'
+      });
+    });
+
+    const turno = page.locator('.uhp-voz__turno').last();
+    await expect(turno).toContainText('<img src=x');
+    await expect(turno).toContainText('<b>negrita</b>');
+    expect(await turno.locator('img, b').count()).toBe(0);
+    expect(await page.evaluate(() => window.__INYECTADO)).toBeUndefined();
+  });
+
+  test('escribir en vez de hablar llega al agente', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    // La alternativa equivalente que exige la Resolución 1519: quien no
+    // puede o no quiere hablar tiene que poder preguntar igual.
+    const campo = page.locator('.uhp-voz__campo');
+    await expect(campo).toBeVisible();
+    await campo.fill('¿Cuántos municipios hay?');
+    await page.locator('.uhp-voz__forma').getByRole('button', { name: 'Enviar' }).click();
+
+    expect(await page.evaluate(() => window.__UHP_STUB.enviados)).toEqual(['¿Cuántos municipios hay?']);
+    await expect(page.locator('.uhp-voz__turno--usted')).toContainText('¿Cuántos municipios hay?');
+  });
+
+  test('retirar la autorización cierra la sesión y borra la aceptación', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    // El artículo 8(e) de la Ley 1581 da derecho a revocar la
+    // autorización, y revocarla tiene que notarse en el acto.
+    await page.getByRole('button', { name: 'Retirar autorización' }).click();
+    expect(await page.evaluate(() => window.__UHP_STUB.cerrada)).toBe(1);
+    expect(await page.evaluate(() => {
+      try { return window.sessionStorage.getItem('uhp_voz_consentimiento_v1'); }
+      catch (e) { return null; }
+    })).toBeNull();
+
+    // Y al volver a pulsar, el aviso aparece otra vez.
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toContainText('artículo 9 de la Ley 1581');
+  });
+
+  test('un clic del visitante le llega al agente como contexto', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    // Si el visitante mueve el tablero a mano y el agente no se entera,
+    // seguirá hablando de una pantalla que ya no existe.
+    await page.locator('.uhp-db__mrow', { hasText: 'Pasto' }).first().click();
+    await expect.poll(
+      () => page.evaluate(() => window.__UHP_STUB.contexto.length),
+      { timeout: 4000 }
+    ).toBeGreaterThan(0);
+    const ctx = await page.evaluate(() => window.__UHP_STUB.contexto.join(' '));
+    expect(ctx).toContain('El visitante cambió el tablero');
+    expect(ctx).toContain('Pasto');
+  });
+
+  test('el asistente no pide nada a un servidor externo', async ({ page }) => {
+    const fuera = [];
+    page.on('request', (r) => {
+      const u = r.url();
+      if (!u.startsWith(BASE) && !u.startsWith('data:') && !u.startsWith('blob:')) { fuera.push(u); }
+    });
+
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+    await herramienta(page, 'uhp_leer_estado_tablero', {});
+
+    // Con el SDK ya presente, el cargador no debe bajarlo. Y nada del
+    // asistente puede salir a la red por su cuenta.
+    expect(fuera, 'el asistente salió a la red: ' + fuera.join(', ')).toEqual([]);
+  });
+
+  test('los pares tinta/fondo del asistente cumplen la norma de contraste', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+
+    const medir = (selectores) => page.evaluate((sel) => {
+      function lum(c) {
+        const m = c.match(/\d+(\.\d+)?/g).map(Number);
+        const f = m.slice(0, 3).map((v) => {
+          const s = v / 255;
+          return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2];
+      }
+      function fondoDe(n) {
+        let e = n;
+        while (e && e !== document.documentElement) {
+          const c = getComputedStyle(e).backgroundColor;
+          if (c && !/rgba\(0, 0, 0, 0\)|transparent/.test(c)) { return c; }
+          e = e.parentElement;
+        }
+        return 'rgb(255,255,255)';
+      }
+      const faltan = [];
+      const medidos = [];
+      sel.forEach((s) => {
+        const n = document.querySelector(s);
+        // Un selector que no encuentra nodo NO puede saltarse en
+        // silencio: la prueba pasaría en verde sin medir nada.
+        if (!n) { faltan.push(s); return; }
+        const e = getComputedStyle(n);
+        const a = lum(e.color);
+        const b = lum(fondoDe(n));
+        const r = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+        medidos.push({ sel: s, ratio: Math.round(r * 100) / 100 });
+      });
+      return { faltan, medidos };
+    }, selectores);
+
+    function comprobar(pares) {
+      // Un selector que no encuentra nodo NO puede saltarse en silencio:
+      // la prueba pasaría en verde sin medir nada.
+      expect(pares.faltan, 'selectores que no existen en la pantalla medida').toEqual([]);
+      pares.medidos.forEach((m) => {
+        expect(m.ratio, m.sel + ' da ' + m.ratio + ':1').toBeGreaterThanOrEqual(4.5);
+      });
+    }
+
+    // Estado 1: el lanzador y el aviso corto, antes de tocar nada.
+    comprobar(await medir(['.uhp-voz__abrir', '.uhp-voz__aviso-corto']));
+
+    // Estado 2: la compuerta del aviso, con su botón principal.
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    comprobar(await medir([
+      '.uhp-voz__bloque h4', '.uhp-voz__bloque p',
+      '.uhp-voz__btn', '.uhp-voz__btn--principal'
+    ]));
+
+    // Estado 3: la conversación, con un turno de cada parte.
+    await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
+    await page.evaluate(() => {
+      window.__UHP_STUB.opciones.onMessage({ source: 'ai', message: 'Hay 55 municipios.' });
+    });
+    comprobar(await medir([
+      '.uhp-voz__quien', '.uhp-voz__turno', '.uhp-voz__estado-txt', '.uhp-voz__cab h3'
+    ]));
+  });
+});
+
+/* ================================================================== */
 test.describe('Gráficos', () => {
 
   test('las ocho vistas se dibujan con D3plus', async ({ page }) => {
@@ -1195,6 +1621,112 @@ test.describe('Tablero', () => {
     });
 
     expect(medidas, 'pares por debajo del mínimo').toEqual([]);
+  });
+
+  test('la fachada de mando mueve el tablero por el mismo camino que un clic', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero.html');
+    await listo(page);
+
+    // El asistente de voz no toca el estado del tablero: pasa por esta
+    // fachada, que es la que usan también los manejadores de clic. Si
+    // divergieran, hablar y pulsar darían resultados distintos.
+    const hay = await page.evaluate(() => !!(window.UHPTablero && window.UHPTablero.mando()));
+    expect(hay, 'el tablero no expone su mando').toBe(true);
+
+    // Indicador: repinta Y mueve el aria-pressed de las pestañas, que es
+    // lo que antes hacía solo el manejador de clic.
+    await page.evaluate(() => window.UHPTablero.mando().setIndicador('hp'));
+    await expect(page.locator('[data-uhp-zona="leyenda-titulo"]')).toContainText('H. pylori');
+    await expect(page.locator('[data-uhp-ind="hp"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-uhp-ind="lpm"]')).toHaveAttribute('aria-pressed', 'false');
+
+    // Zona: recorta la lista igual que el botón.
+    await page.evaluate(() => window.UHPTablero.mando().setZona('amarilla'));
+    await expect(page.locator('.uhp-db__mrow')).toHaveCount(10);
+    await expect(page.locator('.uhp-db__kpi .val').first()).toHaveText('10');
+
+    // Municipio: abre su ficha y lo resalta en el mapa.
+    await page.evaluate(() => window.UHPTablero.mando().setMunicipio('Pasto'));
+    await expect(page.locator('[data-uhp-zona="detalle"] .big')).toHaveText('Pasto');
+    await expect(page.locator('.uhp-db__muni.sel')).toHaveCount(1);
+
+    await page.evaluate(() => window.UHPTablero.mando().limpiar());
+    await expect(page.locator('.uhp-db__mrow')).toHaveCount(55);
+  });
+
+  test('un cambio del asistente se anuncia diciendo que no fue el visitante', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero.html');
+    await listo(page);
+
+    // Quien no ve la pantalla tiene que poder distinguir lo que hizo él
+    // de lo que le hicieron: media pantalla cambia sin que haya tocado
+    // nada y sin que el foco se mueva.
+    await page.evaluate(() => window.UHPTablero.mando().setZona('roja', 'agente'));
+    await expect(page.locator('[data-uhp-zona="estado"]')).toContainText('El asistente');
+
+    // El mismo cambio hecho a mano NO se atribuye a nadie.
+    await page.locator('[data-uhp-accion="limpiar"]').click();
+    await expect(page.locator('[data-uhp-zona="estado"]')).not.toContainText('El asistente');
+  });
+
+  test('resolver un municipio dictado no acierta por aproximación', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero.html');
+    await listo(page);
+
+    const r = await page.evaluate(() => {
+      const m = window.UHPTablero.mando();
+      return {
+        exacto: m.resolver('túquerres'),
+        sinTilde: m.resolver('tuquerres'),
+        alias: m.resolver('Génova'),
+        codigo: m.resolver('52001'),
+        // Albán y Aldana están a dos cambios de distancia y los dos son
+        // municipios intervenidos: confundirlos es leer en voz alta la
+        // cifra de cáncer gástrico de otro pueblo.
+        vecino: m.resolver('Albán'),
+        casi: m.resolver('Sandona del Sur'),
+        fuera: m.resolver('Tumaco'),
+        nada: m.resolver('Barranquilla')
+      };
+    });
+
+    expect(r.exacto.estado).toBe('exacto');
+    expect(r.exacto.municipio.n).toBe('Túquerres');
+    expect(r.sinTilde.estado).toBe('exacto');
+    expect(r.alias.municipio.n).toBe('Colón (Génova)');
+    expect(r.codigo.municipio.n).toBe('Pasto');
+
+    // Con un vecino a dos cambios, la resolución lo dice para poder avisar.
+    expect(r.vecino.estado).toBe('exacto');
+    expect(r.vecino.vecino).toBe('Aldana');
+
+    // Lo que no cruza exacto NO selecciona: sugiere.
+    expect(['sugerencia', 'ninguno']).toContain(r.casi.estado);
+    expect(r.casi.municipio).toBeUndefined();
+
+    // Un municipio de Nariño que el proyecto no intervino no es una
+    // errata: es que allí no hubo tamizaje.
+    expect(r.fuera.estado).toBe('fuera');
+    expect(r.nada.estado).toBe('ninguno');
+  });
+
+  test('la ficha por voz dice si la cifra es del municipio o de su subregión', async ({ page }) => {
+    await page.goto(BASE + '/paginas/tablero.html');
+    await listo(page);
+
+    const f = await page.evaluate(() => window.UHPTablero.mando().ficha('Túquerres'));
+    expect(f.c).toBe('52838');
+    expect(f.sub.length).toBeGreaterThan(0);
+    // Los 55 intervenidos traen cifra propia desde la serie completa.
+    expect(f.lpm.origen).toBe('municipal');
+    expect(f.hp.origen).toBe('municipal');
+    expect(typeof f.lpm.valor).toBe('number');
+
+    // El resumen que lee el asistente sale del mismo cálculo que los KPI.
+    const e = await page.evaluate(() => window.UHPTablero.mando().estado());
+    expect(e.visibles).toBe(55);
+    expect(e.indicador).toBe('lpm');
+    expect(Math.abs(e.promedio - 35.1)).toBeLessThan(0.6);
   });
 
   test('en móvil las columnas se apilan sin desbordar', async ({ page }) => {

@@ -17,7 +17,12 @@ define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 define( 'UHP_VERSION', '1.0.0' );
 define( 'UHP_FILE', dirname( __DIR__ ) . '/urkunina-5000.php' );
 define( 'UHP_DIR', dirname( __DIR__ ) . '/' );
-define( 'UHP_URL', 'https://example.test/wp-content/plugins/urkunina-5000/' );
+/* Rutas RELATIVAS a propósito: las páginas de prueba las sirve el
+   servidor local de tests/servidor.js desde su propia raíz, y el plugin
+   imprime esta misma URL en window.UHP. Con un dominio inventado aquí, el
+   navegador pediría los recursos y la API a example.test y la suite
+   probaría una página que no carga nada. */
+define( 'UHP_URL', '/' );
 define( 'UHP_BASENAME', 'urkunina-5000/urkunina-5000.php' );
 
 define( 'MINUTE_IN_SECONDS', 60 );
@@ -151,7 +156,7 @@ function __( $texto, $dominio = null ) {
 }
 
 function rest_url( $ruta = '' ) {
-	return 'https://example.test/wp-json/' . ltrim( (string) $ruta, '/' );
+	return '/wp-json/' . ltrim( (string) $ruta, '/' );
 }
 
 /** @var array<string,callable[]> Filtros registrados por las pruebas. */
@@ -249,6 +254,7 @@ function uhp_cargar_clases_de_datos() {
 	require_once $base . 'data/class-uhp-views.php';
 	require_once $base . 'data/class-uhp-territorios.php';
 	require_once $base . 'class-uhp-rest.php';
+	require_once $base . 'class-uhp-voz.php';
 }
 
 /* -------------------------------------------------------------------------
@@ -330,7 +336,44 @@ function wp_style_is( $handle, $estado = 'enqueued' ) {
 	return isset( $GLOBALS['uhp_test_encolados'][ 'style:' . $handle ] );
 }
 
-function wp_add_inline_script() {}
+/**
+ * Guarda el script en línea asociado a un handle.
+ *
+ * Era un no-op, y por eso el generador de páginas no podía emitirlo: las
+ * páginas de prueba llevaban a mano un `window.UHP` escrito aparte y todo
+ * lo que el plugin añade por esta vía —la configuración del objeto 3D, la
+ * del asistente de voz— quedaba fuera de la suite. Un módulo que se apaga
+ * en su primera línea por falta de configuración habría pasado las
+ * pruebas sin ejecutar nada.
+ *
+ * @param string $handle   Handle al que se engancha.
+ * @param string $data     Código.
+ * @param string $posicion 'before' o 'after'.
+ */
+function wp_add_inline_script( $handle, $data = '', $posicion = 'after' ) {
+	$p = ( 'before' === $posicion ) ? 'before' : 'after';
+	if ( ! isset( $GLOBALS['uhp_test_inline'] ) ) {
+		$GLOBALS['uhp_test_inline'] = array( 'before' => array(), 'after' => array() );
+	}
+	if ( ! isset( $GLOBALS['uhp_test_inline'][ $p ][ $handle ] ) ) {
+		$GLOBALS['uhp_test_inline'][ $p ][ $handle ] = array();
+	}
+	$GLOBALS['uhp_test_inline'][ $p ][ $handle ][] = (string) $data;
+}
+
+/**
+ * Código en línea de un handle, en una posición.
+ *
+ * @param string $handle   Handle.
+ * @param string $posicion 'before' o 'after'.
+ * @return string
+ */
+function uhp_test_inline( $handle, $posicion ) {
+	$reg = isset( $GLOBALS['uhp_test_inline'][ $posicion ][ $handle ] )
+		? $GLOBALS['uhp_test_inline'][ $posicion ][ $handle ]
+		: array();
+	return implode( "\n", $reg );
+}
 function wp_add_inline_style() {}
 
 /**

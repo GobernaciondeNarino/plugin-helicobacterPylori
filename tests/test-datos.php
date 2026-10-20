@@ -19,6 +19,7 @@ use GobernacionNarino\Urkunina\UHP_Datos;
 use GobernacionNarino\Urkunina\UHP_Municipios;
 use GobernacionNarino\Urkunina\UHP_Views;
 use GobernacionNarino\Urkunina\UHP_Rest;
+use GobernacionNarino\Urkunina\UHP_Voz;
 use GobernacionNarino\Urkunina\UHP_Security;
 use GobernacionNarino\Urkunina\UHP_Topojson;
 use GobernacionNarino\Urkunina\UHP_Subregiones;
@@ -1326,6 +1327,148 @@ foreach ( (array) UHP_Datos::valor( 'proyecto', 'financiacion.fuentes', array() 
 }
 comprobar( $bien, 'El porcentaje de cada fuente de financiación sale de su propio valor' );
 comprobar( abs( $suma - 100.0 ) < 0.01, sprintf( 'Los porcentajes de financiación suman 100 (%.2f)', $suma ) );
+
+/* ---------------------------------------------------------------- */
+echo "\n11. Asistente de voz\n";
+
+$voz_antes = get_option( 'uhp_voz', array() );
+
+// Nace apagado. Mientras lo esté, el tablero no imprime una sola línea
+// del asistente: ni el botón, ni el aviso, ni el script.
+update_option( 'uhp_voz', UHP_Voz::por_defecto() );
+comprobar( ! UHP_Voz::configurada(), 'Sin configurar, el asistente de voz no se publica' );
+comprobar( '' === UHP_Voz::control_html( 'x' ), 'Sin configurar no emite marcado alguno' );
+
+// Encenderlo NO basta: faltan los campos del aviso de habeas data.
+$parcial           = UHP_Voz::por_defecto();
+$parcial['activo'] = 1;
+$parcial['agente'] = 'agent_abcdefghij';
+$parcial['modo']   = 'publico';
+update_option( 'uhp_voz', $parcial );
+comprobar(
+	! UHP_Voz::configurada(),
+	'Encenderlo sin los datos del aviso no lo publica: ' . count( UHP_Voz::pendientes() ) . ' puertas abiertas'
+);
+
+// Completo: se publica.
+$lleno = array_merge(
+	$parcial,
+	array(
+		'politica'        => 'https://narino.gov.co/politica',
+		'correo'          => 'datos@narino.gov.co',
+		'canal'           => 'Calle 19 No. 23-78, Pasto',
+		'retencion'       => 'El proveedor conserva 30 días.',
+		'evaluacion_a11y' => 1,
+	)
+);
+update_option( 'uhp_voz', $lleno );
+comprobar( UHP_Voz::configurada(), 'Con todas las puertas firmadas, el asistente se publica' );
+comprobar( ! UHP_Voz::pendientes(), 'Y no queda ninguna pendiente' );
+
+// LA COMPROBACIÓN QUE IMPORTA: la clave de API no puede salir al front
+// por ninguna vía. config_front() se construye por lista blanca, y esto
+// verifica que la lista blanca sigue siéndolo.
+update_option( 'uhp_voz_clave', 'sk_clave_secreta_de_prueba' );
+$front = UHP_Voz::config_front();
+$plano = wp_json_encode( $front );
+comprobar(
+	false === strpos( $plano, 'sk_clave_secreta_de_prueba' ),
+	'La clave de API no aparece en lo que viaja al navegador'
+);
+comprobar(
+	false === strpos( strtolower( $plano ), 'clave' ) && false === strpos( strtolower( $plano ), 'api_key' ),
+	'Ni siquiera una clave con ese nombre viaja al navegador'
+);
+$permitidas = array( 'agente', 'modo', 'transporte', 'texto', 'recordar', 'avisoVersion', 'ruta', 'sdk' );
+$sobran     = array_diff( array_keys( $front ), $permitidas );
+comprobar(
+	! $sobran,
+	'config_front() no publica ninguna clave fuera de su lista blanca' . ( $sobran ? ': ' . implode( ', ', $sobran ) : '' )
+);
+
+// El marcado del aviso tiene que llevar los puntos que la Ley 1581 pide
+// informar ANTES de recoger la autorización.
+$html = UHP_Voz::control_html( 'uhpdb-1' );
+foreach ( array(
+	'Ley 1581'                  => 'cita la ley que la ampara',
+	'transferencia internacional' => 'advierte de la transferencia al exterior',
+	'datos@narino.gov.co'       => 'da el canal para ejercer derechos',
+	'No dicte datos personales' => 'pide no dictar datos sensibles',
+	'funciona igual sin el asistente' => 'dice que el tablero funciona sin él',
+) as $aguja => $porque ) {
+	comprobar( false !== strpos( $html, $aguja ), 'El aviso ' . $porque );
+}
+comprobar(
+	false === strpos( $html, 'sk_clave_secreta_de_prueba' ),
+	'El marcado del asistente no filtra la clave de API'
+);
+
+// Las ocho herramientas y el archivo que se pega en ElevenLabs no pueden
+// separarse: si alguien cambia un parámetro y no regenera el JSON, quien
+// configure el agente pegará una forma que el navegador ya no entiende.
+$defs = UHP_Voz::definiciones_herramientas();
+comprobar( 8 === count( $defs ), sprintf( 'El agente declara ocho herramientas de cliente (%d)', count( $defs ) ) );
+
+$ruta_json = UHP_DIR . 'docs/voz/herramientas.json';
+$doc       = is_readable( $ruta_json ) ? json_decode( (string) file_get_contents( $ruta_json ), true ) : null;
+comprobar( is_array( $doc ), 'docs/voz/herramientas.json existe y es JSON válido' );
+if ( is_array( $doc ) ) {
+	comprobar(
+		wp_json_encode( $doc['herramientas'] ) === wp_json_encode( json_decode( wp_json_encode( $defs ), true ) ),
+		'El JSON documentado es exactamente el que produce el plugin'
+	);
+	comprobar(
+		isset( $doc['prompt'] ) && $doc['prompt'] === UHP_Voz::prompt_agente(),
+		'Las instrucciones documentadas del agente son las del plugin'
+	);
+}
+
+// Las que mueven el tablero NO esperan respuesta y las que leen SÍ: al
+// revés, la pantalla cambiaría después de que el agente terminara de
+// hablar, o el agente describiría una pantalla que aún no conoce.
+$mutan = array( 'uhp_cambiar_indicador', 'uhp_filtrar_zona_riesgo', 'uhp_filtrar_subregion', 'uhp_seleccionar_municipio', 'uhp_limpiar_tablero' );
+$bien  = true;
+foreach ( $defs as $d ) {
+	$deberia = ! in_array( $d['name'], $mutan, true );
+	if ( (bool) $d['espera'] !== $deberia ) {
+		$bien = false;
+	}
+}
+comprobar( $bien, 'Las herramientas que mueven el tablero no esperan respuesta y las que leen sí' );
+
+// La CSP que hace falta. Con WebSocket no debe aparecer LiveKit: es la
+// diferencia entre declarar dos orígenes y declarar seis.
+$csp = UHP_Voz::hosts_csp();
+comprobar(
+	in_array( 'wss://api.elevenlabs.io', $csp['connect-src'], true ),
+	'La CSP declara el WebSocket de la API'
+);
+comprobar(
+	! in_array( 'wss://*.livekit.cloud', $csp['connect-src'], true ),
+	'Con transporte WebSocket la CSP no arrastra los dominios de LiveKit'
+);
+$lleno['transporte'] = 'webrtc';
+update_option( 'uhp_voz', $lleno );
+comprobar(
+	in_array( 'wss://*.livekit.cloud', UHP_Voz::hosts_csp()['connect-src'], true ),
+	'Con transporte WebRTC sí los declara, porque el audio va por ahí'
+);
+
+// El identificador del agente se valida: lo que no tiene su forma no
+// puede acabar en una URL que el servidor consulta.
+comprobar(
+	'' === UHP_Voz::sanear_agente( 'javascript:alert(1)' )
+		&& '' === UHP_Voz::sanear_agente( '../../etc/passwd' )
+		&& '' === UHP_Voz::sanear_agente( 'agent_corto' . "\n" . 'otra' ),
+	'Un identificador de agente con forma extraña se descarta'
+);
+comprobar(
+	'agent_abcdefghij' === UHP_Voz::sanear_agente( '  agent_abcdefghij  ' ),
+	'Uno con la forma correcta se conserva, sin espacios'
+);
+
+update_option( 'uhp_voz', $voz_antes );
+delete_option( 'uhp_voz_clave' );
 
 /* ---------------------------------------------------------------- */
 echo "\n";

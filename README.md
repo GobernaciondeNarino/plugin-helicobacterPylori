@@ -22,6 +22,7 @@ de WordPress:
 | Componente | Shortcode |
 |---|---|
 | Tablero de resultados: mapa del departamento, filtros y lectura del territorio | `[urkunina_dashboard]` |
+| Asistente de voz sobre el tablero: pregunta hablada y filtros que obedecen | `[urkunina_dashboard voz="si\|no"]` |
 | Recreación 3D de *Helicobacter pylori* con línea de tiempo | `[urkunina_3d desplazar="si\|no"]` |
 | Gráfico de cualquiera de las 29 vistas del catálogo, con el mapa entre sus tipos | `[urkunina_grafico view="…" type="…"]` |
 | Mapa coroplético de los 64 municipios sobre OpenStreetMap | `[urkunina_mapa]` |
@@ -230,12 +231,42 @@ cáncer detectado: esa información no está en los documentos fuente.
 
 ---
 
+## Preguntar por voz
+
+El tablero puede responder preguntas habladas y mover sus propios filtros
+mientras lo hace: «muéstrame la zona roja», «¿cuánto tiene Túquerres?», «cambia
+a H. pylori». La voz la pone ElevenLabs; todo lo que el ciudadano ve lo pone el
+plugin, con los mismos colores y los mismos controles que el resto del tablero.
+
+**Nace apagado.** No basta con encenderlo: hasta que no están el identificador
+del agente, el enlace a la política de tratamiento de datos, dos canales para
+ejercer los derechos del titular, lo que el proveedor declare por escrito sobre
+retención y la firma de la evaluación de accesibilidad, el tablero sale byte
+por byte como si esta función no existiera.
+
+Antes de hablar, el visitante lee un aviso completo de habeas data y lo acepta.
+Puede retirar la autorización en cualquier momento con un botón, y puede
+escribir en vez de hablar. Los cuatro filtros siguen manejándose con el teclado
+y con el ratón: el asistente no es la única vía para nada.
+
+El agente no inventa: cada cifra sale de una herramienta que lee el tablero, y
+cuando una cifra es de la subregión y no del municipio, lo dice. Un municipio
+que el proyecto no intervino se responde con esas palabras —«allí no hubo
+tamizaje»—, no como si faltara el dato. Y un nombre que no cruce exacto nunca
+selecciona otro parecido: pregunta, y lo confirma una pulsación.
+
+Puesta en marcha, definiciones de las herramientas y CSP en
+[`docs/voz/puesta-en-marcha.md`](docs/voz/puesta-en-marcha.md). El análisis de
+protección de datos, en [`docs/voz/privacidad.md`](docs/voz/privacidad.md).
+
+---
+
 ## Verificación
 
 ```bash
 npm install          # instala Playwright
-npm run test:datos   # 482 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 69 pruebas de navegador
+npm run test:datos   # 506 comprobaciones de la capa de datos, sin WordPress
+npm test             # lo anterior más 89 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los

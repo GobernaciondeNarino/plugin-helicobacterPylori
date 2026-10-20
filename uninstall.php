@@ -24,6 +24,12 @@ function uhp_limpiar_sitio() {
 		'uhp_estilo',
 		'uhp_dashboard',
 		'uhp_3d',
+		'uhp_voz',
+		// La clave de API del asistente de voz vive en su propia opción,
+		// fuera del array que alimenta al front. Desinstalar tiene que
+		// llevársela: dejar una credencial de un tercero en la base de
+		// datos de un sitio del que el plugin ya salió es un hallazgo.
+		'uhp_voz_clave',
 		'uhp_datos_hash',
 	);
 	foreach ( $opciones as $opcion ) {
@@ -33,7 +39,7 @@ function uhp_limpiar_sitio() {
 	// Transitorios del plugin: caché de archivos, índice de municipios y
 	// contadores del límite de peticiones. Se borran por prefijo porque su
 	// nombre lleva un hash y no se pueden enumerar de otro modo.
-	$prefijos = array( 'uhp_json_', 'uhp_municipios_', 'uhp_rl_', 'uhp_aviso_' );
+	$prefijos = array( 'uhp_json_', 'uhp_municipios_', 'uhp_rl_', 'uhp_aviso_', 'uhp_voz_cuota_' );
 	foreach ( $prefijos as $prefijo ) {
 		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(

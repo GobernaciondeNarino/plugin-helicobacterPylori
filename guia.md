@@ -848,6 +848,100 @@ falla la suite en vez de llegar a producción.
 
 ---
 
+### 4.9 El asistente de voz
+
+El tablero puede atender preguntas habladas y mover sus propios filtros al
+responderlas. El reconocimiento, el modelo y la voz los pone ElevenLabs; el
+plugin pone la compuerta de consentimiento, el panel, la transcripción y las
+ocho herramientas con las que el agente toca el tablero.
+
+#### Una sola puerta hacia el tablero
+
+Las reglas de coherencia entre los tres filtros vivían dentro de los
+manejadores de clic de `uhp-dashboard.js`, repetidas. Ahora están en cinco
+funciones con nombre —`aplicarIndicador`, `aplicarZona`, `aplicarSubregion`,
+`aplicarMunicipio`, `aplicarLimpiar`— que invocan por igual el ratón y el
+asistente. **Hablar y pulsar no pueden divergir porque recorren el mismo
+código.** Sobre ellas se levanta `window.UHPTablero.mando(raiz)`, la fachada que
+es el único canal del asistente, y que no expone ni una operación que el
+teclado no alcance ya: una capacidad que solo existiera detrás del micrófono
+sería justo lo que la Resolución 1519 prohíbe.
+
+`aplicarMunicipio` recibe `alternar`: el clic suelta el municipio al pulsarlo
+dos veces, la voz no. «Muéstrame Túquerres» dicho dos veces no significa
+«quítalo».
+
+Cada cambio pasa por `notificar(st, origen)`. Con `origen === 'agente'`, la
+región `aria-live` antepone «El asistente…»: quien no ve la pantalla necesita
+distinguir lo que hizo él de lo que le hicieron. Y cuando el visitante actúa, el
+anuncio anterior del asistente se borra, o le atribuiría a la máquina un cambio
+que acaba de hacer él.
+
+#### Las ocho herramientas
+
+Cinco mueven el tablero y tres solo leen. La diferencia no es cosmética: las que
+leen se declaran en ElevenLabs con «esperar respuesta» —el agente necesita el
+dato para seguir la frase— y las que mueven, sin ella, para que la pantalla
+cambie *mientras* habla y no después.
+
+Las tres de lectura existen para que el agente no invente: `uhp_leer_estado_tablero`
+son sus ojos, `uhp_listar_municipios` le impide enumerar municipios de memoria y
+`uhp_consultar_municipio` responde un dato **sin** mover la pantalla, que es lo
+que nadie espera de una pregunta suelta.
+
+#### Nunca se acierta un municipio por parecido
+
+Albán y Aldana, Iles e Imués, Linares y Leiva están a dos cambios de distancia
+y los seis son municipios intervenidos. El reconocimiento de voz entregará
+tarde o temprano uno por otro, y equivocarse significa leer en voz alta la cifra
+de cáncer gástrico de otro pueblo.
+
+`resolver()` solo cruza por coincidencia **exacta** del nombre normalizado, de
+su alias entre paréntesis —«Génova» por «Colón (Génova)»— o del código DANE. Lo
+que no cruza se devuelve como sugerencia y **la confirma una pulsación en la
+pantalla**, no una frase del modelo: si la confirmación dependiera de que el
+agente obedezca, se autoconfirmaría en el turno siguiente, porque el nombre que
+él mismo sugirió ya sería una coincidencia exacta. Una prueba lo comprueba.
+
+Cuando el nombre sí cruza pero tiene un vecino a dos cambios, la respuesta lo
+avisa para que el agente pregunte antes de leer cifra alguna.
+
+#### Lo que no se deja al modelo
+
+- **Nada de lo que dice el agente entra como HTML.** Todo se pinta con
+  `textContent`. Una prueba le hace devolver `<img onerror=…>` y verifica que se
+  lee como texto.
+- **Presupuesto de cambios**: un cambio cada 700 ms y veinte por minuto. Las
+  cinco herramientas mutadoras no esperan respuesta, de modo que un modelo
+  atascado puede encadenar decenas; cada una repinta la lista de 55 municipios y
+  reenfoca el mapa.
+- **La clave de API no existe en el navegador.** Vive en su propia opción —mejor
+  en `wp-config.php`— y `config_front()` se arma por lista blanca, clave por
+  clave, nunca por resta: así el ajuste que alguien añada mañana no puede
+  publicarla por descuido. Dos comprobaciones de la suite lo verifican.
+
+#### Por qué el SDK y no el widget
+
+El SDK suprime por ausencia lo que el widget oficial solo neutraliza por
+configuración. Además deja el control del marcado: la compuerta, los estados y
+la transcripción son nuestros, con los tokens `--uhp-db-*` y bajo la misma
+prueba de contraste que el resto del tablero.
+
+Pesa 1,07 MB, así que **no se descarga hasta que el visitante pulsa**. Y se usa
+con `connectionType: 'websocket'`, no WebRTC: el audio va entonces solo a
+`api.elevenlabs.io` en lugar de atravesar además la infraestructura de LiveKit,
+y la CSP de la entidad se escribe con dos orígenes en vez de seis.
+
+#### El panel flota, y no por estética
+
+`.uhp-db__col--izq` declara exactamente tantas filas de rejilla como hijos
+tiene; una cuarta tarjeta desplazaría la lista de municipios a una fila que no
+existe. Y, sobre todo, `avisar()` vacía `.uhp-db__main` con `innerHTML` cuando
+la carga de datos falla: un panel colgado de ahí desaparecería con el micrófono
+abierto. El bloque es hijo directo de `.uhp-db` y se posiciona encima.
+
+---
+
 ## 5. El módulo de datos
 
 Es el único subsistema que escribe en disco, así que concentra las garantías.
@@ -1011,7 +1105,7 @@ npm run test:datos   # capa de datos, sin WordPress
 npm test             # lo anterior más las pruebas de navegador
 ```
 
-### 8.1 Capa de datos — 482 comprobaciones
+### 8.1 Capa de datos — 506 comprobaciones
 
 `tests/test-datos.php` ejecuta las clases del plugin fuera de WordPress, con
 sustitutos mínimos de sus funciones (`tests/stubs-wordpress.php`). Comprueba
@@ -1047,7 +1141,7 @@ silencioso:
   Ofrecerlo en una vista sin territorio produciría un mapa vacío; no ofrecerlo
   en una que sí lo tiene esconde la mitad de la lectura.
 
-### 8.2 Navegador — 69 pruebas
+### 8.2 Navegador — 89 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a
@@ -1113,6 +1207,23 @@ vacío; que cambiar de tipo a mano no devuelve al mapa en el siguiente dibujo;
 que el borde del control llega a 3:1 sobre su fondo, como exige WCAG 2.1
 §1.4.11; y que un selector sin grupo avisa en vez de romper la página.
 
+Del asistente de voz se comprueba que el tablero sin configurar sale
+exactamente como antes; que el aviso corto viaja en el HTML y se lee **con el
+JavaScript desactivado**; que pulsar abre el aviso completo —con los puntos que
+la Ley 1581 obliga a informar— y que **no se abre sesión alguna hasta aceptar**;
+que la sesión registra las ocho herramientas y arranca sabiendo qué hay en
+pantalla; que las herramientas mueven el tablero de verdad y el cambio se
+anuncia atribuyéndolo al asistente; que un nombre que no cruza exacto **no
+selecciona** y que el modelo **no puede autoconfirmar su propia sugerencia**;
+que un municipio fuera del estudio se dice con esas palabras; que una ráfaga de
+doce llamadas se frena; que lo que dice el agente se pinta como texto y un
+`<img onerror=…>` no se ejecuta; que se puede escribir en vez de hablar; que
+retirar la autorización cierra la sesión y borra la aceptación; que un clic del
+visitante le llega al agente como contexto; que **el asistente no pide nada a un
+servidor externo**; y que sus pares tinta/fondo cumplen la norma de contraste en
+los tres estados —lanzador, aviso y conversación—, con los selectores que no
+encuentran nodo contados como fallo y no saltados en silencio.
+
 El entorno de pruebas espeja Three.js, D3plus y Leaflet en local
 (`tests/vendor`, no versionado) para no depender de la red, incluida la ruta
 absoluta que los complementos de Three.js importan internamente.
@@ -1124,10 +1235,25 @@ peticiones a los servidores de capa base —OpenStreetMap y CARTO— se intercep
 y se responden con una tesela de un píxel: lo que se comprueba es que el
 componente **pide** la capa base y la coloca, no cómo se ve una tesela.
 
+El SDK de ElevenLabs se sustituye por un doble instalado con
+`addInitScript` antes de que corra nada: el cargador lo encuentra ya puesto y
+no baja el megabyte del CDN. Una prueba vigila que no salga ni una petición
+fuera del servidor local.
+
 Dos pruebas se saltaban esa regla y salían de verdad a `tile.openstreetmap.org`.
 Pasaban mientras el entorno lo permitiera; con un proxy que intercepta el TLS,
 Chromium rechaza el certificado y esos fallos de red acababan contados como
 errores del plugin. El helper `sinTeselas()` las cubre ahora también.
+
+### 8.2.2 Las páginas de prueba llevan los scripts en línea reales
+
+`tests/generar-paginas.php` escribía a mano `window.UHP` y `window.UHP3D`, y el
+sustituto de `wp_add_inline_script()` era un no-op. Todo lo que el plugin manda
+al navegador por esa vía quedaba fuera de la suite: un módulo que se apaga en su
+primera línea por falta de configuración habría pasado las pruebas **sin
+ejecutar una sola**. Ahora el sustituto guarda lo que se le añade y el generador
+lo imprime donde WordPress lo pondría, antes o después de su etiqueta. El par
+escrito a mano desapareció, y con él la posibilidad de que divergiera del real.
 
 ### 8.3 Las páginas de prueba no listan sus recursos
 

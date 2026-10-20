@@ -75,11 +75,15 @@
       muns: [],
       subs: {},
       fichasZona: {},
+      // Quien quiera enterarse de los cambios; ver mando().alCambiar().
+      oyentes: [],
       // Estado del dibujo.
       svg: null, root: null, gMun: null, gDept: null, gCaso: null,
       proyeccion: null, trazo: null, zoom: null,
       W: 0, H: 0, k: 1, ajuste: null
     };
+
+    INSTANCIAS.push({ raiz: raiz, mando: mando(st) });
 
     montarMapa(st);
     cablear(st);
@@ -253,9 +257,12 @@
       .on('mouseleave', function () { ocultarTip(st); })
       .on('click', function (e, d) {
         if (!d.properties.int) { return; }
-        st.muni = (st.muni === d.properties.n) ? null : d.properties.n;
         ocultarTip(st);
+        // Desde el mapa no se reenfoca: el municipio ya está bajo el
+        // cursor y mover la cámara bajo la mano desorienta.
+        st.muni = (st.muni === d.properties.n) ? null : d.properties.n;
         render(st);
+        notificar(st, 'usuario', st.muni || 'ningún municipio');
       });
 
     // Contorno del departamento: la unión de todas las geometrías, sin
@@ -383,6 +390,123 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* Mutadores del estado
+
+     Las reglas de coherencia entre los tres filtros vivían dentro de los
+     manejadores de clic, repetidas. Aquí tienen un solo sitio, y los
+     clics las invocan igual que las invoca el asistente de voz: por
+     construcción, hablar y pulsar no pueden divergir.
+
+     Todas reciben `origen` —'usuario' o 'agente'— y devuelven si el
+     cambio se aplicó. Quien no ve la pantalla necesita saber que acaba
+     de moverse algo que él no tocó, y de ahí que `notificar()` anteponga
+     la autoría cuando el cambio no es suyo.                            */
+  /* ------------------------------------------------------------------ */
+
+  function aplicarIndicador(st, clave, origen) {
+    var v = (clave === 'hp') ? 'hp' : 'lpm';
+    if (!RAMPAS[v]) { return false; }
+    st.ind = v;
+    sincronizarPestanas(st);
+    render(st);
+    notificar(st, origen, RAMPAS[v].etiqueta);
+    return true;
+  }
+
+  /* El `aria-pressed` de las pestañas de indicador lo movía el manejador
+     de clic. Si solo lo moviera él, un cambio por voz dejaría el mapa
+     repintado y los botones mintiendo. */
+  function sincronizarPestanas(st) {
+    var inds = st.raiz.querySelectorAll('[data-uhp-ind]');
+    for (var i = 0; i < inds.length; i++) {
+      var suyo = inds[i].getAttribute('data-uhp-ind') === 'hp' ? 'hp' : 'lpm';
+      inds[i].setAttribute('aria-pressed', suyo === st.ind ? 'true' : 'false');
+    }
+  }
+
+  function aplicarZona(st, clave, origen) {
+    if (clave !== null && ZONA_ORDEN.indexOf(clave) < 0) { return false; }
+    st.zona = clave;
+    // Una subregión que ya no cae en la zona activa deja de filtrar: si
+    // se quedara, la selección sería vacía sin explicar por qué.
+    if (st.sub && st.subs[st.sub] && st.subs[st.sub].zona !== st.zona) { st.sub = null; }
+    st.muni = null;
+    render(st);
+    enfocar(st, st.feats.filter(function (f) { return pasa(st, f.properties); }));
+    notificar(st, origen, clave ? etiquetaZona(st, clave) : 'todas las zonas');
+    return true;
+  }
+
+  function aplicarSubregion(st, nombre, origen) {
+    if (nombre !== null && !st.subs[nombre]) { return false; }
+    st.sub = nombre;
+    // Elegir una subregión mueve también la zona: si no, filtrar por una
+    // subregión de la zona verde con la roja activa no daría nada.
+    st.zona = st.sub ? (st.subs[nombre].zona || null) : st.zona;
+    st.muni = null;
+    render(st);
+    enfocar(st, st.feats.filter(function (f) { return pasa(st, f.properties); }));
+    notificar(st, origen, nombre || 'todas las subregiones');
+    return true;
+  }
+
+  /* `alternar` es lo que hace el clic: pulsar dos veces el mismo
+     municipio lo suelta. Por voz NO se alterna, porque «muéstrame
+     Túquerres» dicho dos veces no significa «quítalo». */
+  function aplicarMunicipio(st, nombre, origen, alternar) {
+    if (nombre === null) {
+      st.muni = null;
+      render(st);
+      notificar(st, origen, 'ningún municipio');
+      return true;
+    }
+    var m = municipioDe(st, nombre);
+    if (!m) { return false; }
+    st.muni = (alternar && st.muni === m.n) ? null : m.n;
+    render(st);
+    var f = st.muni ? featDe(st, st.muni) : null;
+    if (f) { enfocar(st, [f]); }
+    notificar(st, origen, st.muni || 'ningún municipio');
+    return true;
+  }
+
+  function aplicarLimpiar(st, origen) {
+    st.zona = null;
+    st.sub = null;
+    st.muni = null;
+    verTodo(st);
+    render(st);
+    notificar(st, origen, 'los 55 municipios');
+    return true;
+  }
+
+  function municipioDe(st, nombre) {
+    for (var i = 0; i < st.muns.length; i++) {
+      if (st.muns[i].n === nombre) { return st.muns[i]; }
+    }
+    return null;
+  }
+
+  function notificar(st, origen, que) {
+    if (origen === 'agente') {
+      anunciar(st, 'El asistente cambió la vista a ' + que + '.');
+    } else if (st.nodos.estado && st.nodos.estado.textContent.indexOf('El asistente') === 0) {
+      // El aviso anterior era del asistente y el visitante acaba de
+      // actuar: dejarlo ahí haría que un lector de pantalla atribuyera
+      // al asistente un cambio que hizo quien está leyendo.
+      anunciar(st, '');
+    }
+    for (var i = 0; i < st.oyentes.length; i++) {
+      try {
+        st.oyentes[i](estadoResumido(st), origen);
+      } catch (e) {
+        // Un oyente roto no puede llevarse por delante el tablero.
+        if (window.console && console.error) { console.error('[URKUNINA 5000] oyente del tablero', e); }
+      }
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Render                                                             */
   /* ------------------------------------------------------------------ */
 
@@ -480,13 +604,7 @@
       b.appendChild(C.el('span', 'n', String(n)));
 
       b.addEventListener('click', function () {
-        st.zona = (st.zona === clave) ? null : clave;
-        // Una subregión que ya no cae en la zona activa deja de filtrar:
-        // si se quedara, la selección sería vacía sin explicar por qué.
-        if (st.sub && st.subs[st.sub] && st.subs[st.sub].zona !== st.zona) { st.sub = null; }
-        st.muni = null;
-        render(st);
-        enfocar(st, st.feats.filter(function (f2) { return pasa(st, f2.properties); }));
+        aplicarZona(st, (st.zona === clave) ? null : clave, 'usuario');
       });
       caja.appendChild(b);
     });
@@ -512,10 +630,7 @@
         b.appendChild(C.el('span', 'sr', m.sub));
 
         b.addEventListener('click', function () {
-          st.muni = (st.muni === m.n) ? null : m.n;
-          render(st);
-          var f = featDe(st, st.muni);
-          if (f) { enfocar(st, [f]); }
+          aplicarMunicipio(st, m.n, 'usuario', true);
         });
         caja.appendChild(b);
       });
@@ -561,13 +676,7 @@
       b.appendChild(track);
 
       b.addEventListener('click', function () {
-        st.sub = (st.sub === clave) ? null : clave;
-        // Elegir una subregión mueve también la zona: si no, filtrar por
-        // una subregión de la zona verde con la roja activa no daría nada.
-        st.zona = st.sub ? (st.subs[clave].zona || null) : st.zona;
-        st.muni = null;
-        render(st);
-        enfocar(st, st.feats.filter(function (f) { return pasa(st, f.properties); }));
+        aplicarSubregion(st, (st.sub === clave) ? null : clave, 'usuario');
       });
       caja.appendChild(b);
     });
@@ -634,10 +743,7 @@
         b.appendChild(C.el('b', '', m.n));
         b.appendChild(C.el('span', 'cn', String(m.casos)));
         b.addEventListener('click', function () {
-          st.muni = m.n;
-          render(st);
-          var f = featDe(st, m.n);
-          if (f) { enfocar(st, [f]); }
+          aplicarMunicipio(st, m.n, 'usuario', false);
         });
         casos.appendChild(b);
       });
@@ -700,19 +806,13 @@
     for (var i = 0; i < inds.length; i++) {
       (function (b) {
         b.addEventListener('click', function () {
-          st.ind = b.getAttribute('data-uhp-ind') === 'hp' ? 'hp' : 'lpm';
-          for (var j = 0; j < inds.length; j++) {
-            inds[j].setAttribute('aria-pressed', inds[j] === b ? 'true' : 'false');
-          }
-          render(st);
+          aplicarIndicador(st, b.getAttribute('data-uhp-ind'), 'usuario');
         });
       }(inds[i]));
     }
 
     accion(st, 'limpiar', function () {
-      st.zona = null; st.sub = null; st.muni = null;
-      verTodo(st);
-      render(st);
+      aplicarLimpiar(st, 'usuario');
     });
     accion(st, 'zoom-mas', function () {
       st.svg.transition().duration(reducirMovimiento ? 0 : 250).call(st.zoom.scaleBy, 1.6);
@@ -753,5 +853,233 @@
     main.appendChild(caja);
   }
 
-  window.UHPTablero = { iniciar: iniciar };
+  /* ------------------------------------------------------------------ */
+  /* Lectura del tablero
+
+     Todo lo que sigue LEE y no toca nada. Existe para que algo externo
+     —hoy el asistente de voz— pueda describir lo que se está viendo sin
+     volver a pedir datos ni, peor, inventárselos.                      */
+  /* ------------------------------------------------------------------ */
+
+  /* El mismo cálculo que pintarKpis: el promedio solo sobre los que
+     tienen cifra. Si se duplicara aquí con otra regla, el tablero y el
+     asistente dirían números distintos de la misma selección. */
+  function estadoResumido(st) {
+    var lista = seleccion(st);
+    var suma = 0;
+    var conCifra = 0;
+    lista.forEach(function (m) {
+      var sb = st.subs[m.sub] || {};
+      var v = (m[st.ind] != null) ? m[st.ind] : sb[st.ind];
+      if (v == null) { return; }
+      suma += v;
+      conCifra++;
+    });
+    return {
+      disponible: st.feats.length > 0,
+      indicador: st.ind,
+      indicadorEtiqueta: st.ind === 'hp' ? 'infección por H. pylori' : 'lesión precursora de malignidad',
+      zona: st.zona,
+      zonaEtiqueta: st.zona ? etiquetaZona(st, st.zona) : null,
+      subregion: st.sub,
+      municipio: st.muni,
+      visibles: lista.length,
+      casos: lista.reduce(function (a, m) { return a + m.casos; }, 0),
+      promedio: conCifra ? Math.round(suma / conCifra * 10) / 10 : null,
+      conCifra: conCifra
+    };
+  }
+
+  /* Normaliza un nombre para compararlo con lo que escribe el
+     reconocimiento de voz: sin tildes, en minúsculas, sin artículo
+     inicial y sin nada que no sea letra o número. «La Sabana», «la
+     sabana» y «sabana» tienen que cruzar con la misma subregión. */
+  function normalizar(txt) {
+    var t = String(txt == null ? '' : txt).toLowerCase();
+    t = t.normalize ? t.normalize('NFD').replace(/[̀-ͯ]/g, '') : t;
+    t = t.replace(/^(el|la|los|las)\s+/, '');
+    return t.replace(/[^a-z0-9]+/g, '');
+  }
+
+  /* Distancia de edición, acotada: solo interesa saber si dos nombres
+     están a 1 o 2 cambios, no cuánto se parecen dos frases largas. */
+  function distancia(a, b) {
+    if (a === b) { return 0; }
+    if (Math.abs(a.length - b.length) > 2) { return 99; }
+    var fila = [];
+    for (var j = 0; j <= b.length; j++) { fila[j] = j; }
+    for (var i = 1; i <= a.length; i++) {
+      var ant = fila[0];
+      fila[0] = i;
+      for (var k = 1; k <= b.length; k++) {
+        var tmp = fila[k];
+        fila[k] = Math.min(
+          fila[k] + 1,
+          fila[k - 1] + 1,
+          ant + (a.charAt(i - 1) === b.charAt(k - 1) ? 0 : 1)
+        );
+        ant = tmp;
+      }
+    }
+    return fila[b.length];
+  }
+
+  /* Los rótulos de los informes llevan el nombre popular entre
+     paréntesis —«Colón (Génova)»— y por voz se dirá uno u otro. */
+  function clavesDe(m) {
+    var claves = [normalizar(m.n), m.c];
+    var par = /^(.*?)\s*\(([^)]+)\)\s*$/.exec(m.n);
+    if (par) {
+      claves.push(normalizar(par[1]));
+      claves.push(normalizar(par[2]));
+    }
+    return claves;
+  }
+
+  /* Resuelve un nombre dictado contra los municipios del tablero.
+
+     NUNCA selecciona por aproximación. Hay tres pares de municipios
+     intervenidos a dos cambios de distancia —Albán y Aldana, Iles e
+     Imués, Linares y Leiva— y confundirlos significa leer en voz alta la
+     cifra de cáncer gástrico de otro pueblo. Cuando no hay coincidencia
+     exacta se devuelve la sugerencia para que alguien la confirme, y
+     cuando sí la hay pero tiene un vecino cercano, se devuelve el vecino
+     para poder advertirlo. */
+  function resolver(st, texto) {
+    var buscado = normalizar(texto);
+    if (!buscado) { return { estado: 'ninguno' }; }
+
+    var exacto = null;
+    var cerca = null;
+    var mejor = 99;
+    st.muns.forEach(function (m) {
+      var claves = clavesDe(m);
+      for (var i = 0; i < claves.length; i++) {
+        if (claves[i] === buscado) { exacto = m; return; }
+      }
+      var d = distancia(buscado, normalizar(m.n));
+      if (d < mejor) { mejor = d; cerca = m; }
+    });
+
+    if (exacto) {
+      return { estado: 'exacto', municipio: ficha(st, exacto), vecino: vecinoDe(st, exacto) };
+    }
+    // Un municipio de Nariño que el proyecto no intervino no es un error
+    // de dicción: es que allí no hubo tamizaje, y hay que decirlo.
+    var fuera = null;
+    st.feats.forEach(function (f) {
+      if (f.properties.int) { return; }
+      var claves = clavesDe(f.properties);
+      for (var i = 0; i < claves.length; i++) {
+        if (claves[i] === buscado) { fuera = f.properties; }
+      }
+    });
+    if (fuera) { return { estado: 'fuera', municipio: { n: fuera.n, c: fuera.c, sub: fuera.sub } }; }
+
+    if (cerca && mejor <= 2) { return { estado: 'sugerencia', sugerencia: cerca.n }; }
+    return { estado: 'ninguno' };
+  }
+
+  /* ¿Tiene este municipio otro a dos cambios de distancia? */
+  function vecinoDe(st, m) {
+    var yo = normalizar(m.n);
+    var hallado = null;
+    st.muns.forEach(function (o) {
+      if (o.n === m.n || hallado) { return; }
+      if (distancia(yo, normalizar(o.n)) <= 2) { hallado = o.n; }
+    });
+    return hallado;
+  }
+
+  /* Ficha de un municipio. `origen` dice si la cifra es suya o de su
+     subregión: es la regla de honestidad del tablero, y por voz importa
+     más todavía, porque nadie ve la atenuación del mapa. */
+  function ficha(st, m) {
+    var sb = st.subs[m.sub] || {};
+    function dato(k) {
+      if (m[k] != null) { return { valor: m[k], origen: 'municipal' }; }
+      if (sb[k] != null) { return { valor: sb[k], origen: 'subregional' }; }
+      return { valor: null, origen: 'sin dato' };
+    }
+    return {
+      n: m.n,
+      c: m.c,
+      sub: m.sub,
+      zona: m.zona,
+      zonaEtiqueta: etiquetaZona(st, m.zona),
+      lpm: dato('lpm'),
+      hp: dato('hp'),
+      casos: m.casos,
+      intervenido: true
+    };
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Fachada
+
+     El único canal por el que algo externo gobierna el tablero. No
+     expone ni una operación que el teclado no alcance ya: si apareciera
+     aquí algo que no se puede hacer con el ratón, sería una función
+     oculta detrás del micrófono, y eso es justo lo que la norma de
+     accesibilidad prohíbe.                                             */
+  /* ------------------------------------------------------------------ */
+
+  /* Las instancias se guardan en una lista y no en un WeakMap para no
+     exigir ES6 a un archivo que no lo usa en ninguna otra línea. En una
+     página caben una o dos: recorrerla es más barato que mantenerla. */
+  var INSTANCIAS = [];
+
+  function mando(st) {
+    return {
+      disponible: function () { return st.feats.length > 0; },
+      estado: function () { return estadoResumido(st); },
+      catalogo: function () {
+        return {
+          indicadores: ['lpm', 'hp'],
+          zonas: ZONA_ORDEN.slice(),
+          subregiones: Object.keys(st.subs).sort(),
+          municipios: st.muns.map(function (m) { return m.n; }).sort()
+        };
+      },
+      resolver: function (texto) { return resolver(st, texto); },
+      ficha: function (nombre) {
+        var m = municipioDe(st, nombre);
+        return m ? ficha(st, m) : null;
+      },
+      listar: function (filtro) {
+        var f = filtro || {};
+        return st.muns.filter(function (m) {
+          if (f.zona && m.zona !== f.zona) { return false; }
+          if (f.subregion && m.sub !== f.subregion) { return false; }
+          if (!f.zona && !f.subregion) { return pasa(st, m); }
+          return true;
+        }).map(function (m) { return m.n; });
+      },
+      setIndicador: function (v, origen) { return aplicarIndicador(st, v, origen || 'agente'); },
+      setZona: function (v, origen) { return aplicarZona(st, v, origen || 'agente'); },
+      setSubregion: function (v, origen) { return aplicarSubregion(st, v, origen || 'agente'); },
+      setMunicipio: function (v, origen) { return aplicarMunicipio(st, v, origen || 'agente', false); },
+      limpiar: function (origen) { return aplicarLimpiar(st, origen || 'agente'); },
+      alCambiar: function (fn) {
+        if (typeof fn !== 'function') { return function () {}; }
+        st.oyentes.push(fn);
+        return function () {
+          var i = st.oyentes.indexOf(fn);
+          if (i >= 0) { st.oyentes.splice(i, 1); }
+        };
+      }
+    };
+  }
+
+  /* Sin argumento devuelve el primer tablero del documento, que es el
+     caso de todas las páginas reales: dos tableros en una misma página
+     no tendrían a quién obedecer. */
+  function mandoDe(raiz) {
+    for (var i = 0; i < INSTANCIAS.length; i++) {
+      if (!raiz || INSTANCIAS[i].raiz === raiz) { return INSTANCIAS[i].mando; }
+    }
+    return null;
+  }
+
+  window.UHPTablero = { iniciar: iniciar, mando: mandoDe };
 }());

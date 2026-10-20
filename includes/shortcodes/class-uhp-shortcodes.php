@@ -91,6 +91,12 @@ final class UHP_Shortcodes {
 
 			if ( 'urkunina_dashboard' === $tag ) {
 				$hay_tablero = true;
+				// La hoja del asistente va con la del tablero: si saliera
+				// en el pie, el botón del micrófono se pintaría en crudo
+				// sobre el mapa durante el primer repintado.
+				if ( UHP_Voz::configurada() ) {
+					wp_enqueue_style( UHP_Assets::P . 'voz' );
+				}
 			} else {
 				$hay_resto = true;
 			}
@@ -348,6 +354,9 @@ final class UHP_Shortcodes {
 				'lema'      => __( 'Prevalencia de lesiones precursoras de malignidad y erradicación de H. pylori como prevención primaria del cáncer gástrico — Nariño, 2018–2023', 'urkunina-5000' ),
 				'alto'      => '100vh',
 				'indicador' => isset( $cfg['indicador'] ) ? $cfg['indicador'] : 'lpm',
+				// El asistente de voz, cuando está configurado. Se puede
+				// apagar en una página concreta sin apagarlo en el sitio.
+				'voz'       => 'si',
 			),
 			$atts,
 			'urkunina_dashboard'
@@ -357,6 +366,29 @@ final class UHP_Shortcodes {
 		wp_enqueue_style( UHP_Assets::P . 'dashboard' );
 		UHP_Assets::encolar_libreria( 'd3' );
 		wp_enqueue_script( UHP_Assets::P . 'dashboard' );
+
+		$con_voz = $this->afirmativo( $atts['voz'] ) && UHP_Voz::configurada();
+		if ( $con_voz ) {
+			wp_enqueue_style( UHP_Assets::P . 'voz' );
+			wp_enqueue_script( UHP_Assets::P . 'voz' );
+			// La configuración y los rótulos viajan en un script en línea
+			// y NO en atributos del marcado: así el aviso completo, que es
+			// largo, no se duplica en cada tablero de la página.
+			static $voz_impresa = false;
+			if ( ! $voz_impresa ) {
+				wp_add_inline_script(
+					UHP_Assets::P . 'voz',
+					'window.UHPVoz=' . UHP_Assets::json_para_script(
+						array(
+							'cfg'    => UHP_Voz::config_front(),
+							'textos' => UHP_Voz::textos(),
+						)
+					) . ';',
+					'before'
+				);
+				$voz_impresa = true;
+			}
+		}
 
 		$id = $this->id( 'uhpdb' );
 
@@ -543,6 +575,16 @@ final class UHP_Shortcodes {
 					</div>
 				</div>
 			</main>
+
+			<?php
+			/* El bloque del asistente es hijo DIRECTO de .uhp-db, no de
+			   .uhp-db__main: cuando la carga de datos falla, avisar()
+			   vacía el contenido de main con innerHTML y se llevaría por
+			   delante un panel con el micrófono abierto. */
+			if ( $con_voz ) {
+				echo UHP_Voz::control_html( $id ); // phpcs:ignore WordPress.Security.EscapingOutput.OutputNotEscaped -- Marcado propio ya escapado en control_html().
+			}
+			?>
 
 			<p class="uhp-db__sr" data-uhp-zona="estado" role="status" aria-live="polite"></p>
 		</div>

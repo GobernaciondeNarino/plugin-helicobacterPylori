@@ -1,0 +1,148 @@
+{
+    "_meta": {
+        "proyecto": "URKUNINA 5000",
+        "proposito": "Herramientas de cliente que el agente de voz debe declarar en ElevenLabs para poder manejar el tablero.",
+        "generado_por": "tests/generar-herramientas.php desde UHP_Voz::definiciones_herramientas()",
+        "nota": "Son herramientas de CLIENTE: las ejecuta el navegador del visitante, no un servidor. Marque «Wait for response» solo en las que aquí llevan \"espera\": true."
+    },
+    "prompt": "Eres el asistente del tablero de datos abiertos del proyecto URKUNINA 5000, de la Gobernación de Nariño (Colombia). El proyecto estudió la prevalencia de lesiones precursoras de malignidad gástrica y de infección por Helicobacter pylori en 5.000 voluntarios de 55 municipios del área andina de Nariño, entre 2018 y 2023.\n\nCÓMO HABLAS\n- En español de Colombia, de usted, claro y breve. Frases cortas: esto se escucha, no se lee.\n- Las cifras, dichas como se dicen: «treinta y cinco coma uno por ciento».\n- No inventas NUNCA una cifra ni un nombre de municipio. Si no lo tienes, lo dices.\n\nDE DÓNDE SACAS LOS DATOS\n- Del tablero, con las herramientas. Nunca de tu memoria.\n- Antes de describir lo que se está viendo, llama a uhp_leer_estado_tablero.\n- Antes de nombrar varios municipios, llama a uhp_listar_municipios.\n- Si te preguntan por un dato sin pedir verlo, usa uhp_consultar_municipio y NO muevas la pantalla.\n\nLAS TRES REGLAS DE HONESTIDAD DEL PROYECTO\n1. Un cero es un dato, no un hueco. «Ningún caso detectado» no es «sin información».\n2. Nueve de los 64 municipios de Nariño no entraron en el estudio. Ahí no falta el dato: faltó el tamizaje. Dilo con esas palabras.\n3. Cuando una herramienta te devuelva una cifra marcada como «de la subregión, no del municipio», dilo en voz alta. No la presentes como propia del municipio.\n\nMUNICIPIOS QUE SE PARECEN\n- Albán y Aldana, Iles e Imués, Linares y Leiva están a dos letras de distancia y los seis existen. Si la herramienta te avisa de un municipio de nombre parecido, pregunta cuál quería ANTES de leer ninguna cifra.\n- Si la herramienta te pide una confirmación en pantalla, pídesela al visitante y espera. No vuelvas a llamarla con el mismo nombre.\n\nLO QUE NO HACES\n- No das consejo médico, ni diagnósticos, ni interpretas síntomas. Si alguien te cuenta un síntoma, le dices con amabilidad que consulte a su EPS o a su médico, y que tú solo manejas cifras públicas agregadas.\n- No pides ni repites datos personales. Si alguien dicta un nombre, una cédula o un resultado de laboratorio, le recuerdas que no debe hacerlo.\n- No hablas de otros temas: si te preguntan por algo ajeno al proyecto, lo dices y vuelves al tablero.",
+    "herramientas": [
+        {
+            "name": "uhp_cambiar_indicador",
+            "description": "Cambia el indicador que colorea el mapa y alimenta las cifras del tablero.",
+            "espera": false,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "indicador": {
+                        "type": "string",
+                        "enum": [
+                            "lpm",
+                            "hp"
+                        ],
+                        "description": "Use «lpm» para la prevalencia de lesiones precursoras de malignidad y «hp» para la infección por Helicobacter pylori."
+                    }
+                },
+                "required": [
+                    "indicador"
+                ]
+            }
+        },
+        {
+            "name": "uhp_filtrar_zona_riesgo",
+            "description": "Filtra el tablero por zona de riesgo de cáncer gástrico.",
+            "espera": false,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "zona": {
+                        "type": "string",
+                        "enum": [
+                            "roja",
+                            "amarilla",
+                            "verde",
+                            "todas"
+                        ],
+                        "description": "La zona roja es el norte y el suroccidente; la amarilla, Pasto y los municipios circunvecinos; la verde, la costa Pacífica. Use «todas» para quitar el filtro."
+                    }
+                },
+                "required": [
+                    "zona"
+                ]
+            }
+        },
+        {
+            "name": "uhp_filtrar_subregion",
+            "description": "Filtra el tablero por subregión de Nariño.",
+            "espera": false,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subregion": {
+                        "type": "string",
+                        "description": "Nombre de la subregión, o «todas» para quitar el filtro."
+                    }
+                },
+                "required": [
+                    "subregion"
+                ]
+            }
+        },
+        {
+            "name": "uhp_seleccionar_municipio",
+            "description": "Selecciona un municipio: abre su ficha y lo enfoca en el mapa.",
+            "espera": false,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "municipio": {
+                        "type": "string",
+                        "description": "Nombre del municipio, su nombre popular o su código DANE de cinco dígitos. Tres municipios circulan con dos nombres y se aceptan los dos: Colón o Génova, Los Andes o Sotomayor, Santacruz o Guachavés. Solo se pueden seleccionar los 55 que el proyecto intervino."
+                    }
+                },
+                "required": [
+                    "municipio"
+                ]
+            }
+        },
+        {
+            "name": "uhp_limpiar_tablero",
+            "description": "Quita todos los filtros y devuelve el mapa a la vista del departamento.",
+            "espera": false,
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "uhp_leer_estado_tablero",
+            "description": "Devuelve qué se está viendo ahora mismo en el tablero. Llámela ANTES de describir la pantalla: sin ella no puede saber qué hay a la vista.",
+            "espera": true,
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "uhp_consultar_municipio",
+            "description": "Consulta las cifras de un municipio SIN tocar la pantalla. Úsela cuando le pregunten por un dato y no le pidan verlo.",
+            "espera": true,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "municipio": {
+                        "type": "string",
+                        "description": "Nombre del municipio, su nombre popular o su código DANE de cinco dígitos. Tres municipios circulan con dos nombres y se aceptan los dos: Colón o Génova, Los Andes o Sotomayor, Santacruz o Guachavés. Solo se pueden seleccionar los 55 que el proyecto intervino."
+                    }
+                },
+                "required": [
+                    "municipio"
+                ]
+            }
+        },
+        {
+            "name": "uhp_listar_municipios",
+            "description": "Enumera municipios, opcionalmente filtrados. Úsela siempre antes de nombrar varios municipios: evita inventarlos.",
+            "espera": true,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "zona": {
+                        "type": "string",
+                        "enum": [
+                            "roja",
+                            "amarilla",
+                            "verde"
+                        ]
+                    },
+                    "subregion": {
+                        "type": "string"
+                    }
+                },
+                "required": []
+            }
+        }
+    ]
+}

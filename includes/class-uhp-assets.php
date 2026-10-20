@@ -51,6 +51,16 @@ final class UHP_Assets {
 	const THREE_VERSION = '0.180.0';
 
 	/**
+	 * Versión fijada del SDK de ElevenLabs.
+	 *
+	 * Fijada y no «latest» a propósito: es código de terceros que corre en
+	 * una página pública de la entidad y se lleva el audio del visitante.
+	 * Subirla es una decisión, no un efecto secundario de que alguien
+	 * publique una versión nueva.
+	 */
+	const ELEVENLABS_VERSION = '1.28.0';
+
+	/**
 	 * Catálogo de librerías compartidas.
 	 *
 	 * `handle` es deliberadamente el nombre canónico y no lleva prefijo: es lo
@@ -181,6 +191,18 @@ final class UHP_Assets {
 		// window.UHP3D con las URLs: un módulo es diferido y se ejecutaría
 		// después de todos modos, pero dejar el orden implícito sería frágil.
 		wp_register_script( self::P . '3d', $js . 'uhp-3d.js', array( self::P . 'core' ), UHP_VERSION, true );
+
+		// El asistente de voz se apoya en el núcleo y en el tablero: habla
+		// con el tablero por su fachada de mando, que solo existe cuando
+		// uhp-dashboard.js ya corrió.
+		wp_register_style( self::P . 'voz', $css . 'uhp-voz.css', array( self::P . 'dashboard' ), UHP_VERSION );
+		wp_register_script(
+			self::P . 'voz',
+			$js . 'uhp-voz.js',
+			array( self::P . 'core', self::P . 'dashboard' ),
+			UHP_VERSION,
+			true
+		);
 	}
 
 	/**
@@ -262,6 +284,32 @@ final class UHP_Assets {
 		 */
 		$filtrada = apply_filters( 'uhp_url_libreria', $url, $clave );
 		return is_string( $filtrada ) && '' !== $filtrada ? esc_url_raw( $filtrada ) : esc_url_raw( $url );
+	}
+
+	/**
+	 * URLs del SDK de ElevenLabs.
+	 *
+	 * NO entra en el registro de librerías compartidas ni se encola con
+	 * wp_enqueue_script: pesa más de un megabyte y lo carga el propio
+	 * asistente, por `createElement('script')`, SOLO cuando el visitante
+	 * pulsa el micrófono y acepta el aviso. Cargarlo antes sería imponerle
+	 * un megabyte a todo el que abra el tablero para no usarlo.
+	 *
+	 * La compilación IIFE define `window.ElevenLabsClient`. Los worklets de
+	 * audio van dentro del propio bundle y se instalan como `blob:`, de
+	 * modo que no hay archivos sueltos que servir.
+	 *
+	 * @return array{sdk:string,version:string}
+	 */
+	public static function voz_urls() {
+		$v = self::ELEVENLABS_VERSION;
+		return array(
+			'sdk'     => self::url(
+				'elevenlabs',
+				'https://cdn.jsdelivr.net/npm/@elevenlabs/client@' . $v . '/dist/lib.iife.js'
+			),
+			'version' => $v,
+		);
 	}
 
 	/**

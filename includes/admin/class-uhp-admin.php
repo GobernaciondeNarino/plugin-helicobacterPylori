@@ -143,6 +143,27 @@ final class UHP_Admin {
 			)
 		);
 		register_setting(
+			'uhp_grupo_voz',
+			UHP_Voz::OPCION,
+			array(
+				'type'              => 'array',
+				'sanitize_callback' => array( $this, 'sanear_voz' ),
+				'default'           => UHP_Voz::por_defecto(),
+			)
+		);
+		// La clave de API va en su PROPIA opción, fuera del array del que
+		// se deriva lo que viaja al navegador. Así, el ajuste que alguien
+		// añada mañana a `uhp_voz` no puede publicarla por descuido.
+		register_setting(
+			'uhp_grupo_voz',
+			UHP_Voz::OPCION_CLAVE,
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanear_voz_clave' ),
+				'default'           => '',
+			)
+		);
+		register_setting(
 			'uhp_grupo_3d',
 			'uhp_3d',
 			array(
@@ -215,6 +236,60 @@ final class UHP_Admin {
 			'cabecera'     => empty( $entrada['cabecera'] ) ? 0 : 1,
 			'desplazar'    => empty( $entrada['desplazar'] ) ? 0 : 1,
 		);
+	}
+
+	/**
+	 * Sanea la configuración del asistente de voz.
+	 *
+	 * @param mixed $entrada Valor enviado por el formulario.
+	 * @return array
+	 */
+	public function sanear_voz( $entrada ) {
+		$def     = UHP_Voz::por_defecto();
+		$entrada = is_array( $entrada ) ? $entrada : array();
+
+		// La forma del identificador la conoce UHP_Voz, que es quien lo
+		// mete en una URL: aquí solo se le pregunta.
+		$agente = UHP_Voz::sanear_agente( isset( $entrada['agente'] ) ? $entrada['agente'] : '' );
+
+		return array(
+			'activo'          => empty( $entrada['activo'] ) ? 0 : 1,
+			'agente'          => $agente,
+			'modo'            => ( isset( $entrada['modo'] ) && 'publico' === $entrada['modo'] ) ? 'publico' : 'privado',
+			'transporte'      => ( isset( $entrada['transporte'] ) && 'webrtc' === $entrada['transporte'] ) ? 'webrtc' : 'websocket',
+			'cuota_dia'       => min( 5000, max( 10, isset( $entrada['cuota_dia'] ) ? (int) $entrada['cuota_dia'] : $def['cuota_dia'] ) ),
+			'texto'           => empty( $entrada['texto'] ) ? 0 : 1,
+			'recordar'        => empty( $entrada['recordar'] ) ? 0 : 1,
+			'aviso_version'   => max( 1, isset( $entrada['aviso_version'] ) ? (int) $entrada['aviso_version'] : 1 ),
+			'politica'        => isset( $entrada['politica'] ) ? esc_url_raw( trim( (string) $entrada['politica'] ) ) : '',
+			'correo'          => isset( $entrada['correo'] ) ? sanitize_email( trim( (string) $entrada['correo'] ) ) : '',
+			'canal'           => isset( $entrada['canal'] ) ? sanitize_text_field( trim( (string) $entrada['canal'] ) ) : '',
+			'retencion'       => isset( $entrada['retencion'] ) ? sanitize_textarea_field( trim( (string) $entrada['retencion'] ) ) : '',
+			'aviso_extra'     => isset( $entrada['aviso_extra'] ) ? sanitize_textarea_field( trim( (string) $entrada['aviso_extra'] ) ) : '',
+			'evaluacion_a11y' => empty( $entrada['evaluacion_a11y'] ) ? 0 : 1,
+		);
+	}
+
+	/**
+	 * Sanea la clave de API.
+	 *
+	 * El formulario se pinta SIEMPRE vacío: enviarlo en blanco conserva la
+	 * clave guardada en vez de borrarla, que es lo que ocurriría al tocar
+	 * cualquier otro ajuste de la pestaña.
+	 *
+	 * @param mixed $entrada Valor enviado.
+	 * @return string
+	 */
+	public function sanear_voz_clave( $entrada ) {
+		$nueva = is_string( $entrada ) ? trim( $entrada ) : '';
+		if ( '' === $nueva ) {
+			$actual = get_option( UHP_Voz::OPCION_CLAVE, '' );
+			return is_string( $actual ) ? $actual : '';
+		}
+		if ( 'borrar' === strtolower( $nueva ) ) {
+			return '';
+		}
+		return preg_replace( '/[^A-Za-z0-9_\-]/', '', $nueva );
 	}
 
 	/* ================================================================= */
@@ -1336,7 +1411,7 @@ final class UHP_Admin {
 		$this->exigir_cap();
 
 		$tab = isset( $_GET['tab'] ) ? UHP_Security::clave( wp_unslash( $_GET['tab'] ) ) : 'tablero'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Solo selecciona qué pestaña pintar.
-		if ( ! in_array( $tab, array( 'tablero', 'objeto3d' ), true ) ) {
+		if ( ! in_array( $tab, array( 'tablero', 'objeto3d', 'voz' ), true ) ) {
 			$tab = 'tablero';
 		}
 
@@ -1350,6 +1425,7 @@ final class UHP_Admin {
 			array(
 				'tablero'  => __( 'Tablero', 'urkunina-5000' ),
 				'objeto3d' => __( 'Objeto 3D', 'urkunina-5000' ),
+				'voz'      => __( 'Asistente de voz', 'urkunina-5000' ),
 			),
 			$tab
 		);
@@ -1357,6 +1433,8 @@ final class UHP_Admin {
 		<div class="uhpa">
 			<?php if ( 'tablero' === $tab ) : ?>
 				<?php $this->form_tablero(); ?>
+			<?php elseif ( 'voz' === $tab ) : ?>
+				<?php $this->form_voz(); ?>
 			<?php else : ?>
 				<?php $this->form_3d(); ?>
 			<?php endif; ?>
@@ -1449,6 +1527,224 @@ final class UHP_Admin {
 							<?php esc_html_e( 'Ver y editar la tabla de zonas', 'urkunina-5000' ); ?>
 						</a>
 					</p>
+				</div>
+			</section>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Formulario del asistente de voz.
+	 */
+	private function form_voz() {
+		$cfg    = UHP_Voz::cfg();
+		$falta  = UHP_Voz::pendientes();
+		$listo  = UHP_Voz::configurada();
+		$tiene  = '' !== UHP_Voz::clave_api();
+		$porcte = defined( 'UHP_ELEVENLABS_API_KEY' );
+		?>
+		<div class="uhpa-rejilla uhpa-rejilla--2">
+
+			<section class="uhpa-card">
+				<header class="uhpa-card__cab">
+					<h2><?php esc_html_e( 'Estado', 'urkunina-5000' ); ?></h2>
+					<p><?php esc_html_e( 'El asistente no se publica hasta que están todas sus puertas. No es celo decorativo: sin estos campos, el aviso que autoriza el tratamiento de la voz quedaría con huecos.', 'urkunina-5000' ); ?></p>
+				</header>
+				<div class="uhpa-card__cuerpo">
+					<?php if ( $listo ) : ?>
+						<p class="uhpa-texto">
+							<span class="uhpa-punto uhpa-punto--ok"></span>
+							<?php esc_html_e( 'Publicado. El botón aparece en todo [urkunina_dashboard] de este sitio.', 'urkunina-5000' ); ?>
+						</p>
+						<p class="uhpa-nota">
+							<?php
+							printf(
+								/* translators: 1: sesiones usadas hoy, 2: tope diario. */
+								esc_html__( 'Sesiones de hoy: %1$d de %2$d.', 'urkunina-5000' ),
+								(int) UHP_Voz::cuota_usada(),
+								(int) $cfg['cuota_dia']
+							);
+							?>
+						</p>
+					<?php else : ?>
+						<p class="uhpa-texto">
+							<span class="uhpa-punto uhpa-punto--error"></span>
+							<?php esc_html_e( 'Sin publicar. El tablero sale exactamente como si esta función no existiera.', 'urkunina-5000' ); ?>
+						</p>
+						<ul class="uhpa-lista">
+							<?php foreach ( $falta as $f ) : ?>
+								<li><?php echo esc_html( $f ); ?></li>
+							<?php endforeach; ?>
+						</ul>
+					<?php endif; ?>
+
+					<p class="uhpa-nota">
+						<?php esc_html_e( 'Para apagarlo en una página concreta sin apagarlo en el sitio:', 'urkunina-5000' ); ?>
+						<?php $this->copiable( '[urkunina_dashboard voz="no"]' ); ?>
+					</p>
+				</div>
+			</section>
+
+			<section class="uhpa-card">
+				<header class="uhpa-card__cab">
+					<h2><?php esc_html_e( 'Antes de encenderlo', 'urkunina-5000' ); ?></h2>
+					<p><?php esc_html_e( 'Lo que esta pantalla no puede resolver y la entidad sí tiene que resolver.', 'urkunina-5000' ); ?></p>
+				</header>
+				<div class="uhpa-card__cuerpo">
+					<ul class="uhpa-lista">
+						<li><?php esc_html_e( 'Acuerdo de encargo del tratamiento con el proveedor, y anexo de transferencia internacional (artículo 26 de la Ley 1581 de 2012).', 'urkunina-5000' ); ?></li>
+						<li><?php esc_html_e( 'Lista de dominios permitidos del agente en ElevenLabs, con el dominio de este sitio y ninguno más. Es la única frontera real: la comprobación de origen del servidor solo frena el uso casual.', 'urkunina-5000' ); ?></li>
+						<li><?php esc_html_e( 'Evaluación propia de accesibilidad firmada: teclado, foco visible, lector de pantalla y móvil.', 'urkunina-5000' ); ?></li>
+						<li><?php esc_html_e( 'Decisión sobre cuánto conserva el proveedor las grabaciones y las transcripciones, por escrito, para poder copiarla abajo.', 'urkunina-5000' ); ?></li>
+					</ul>
+				</div>
+			</section>
+		</div>
+
+		<div class="uhpa-rejilla uhpa-rejilla--2">
+			<section class="uhpa-card">
+				<header class="uhpa-card__cab">
+					<h2><?php esc_html_e( 'Configuración', 'urkunina-5000' ); ?></h2>
+				</header>
+				<div class="uhpa-card__cuerpo">
+					<form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
+						<?php settings_fields( 'uhp_grupo_voz' ); ?>
+
+						<p>
+							<label><input type="checkbox" name="uhp_voz[activo]" value="1" <?php checked( 1, (int) $cfg['activo'] ); ?>>
+								<strong><?php esc_html_e( 'Publicar el asistente de voz', 'urkunina-5000' ); ?></strong></label>
+						</p>
+
+						<p>
+							<label class="uhpa-label" for="uhp-voz-agente"><?php esc_html_e( 'Identificador del agente', 'urkunina-5000' ); ?></label>
+							<input type="text" id="uhp-voz-agente" class="uhpa-input" name="uhp_voz[agente]"
+								value="<?php echo esc_attr( $cfg['agente'] ); ?>" placeholder="agent_…">
+							<span class="uhpa-nota"><?php esc_html_e( 'El que da ElevenLabs al crear el agente. Empieza por «agent_».', 'urkunina-5000' ); ?></span>
+						</p>
+
+						<p>
+							<label class="uhpa-label" for="uhp-voz-modo"><?php esc_html_e( 'Tipo de agente', 'urkunina-5000' ); ?></label>
+							<select id="uhp-voz-modo" class="uhpa-input" name="uhp_voz[modo]">
+								<option value="privado" <?php selected( 'privado', $cfg['modo'] ); ?>><?php esc_html_e( 'Privado (recomendado)', 'urkunina-5000' ); ?></option>
+								<option value="publico" <?php selected( 'publico', $cfg['modo'] ); ?>><?php esc_html_e( 'Público', 'urkunina-5000' ); ?></option>
+							</select>
+							<span class="uhpa-nota"><?php esc_html_e( 'Con un agente privado, la sesión la autoriza este servidor con su clave y el navegador nunca la ve. Con uno público, cualquiera que lea el código fuente puede abrir conversaciones contra su agente desde otra página, y las paga la entidad.', 'urkunina-5000' ); ?></span>
+						</p>
+
+						<p>
+							<label class="uhpa-label" for="uhp-voz-clave"><?php esc_html_e( 'Clave de API', 'urkunina-5000' ); ?></label>
+							<?php if ( $porcte ) : ?>
+								<span class="uhpa-nota">
+									<span class="uhpa-punto uhpa-punto--ok"></span>
+									<?php esc_html_e( 'Definida en wp-config.php con la constante UHP_ELEVENLABS_API_KEY. Es la vía preferente: así no entra en la base de datos ni viaja en una exportación. Este campo se ignora.', 'urkunina-5000' ); ?>
+								</span>
+							<?php else : ?>
+								<input type="password" id="uhp-voz-clave" class="uhpa-input" name="uhp_voz_clave"
+									value="" autocomplete="off"
+									placeholder="<?php echo esc_attr( $tiene ? __( '— guardada —', 'urkunina-5000' ) : __( 'sin configurar', 'urkunina-5000' ) ); ?>">
+								<span class="uhpa-nota">
+									<?php esc_html_e( 'Se pinta vacío a propósito: dejarlo en blanco conserva la que está guardada. Escriba «borrar» para eliminarla. Mejor todavía: póngala en wp-config.php como UHP_ELEVENLABS_API_KEY y deje este campo en paz.', 'urkunina-5000' ); ?>
+								</span>
+							<?php endif; ?>
+						</p>
+
+						<p>
+							<label class="uhpa-label" for="uhp-voz-cuota"><?php esc_html_e( 'Tope de conversaciones por día', 'urkunina-5000' ); ?></label>
+							<input type="number" min="10" max="5000" id="uhp-voz-cuota" class="uhpa-input"
+								name="uhp_voz[cuota_dia]" value="<?php echo esc_attr( (int) $cfg['cuota_dia'] ); ?>">
+							<span class="uhpa-nota"><?php esc_html_e( 'El servicio se factura por minuto. Sin tope, una tarde de tráfico inesperado se lleva el presupuesto del trimestre.', 'urkunina-5000' ); ?></span>
+						</p>
+
+						<p>
+							<label><input type="checkbox" name="uhp_voz[texto]" value="1" <?php checked( 1, (int) $cfg['texto'] ); ?>>
+								<?php esc_html_e( 'Permitir escribir en vez de hablar', 'urkunina-5000' ); ?></label><br>
+							<label><input type="checkbox" name="uhp_voz[recordar]" value="1" <?php checked( 1, (int) $cfg['recordar'] ); ?>>
+								<?php esc_html_e( 'Recordar la autorización durante la visita', 'urkunina-5000' ); ?></label>
+						</p>
+						<p class="uhpa-nota"><?php esc_html_e( 'Lo primero es la alternativa equivalente que exige la Resolución 1519 de 2020: desactivarlo deja sin asistente a quien no puede o no quiere hablar. Lo segundo se guarda en el almacenamiento de SESIÓN del navegador del visitante y se va al cerrar la pestaña.', 'urkunina-5000' ); ?></p>
+
+						<hr>
+						<p class="uhpa-texto"><strong><?php esc_html_e( 'Datos del aviso de habeas data', 'urkunina-5000' ); ?></strong></p>
+						<p class="uhpa-nota"><?php esc_html_e( 'Van literalmente en el aviso que el ciudadano lee antes de que se encienda el micrófono. Sin los cuatro, el asistente no se publica.', 'urkunina-5000' ); ?></p>
+
+						<p>
+							<label class="uhpa-label" for="uhp-voz-politica"><?php esc_html_e( 'Política de tratamiento de datos (URL)', 'urkunina-5000' ); ?></label>
+							<input type="url" id="uhp-voz-politica" class="uhpa-input" name="uhp_voz[politica]"
+								value="<?php echo esc_attr( $cfg['politica'] ); ?>">
+						</p>
+						<p>
+							<label class="uhpa-label" for="uhp-voz-correo"><?php esc_html_e( 'Correo para ejercer derechos', 'urkunina-5000' ); ?></label>
+							<input type="email" id="uhp-voz-correo" class="uhpa-input" name="uhp_voz[correo]"
+								value="<?php echo esc_attr( $cfg['correo'] ); ?>">
+						</p>
+						<p>
+							<label class="uhpa-label" for="uhp-voz-canal"><?php esc_html_e( 'Segundo canal de atención', 'urkunina-5000' ); ?></label>
+							<input type="text" id="uhp-voz-canal" class="uhpa-input" name="uhp_voz[canal]"
+								value="<?php echo esc_attr( $cfg['canal'] ); ?>"
+								placeholder="<?php esc_attr_e( 'Dirección o ventanilla de radicación', 'urkunina-5000' ); ?>">
+						</p>
+						<p>
+							<label class="uhpa-label" for="uhp-voz-retencion"><?php esc_html_e( 'Retención declarada por el proveedor', 'urkunina-5000' ); ?></label>
+							<textarea id="uhp-voz-retencion" class="uhpa-input" name="uhp_voz[retencion]" rows="3"><?php echo esc_textarea( $cfg['retencion'] ); ?></textarea>
+							<span class="uhpa-nota"><?php esc_html_e( 'Qué dice por escrito sobre cuánto conserva las grabaciones y las transcripciones. Se imprime tal cual en el aviso.', 'urkunina-5000' ); ?></span>
+						</p>
+						<p>
+							<label class="uhpa-label" for="uhp-voz-extra"><?php esc_html_e( 'Nota adicional de la entidad (opcional)', 'urkunina-5000' ); ?></label>
+							<textarea id="uhp-voz-extra" class="uhpa-input" name="uhp_voz[aviso_extra]" rows="2"><?php echo esc_textarea( $cfg['aviso_extra'] ); ?></textarea>
+							<span class="uhpa-nota"><?php esc_html_e( 'Se añade al final del aviso. No sustituye ni recorta ninguno de sus bloques.', 'urkunina-5000' ); ?></span>
+						</p>
+						<p>
+							<label class="uhpa-label" for="uhp-voz-version"><?php esc_html_e( 'Versión del aviso', 'urkunina-5000' ); ?></label>
+							<input type="number" min="1" id="uhp-voz-version" class="uhpa-input"
+								name="uhp_voz[aviso_version]" value="<?php echo esc_attr( (int) $cfg['aviso_version'] ); ?>">
+							<span class="uhpa-nota"><?php esc_html_e( 'Súbala cada vez que cambie el texto del aviso: las autorizaciones dadas con la versión anterior dejan de valer y se vuelve a preguntar.', 'urkunina-5000' ); ?></span>
+						</p>
+
+						<p>
+							<label><input type="checkbox" name="uhp_voz[evaluacion_a11y]" value="1" <?php checked( 1, (int) $cfg['evaluacion_a11y'] ); ?>>
+								<?php esc_html_e( 'La evaluación propia de accesibilidad está firmada', 'urkunina-5000' ); ?></label>
+							<span class="uhpa-nota"><?php esc_html_e( 'Resolución 1519 de 2020. Marcarla sin haberla hecho no hace accesible el asistente: hace falsa esta casilla.', 'urkunina-5000' ); ?></span>
+						</p>
+
+						<?php submit_button( __( 'Guardar el asistente de voz', 'urkunina-5000' ) ); ?>
+					</form>
+				</div>
+			</section>
+
+			<section class="uhpa-card">
+				<header class="uhpa-card__cab">
+					<h2><?php esc_html_e( 'Qué pegar en ElevenLabs', 'urkunina-5000' ); ?></h2>
+					<p><?php esc_html_e( 'El agente tiene que conocer estas ocho herramientas o no podrá mover el tablero. Se declaran como herramientas de CLIENTE, no de servidor.', 'urkunina-5000' ); ?></p>
+				</header>
+				<div class="uhpa-card__cuerpo">
+					<p class="uhpa-texto"><strong><?php esc_html_e( 'Instrucciones del agente', 'urkunina-5000' ); ?></strong></p>
+					<textarea class="uhpa-input" rows="8" readonly onclick="this.select()"><?php echo esc_textarea( UHP_Voz::prompt_agente() ); ?></textarea>
+
+					<p class="uhpa-texto"><strong><?php esc_html_e( 'Herramientas de cliente', 'urkunina-5000' ); ?></strong></p>
+					<table class="uhpa-tabla uhpa-tabla--compacta">
+						<thead>
+							<tr>
+								<th scope="col"><?php esc_html_e( 'Nombre', 'urkunina-5000' ); ?></th>
+								<th scope="col"><?php esc_html_e( 'Esperar respuesta', 'urkunina-5000' ); ?></th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( UHP_Voz::definiciones_herramientas() as $h ) : ?>
+								<tr>
+									<th scope="row"><code><?php echo esc_html( $h['name'] ); ?></code></th>
+									<td><?php echo esc_html( $h['espera'] ? __( 'Sí', 'urkunina-5000' ) : __( 'No', 'urkunina-5000' ) ); ?></td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+					<p class="uhpa-nota"><?php esc_html_e( 'El JSON completo de cada una está en docs/voz/herramientas.json, dentro del plugin.', 'urkunina-5000' ); ?></p>
+
+					<p class="uhpa-texto"><strong><?php esc_html_e( 'Política de seguridad de contenido', 'urkunina-5000' ); ?></strong></p>
+					<p class="uhpa-nota"><?php esc_html_e( 'Si el servidor web aplica una CSP, el asistente necesita estos orígenes:', 'urkunina-5000' ); ?></p>
+					<?php foreach ( UHP_Voz::hosts_csp() as $directiva => $origenes ) : ?>
+						<p class="uhpa-nota"><?php $this->copiable( $directiva . ' ' . implode( ' ', $origenes ) ); ?></p>
+					<?php endforeach; ?>
+					<p class="uhpa-nota"><?php esc_html_e( 'Los procesadores de audio del SDK se instalan desde una URL blob:, de modo que worker-src tiene que admitirla.', 'urkunina-5000' ); ?></p>
 				</div>
 			</section>
 		</div>

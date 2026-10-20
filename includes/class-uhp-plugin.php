@@ -26,6 +26,8 @@ final class UHP_Plugin {
 	public $estilos;
 	/** @var UHP_Rest */
 	public $rest;
+	/** @var UHP_Voz */
+	public $voz;
 	/** @var UHP_Shortcodes */
 	public $shortcodes;
 	/** @var UHP_Admin|null */
@@ -73,6 +75,7 @@ final class UHP_Plugin {
 
 		// REST (depende de datos y vistas).
 		require_once $base . 'class-uhp-rest.php';
+		require_once $base . 'class-uhp-voz.php';
 
 		// Presentación.
 		require_once $base . 'shortcodes/class-uhp-shortcodes.php';
@@ -101,6 +104,7 @@ final class UHP_Plugin {
 		$this->assets     = new UHP_Assets();
 		$this->estilos    = new UHP_Estilos();
 		$this->rest       = new UHP_Rest();
+		$this->voz        = new UHP_Voz();
 		$this->shortcodes = new UHP_Shortcodes();
 
 		if ( is_admin() ) {
