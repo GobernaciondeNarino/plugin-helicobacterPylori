@@ -282,9 +282,10 @@ test.describe('Asistente de voz', () => {
     await expect(page.locator('.uhp-db__mrow')).toHaveCount(55);
   }
 
-  /** Abre el panel y acepta el aviso. */
+  /** Abre el panel por el canal HABLADO y acepta su aviso. Se nombra el
+   *  canal porque en una página con los dos, «el lanzador» son dos. */
   async function conversar(page) {
-    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    await page.locator('[data-uhp-voz-canal="voz"]').click();
     await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
     await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
   }
@@ -363,7 +364,7 @@ test.describe('Asistente de voz', () => {
     await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeHidden();
   });
 
-  test('la sesión registra las ocho herramientas y el estado de la pantalla', async ({ page }) => {
+  test('la sesión registra las diez herramientas y el estado de la pantalla', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz.html');
     await listo(page);
@@ -377,7 +378,9 @@ test.describe('Asistente de voz', () => {
 
     expect(o.tools).toEqual([
       'uhp_cambiar_indicador',
+      'uhp_comparar_subregiones',
       'uhp_consultar_municipio',
+      'uhp_consultar_perfil',
       'uhp_filtrar_subregion',
       'uhp_filtrar_zona_riesgo',
       'uhp_leer_estado_tablero',
@@ -621,6 +624,19 @@ test.describe('Asistente de voz', () => {
     // abría después, sin panel, con el micrófono encendido.
     await page.addInitScript(() => {
       window.__UHP_STUB = { abierta: 0, cerrada: 0, opciones: null, enviados: [], contexto: [] };
+      // El micrófono también: esta prueba trae su propio doble del SDK y
+      // sin él llegaba al getUserMedia de verdad, que en un Chromium sin
+      // tarjeta de sonido no resuelve. El permiso se pide ANTES de abrir
+      // la sesión, así que la ventana que esta prueba quiere medir no
+      // llegaba a existir.
+      const falso = {
+        getUserMedia: function () {
+          return Promise.resolve({ getTracks: function () { return [{ stop: function () {} }]; } });
+        }
+      };
+      try {
+        Object.defineProperty(navigator, 'mediaDevices', { value: falso, configurable: true });
+      } catch (e) { window.navigator.mediaDevices = falso; }
       window.ElevenLabsClient = {
         Conversation: {
           startSession: function (opciones) {
@@ -639,12 +655,12 @@ test.describe('Asistente de voz', () => {
     await page.goto(BASE + '/paginas/voz.html');
     await listo(page);
 
-    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    await page.locator('[data-uhp-voz-canal="voz"]').click();
     await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
     await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
 
     // Cerrar ANTES de que la promesa resuelva.
-    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    await page.locator('[data-uhp-voz-canal="voz"]').click();
     await page.waitForTimeout(1200);
 
     // La sesión que llegó tarde se cierra sola: no queda micrófono vivo.
@@ -993,9 +1009,14 @@ test.describe('Asistente de voz', () => {
     const salida = page.getByRole('button', { name: 'Escribir en vez de hablar' });
     await expect(salida).toBeVisible();
     await salida.click();
-    await page.getByRole('button', { name: 'Acepto y quiero escribir' }).click();
+
+    /* Y NO vuelve a pedir autorización: quien aceptó el aviso de la voz ya
+       leyó un texto que incluye el canal escrito con esas palabras —«puede
+       escribir sus preguntas en lugar de hablarlas»—, y volver a pedirla
+       sería fricción por algo más estrecho de lo ya autorizado. */
     await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
     expect(await page.evaluate(() => window.__UHP_STUB.tipo)).toBe('text');
+    await expect(page.getByRole('button', { name: 'Acepto y quiero escribir' })).toHaveCount(0);
   });
 
   test('las variables dinámicas viajan siempre y dicen por qué canal', async ({ page }) => {
@@ -1193,39 +1214,40 @@ test.describe('Asistente de voz', () => {
     await page.goto(BASE + '/paginas/voz.html');
     await listo(page);
 
-    /* Sin filtro, doce municipios traen su cifra publicada y cuarenta y
-       tres no: el pie nombra las dos partes en vez de llamar «est.» a
-       todo o «publicado» a nada. */
+    /* Sin filtro, el total es el que publica el informe —5.000— y el pie
+       nombra las dos partes: los 940 que el informe desglosa en doce
+       municipios y el prorrateo de los 4.060 restantes entre los otros
+       cuarenta y tres. Prorratear 5.000 entre 55 y sumar aparte los doce
+       publicados daría 4.849, porque esos doce están por debajo de la
+       media. Dos datos publicados restringen el estimado. */
     const kpi = page.locator('.uhp-db__kpi', { hasText: 'Participantes' }).first();
-    await expect(kpi).toContainText('publicados');
-    await expect(kpi).toContainText('prorrateados');
-
-    /* Y el total del departamento sigue siendo el que publica el informe.
-       Prorratear 5.000 entre 55 y sumarle aparte los doce publicados daba
-       4.849: los doce que se conocen están por debajo de la media, de modo
-       que el prorrateo se reparte entre lo que QUEDA —4.060 entre 43— y no
-       entre los 55. Dos datos publicados restringen el estimado. */
     await expect(kpi.locator('.val')).toHaveText('5.000');
+    await expect(kpi).toContainText('940 publicados');
+    await expect(kpi).toContainText('4.060 prorrateados');
 
     await conversar(page);
 
-    /* Y con Pupiales seleccionado, la tarjeta dice 80 —lo que publica el
-       informe— y no 91, que es lo que daba el prorrateo de 5.000 entre 55
-       antes de que estos datos viajaran. */
-    const r = await herramienta(page, 'uhp_seleccionar_municipio', { municipio: 'Pupiales' });
-    expect(r).toContain('Pupiales');
-    await expect(kpi).toContainText('80');
-    await expect(kpi).toContainText('dato publicado');
-    await expect(kpi).not.toContainText('91');
+    /* Con un filtro puesto, lo publicado se suma y solo se prorratea el
+       resto. La Cordillera tiene cinco municipios intervenidos y el
+       informe desglosa tres: 240 publicados más 189 prorrateados. Antes,
+       los cinco se prorrateaban por igual y daban 455. */
+    const f = await herramienta(page, 'uhp_filtrar_subregion', { subregion: 'La Cordillera' });
+    expect(f).toContain('Cordillera');
+    await expect(kpi).toContainText('240 publicados');
+    await expect(kpi.locator('.val')).toHaveText('429');
 
-    // El agente también lo dice, y dice de dónde sale.
-    const ficha = await herramienta(page, 'uhp_consultar_municipio', { municipio: 'Pupiales' });
-    expect(ficha).toContain('80 participantes examinados');
-    expect(ficha).toContain('57 positivos');
+    /* Y el agente puede decir la cifra de un municipio, que antes no
+       viajaba al navegador: a «¿a cuántas personas examinaron en
+       Policarpa?» solo podía contestar que no lo sabía. */
+    const ficha = await herramienta(page, 'uhp_consultar_municipio', { municipio: 'Policarpa' });
+    expect(ficha).toContain('90 participantes examinados');
+    expect(ficha).toContain('65 positivos');
     expect(ficha).toContain('dato publicado');
 
-    // Donde no se publica, no se inventa: ni cifra ni cero.
+    // Donde no se publica, no se inventa: ni cifra ni cero. Dar el
+    // prorrateo del conjunto como la cifra de un municipio sería mentir.
     const sinDato = await herramienta(page, 'uhp_consultar_municipio', { municipio: 'Túquerres' });
+    expect(sinDato).toContain('Túquerres');
     expect(sinDato).not.toContain('participantes examinados');
   });
 
