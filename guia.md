@@ -871,11 +871,16 @@ sería justo lo que la Resolución 1519 prohíbe.
 dos veces, la voz no. «Muéstrame Túquerres» dicho dos veces no significa
 «quítalo».
 
-Cada cambio pasa por `notificar(st, origen)`. Con `origen === 'agente'`, la
-región `aria-live` antepone «El asistente…»: quien no ve la pantalla necesita
-distinguir lo que hizo él de lo que le hicieron. Y cuando el visitante actúa, el
-anuncio anterior del asistente se borra, o le atribuiría a la máquina un cambio
-que acaba de hacer él.
+Cada cambio pasa por `notificar(st, origen)`, que anuncia **una línea breve**:
+qué cambió y cuántos municipios quedan a la vista. Con `origen === 'agente'`
+antepone «El asistente…», porque quien no ve la pantalla necesita distinguir lo
+que hizo él de lo que le hicieron.
+
+La ficha del municipio llevaba `aria-live` y se quitó: es un bloque de
+**contenido**, no un estado, y con la región viva un lector de pantalla leía sus
+veinte líneas enteras con cada clic. Molesto con un ratón; con el asistente
+moviendo filtros, un secuestro continuo. La línea breve da la misma información
+útil sin el ruido.
 
 #### Las ocho herramientas
 
@@ -891,10 +896,11 @@ que nadie espera de una pregunta suelta.
 
 #### Nunca se acierta un municipio por parecido
 
-Albán y Aldana, Iles e Imués, Linares y Leiva están a dos cambios de distancia
-y los seis son municipios intervenidos. El reconocimiento de voz entregará
-tarde o temprano uno por otro, y equivocarse significa leer en voz alta la cifra
-de cáncer gástrico de otro pueblo.
+Entre los 55 municipios intervenidos hay exactamente tres pares a dos cambios
+de distancia: **Pupiales e Ipiales**, **Albán y Aldana**, **Iles e Imués**. El
+reconocimiento de voz entregará tarde o temprano uno por otro, y equivocarse
+significa leer en voz alta la cifra de otro pueblo: Pupiales tiene 21,3 % de
+lesión precursora e Ipiales 37,2 %.
 
 `resolver()` solo cruza por coincidencia **exacta** del nombre normalizado, de
 su alias entre paréntesis —«Génova» por «Colón (Génova)»— o del código DANE. Lo
@@ -916,9 +922,30 @@ avisa para que el agente pregunte antes de leer cifra alguna.
   atascado puede encadenar decenas; cada una repinta la lista de 55 municipios y
   reenfoca el mapa.
 - **La clave de API no existe en el navegador.** Vive en su propia opción —mejor
-  en `wp-config.php`— y `config_front()` se arma por lista blanca, clave por
-  clave, nunca por resta: así el ajuste que alguien añada mañana no puede
-  publicarla por descuido. Dos comprobaciones de la suite lo verifican.
+  en `wp-config.php`, y sembrada sin `autoload`— y `config_front()` se arma por
+  lista blanca, clave por clave, nunca por resta: así el ajuste que alguien
+  añada mañana no puede publicarla por descuido. Dos comprobaciones de la suite
+  lo verifican. Con agente privado tampoco viaja el identificador del agente: el
+  navegador no lo necesita, porque abre la sesión con la URL firmada.
+- **El panel se construye una vez y se actualiza.** Repintarlo entero con cada
+  frase del agente destruía el campo donde el visitante estaba escribiendo y le
+  dejaba el foco en el `<body>`, con lo que la tecla Escape dejaba de llegar.
+- **Cerrar mientras conecta cierra de verdad.** Un testigo de generación
+  descarta todo lo que vuelve de una sesión que el visitante ya abandonó: sin
+  él, la sesión se abría después, sin panel, con el micrófono encendido.
+
+#### Lo que la ruta de sesión puede y no puede
+
+`POST /voz/sesion` entrega una credencial: una URL firmada comprada con la clave
+de la entidad, que abre una conversación facturable desde cualquier máquina. Y
+quien la pide es un visitante anónimo, de modo que **no hay a quién autenticar**.
+La comprobación de origen **falla cerrada** —antes dejaba pasar a quien no
+mandaba cabeceras, que es justo el `curl` que había que frenar—, hay cinco
+peticiones cada diez minutos por IP y un cupo diario que se **reserva antes** de
+llamar al proveedor y se devuelve si la llamada falla. Ninguna de las cuatro
+hace imposible el abuso: lo encarecen. La última línea de defensa es el límite
+de gasto de la cuenta del proveedor, y así está escrito en
+`docs/voz/privacidad.md` en vez de dejarlo implícito.
 
 #### Por qué el SDK y no el widget
 
@@ -1141,7 +1168,7 @@ silencioso:
   Ofrecerlo en una vista sin territorio produciría un mapa vacío; no ofrecerlo
   en una que sí lo tiene esconde la mitad de la lectura.
 
-### 8.2 Navegador — 89 pruebas
+### 8.2 Navegador — 96 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a

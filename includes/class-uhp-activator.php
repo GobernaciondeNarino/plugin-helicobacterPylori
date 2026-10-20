@@ -64,6 +64,11 @@ final class UHP_Activator {
 		self::sembrar( 'uhp_dashboard', self::dashboard_por_defecto() );
 		self::sembrar( 'uhp_3d', self::tresd_por_defecto() );
 		self::sembrar( UHP_Voz::OPCION, UHP_Voz::por_defecto() );
+		// SIN autoload, y creada aquí a propósito: si la crease el primer
+		// guardado del formulario, WordPress la marcaría para cargarse en
+		// cada petición del sitio, que es lo contrario de lo que dice su
+		// documentación. add_option no pisa una fila que ya exista.
+		add_option( UHP_Voz::OPCION_CLAVE, '', '', false );
 	}
 
 	/**

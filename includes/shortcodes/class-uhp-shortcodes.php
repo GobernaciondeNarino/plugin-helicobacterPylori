@@ -490,7 +490,16 @@ final class UHP_Shortcodes {
 				<div class="uhp-db__col uhp-db__col--der">
 					<div class="uhp-db__card">
 						<h2 data-uhp-zona="detalle-titulo"><?php esc_html_e( 'Casos de cáncer gástrico detectados', 'urkunina-5000' ); ?></h2>
-						<div class="uhp-db__detalle" data-uhp-zona="detalle" aria-live="polite"></div>
+						<?php
+						/* SIN aria-live. Es un bloque de contenido, no un
+						   estado: con la región viva, cada clic hacía que
+						   un lector de pantalla leyera sus veinte líneas
+						   enteras, y con el asistente de voz moviendo
+						   filtros eso es un secuestro continuo. Lo que se
+						   anuncia es la línea breve de
+						   [data-uhp-zona="estado"], que para eso está. */
+						?>
+						<div class="uhp-db__detalle" data-uhp-zona="detalle"></div>
 					</div>
 
 					<div class="uhp-db__card">

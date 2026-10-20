@@ -1379,6 +1379,22 @@ comprobar(
 	false === strpos( strtolower( $plano ), 'clave' ) && false === strpos( strtolower( $plano ), 'api_key' ),
 	'Ni siquiera una clave con ese nombre viaja al navegador'
 );
+// En modo privado el navegador no necesita el identificador del agente:
+// la sesión la abre con la URL firmada que le da el servidor. Publicarlo
+// solo serviría para que alguien intentara usar el agente por su cuenta.
+$lleno_priv         = $lleno;
+$lleno_priv['modo'] = 'privado';
+update_option( 'uhp_voz', $lleno_priv );
+comprobar(
+	'' === UHP_Voz::config_front()['agente'],
+	'Con un agente privado, su identificador no viaja al navegador'
+);
+update_option( 'uhp_voz', $lleno );
+comprobar(
+	'agent_abcdefghij' === UHP_Voz::config_front()['agente'],
+	'Con uno público sí, porque el navegador lo necesita para abrir la sesión'
+);
+
 $permitidas = array( 'agente', 'modo', 'transporte', 'texto', 'recordar', 'avisoVersion', 'ruta', 'sdk' );
 $sobran     = array_diff( array_keys( $front ), $permitidas );
 comprobar(
@@ -1453,6 +1469,25 @@ comprobar(
 	in_array( 'wss://*.livekit.cloud', UHP_Voz::hosts_csp()['connect-src'], true ),
 	'Con transporte WebRTC sí los declara, porque el audio va por ahí'
 );
+
+// Los procesadores de audio del SDK se instalan con AudioWorklet desde
+// una URL blob:, y esa carga la gobierna script-src. Declararla solo en
+// worker-src deja al asistente conectando y sin que se oiga nada.
+comprobar(
+	in_array( 'blob:', UHP_Voz::hosts_csp()['script-src'], true ),
+	'La CSP admite blob: en script-src, que es donde lo mira el navegador'
+);
+// Y el host del SDK se deriva de su URL, no está escrito a mano: si la
+// entidad lo sirve desde su dominio, la receta tiene que seguirlo.
+$filtro_sdk = function ( $url, $clave ) {
+	return 'elevenlabs' === $clave ? 'https://cdn.narino.gov.co/elevenlabs.js' : $url;
+};
+add_filter( 'uhp_url_libreria', $filtro_sdk, 10, 2 );
+comprobar(
+	in_array( 'https://cdn.narino.gov.co', UHP_Voz::hosts_csp()['script-src'], true ),
+	'La receta de CSP sigue al filtro que cambia de dónde sale el SDK'
+);
+remove_filter( 'uhp_url_libreria', $filtro_sdk );
 
 // El identificador del agente se valida: lo que no tiene su forma no
 // puede acabar en una URL que el servidor consulta.

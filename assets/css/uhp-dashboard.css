@@ -100,6 +100,14 @@
 /* El relleno vuelve después del reinicio, que acaba de quitárselo. */
 .uhp-db { padding: 14px; }
 
+/* Ancla de posicionamiento para lo que flota dentro —hoy el asistente de
+   voz—. Vive aquí y no en la hoja del asistente porque es una propiedad
+   del tablero: si dependiera de una hoja condicional, apagar el asistente
+   en una página movería de sitio cualquier otra cosa que flotara. El
+   único absoluto que colgaba de más arriba era .uhp-db__sr, recortado a
+   un píxel: le da igual dónde se ancle. */
+.uhp-db { position: relative; }
+
 .uhp-db a { color: var(--uhp-db-acc); text-decoration: none; }
 .uhp-db a:hover { color: var(--uhp-db-acc-claro); }
 

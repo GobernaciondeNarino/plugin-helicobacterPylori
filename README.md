@@ -266,7 +266,7 @@ protección de datos, en [`docs/voz/privacidad.md`](docs/voz/privacidad.md).
 ```bash
 npm install          # instala Playwright
 npm run test:datos   # 506 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 89 pruebas de navegador
+npm test             # lo anterior más 96 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los

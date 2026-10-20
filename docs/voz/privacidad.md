@@ -57,10 +57,42 @@ exactamente lo que recoge la compuerta.
 | La clave de API vive fuera del array que alimenta al front, y mejor en `wp-config.php` | `UHP_Voz::OPCION_CLAVE`, `clave_api()` |
 | Lo que viaja al navegador se arma por lista blanca, nunca por resta | `UHP_Voz::config_front()` |
 | La autorización se guarda en `sessionStorage`, no en `localStorage`: vale para la visita | `claveConsentimiento()` |
+| Cerrar el panel mientras conecta cierra también la sesión que llegue tarde | testigo de generación en `uhp-voz.js` |
+| La clave se guarda sin `autoload`: no se carga en cada petición del sitio | `UHP_Activator` |
 | Versionado del aviso: al cambiarlo, las autorizaciones viejas dejan de valer | ajuste `aviso_version` |
 | Tope diario de conversaciones en todo el sitio | `cuota_disponible()` |
 | Cinco peticiones de sesión cada diez minutos por IP | `UHP_Security::rate_limit()` |
 | La sesión se cierra al ocultarse la pestaña | `pagehide` en `uhp-voz.js` |
+
+## 4.1 Hasta dónde llega la puerta de la ruta de sesión
+
+Conviene decirlo sin adornos, porque de ello depende cuánto dinero puede
+perderse. `POST /voz/sesion` entrega una **credencial**: una URL firmada,
+comprada con la clave de la entidad, que abre una conversación facturable desde
+cualquier máquina. Quien la pide es un visitante anónimo, de modo que **no hay a
+quién autenticar**. Las cuatro puertas encarecen el abuso y lo acotan; ninguna
+lo hace imposible:
+
+| Puerta | Frena | No frena |
+|---|---|---|
+| Origen igual al del sitio, **fallando cerrado** | Al script que no manda cabeceras, que es el caso corriente | A quien las falsifica |
+| Cinco peticiones cada diez minutos por IP | El goteo desde una sola dirección | Una red de direcciones |
+| Cupo diario de todo el sitio, **reservado antes de gastar** | Que una tarde se lleve el presupuesto del trimestre | Que ese cupo se agote y el ciudadano se quede sin asistente |
+| Lista de dominios permitidos del agente | El uso desde otra página web | Un cliente de WebSocket escrito a mano, que no manda `Origin` |
+
+Dos consecuencias prácticas:
+
+1. **El cupo diario no es un adorno.** Póngalo en un número que la entidad pueda
+   perder sin dolor. Cuando se agota, queda constancia en el registro de errores
+   del sitio con una línea que lo dice; si aparece sin explicación, revise los
+   accesos a `/wp-json/urkunina/v1/voz/sesion`.
+2. **La última línea de defensa no está en este plugin**, sino en el **límite de
+   gasto de la cuenta de ElevenLabs**. Configúrelo.
+
+En modo **público** no hay ninguna de las cuatro: la sesión no pasa por este
+servidor, el identificador del agente está en el código fuente de la página, y
+el tope diario y el límite por IP no se aplican. El panel lo dice con estas
+palabras. Es la razón por la que el modo privado es el valor por defecto.
 
 ## 5. Lo que el plugin NO resuelve y la entidad sí debe resolver
 

@@ -155,6 +155,14 @@ function __( $texto, $dominio = null ) {
 	return $texto;
 }
 
+function wp_parse_url( $url, $componente = -1 ) {
+	return parse_url( (string) $url, $componente );
+}
+
+function wp_using_ext_object_cache() {
+	return false;
+}
+
 function rest_url( $ruta = '' ) {
 	return '/wp-json/' . ltrim( (string) $ruta, '/' );
 }
@@ -201,6 +209,19 @@ function add_shortcode() {}
 function add_filter( $etiqueta, $fn, $prioridad = 10, $args = 1 ) {
 	$GLOBALS['uhp_test_filtros'][ $etiqueta ][] = $fn;
 	return true;
+}
+
+function remove_filter( $etiqueta, $fn, $prioridad = 10 ) {
+	if ( ! isset( $GLOBALS['uhp_test_filtros'][ $etiqueta ] ) ) {
+		return false;
+	}
+	foreach ( $GLOBALS['uhp_test_filtros'][ $etiqueta ] as $i => $registrado ) {
+		if ( $registrado === $fn ) {
+			unset( $GLOBALS['uhp_test_filtros'][ $etiqueta ][ $i ] );
+			return true;
+		}
+	}
+	return false;
 }
 
 function wp_mkdir_p( $ruta ) {

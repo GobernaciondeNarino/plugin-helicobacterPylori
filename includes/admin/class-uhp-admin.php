@@ -1556,16 +1556,23 @@ final class UHP_Admin {
 							<span class="uhpa-punto uhpa-punto--ok"></span>
 							<?php esc_html_e( 'Publicado. El botón aparece en todo [urkunina_dashboard] de este sitio.', 'urkunina-5000' ); ?>
 						</p>
-						<p class="uhpa-nota">
-							<?php
-							printf(
-								/* translators: 1: sesiones usadas hoy, 2: tope diario. */
-								esc_html__( 'Sesiones de hoy: %1$d de %2$d.', 'urkunina-5000' ),
-								(int) UHP_Voz::cuota_usada(),
-								(int) $cfg['cuota_dia']
-							);
-							?>
-						</p>
+						<?php if ( 'privado' === $cfg['modo'] ) : ?>
+							<p class="uhpa-nota">
+								<?php
+								printf(
+									/* translators: 1: sesiones usadas hoy, 2: tope diario. */
+									esc_html__( 'Sesiones de hoy: %1$d de %2$d.', 'urkunina-5000' ),
+									(int) UHP_Voz::cuota_usada(),
+									(int) $cfg['cuota_dia']
+								);
+								?>
+							</p>
+						<?php else : ?>
+							<p class="uhpa-nota">
+								<span class="uhpa-punto uhpa-punto--error"></span>
+								<?php esc_html_e( 'En modo público la sesión NO pasa por este servidor: el tope diario, el límite por IP y la comprobación de origen no se aplican, y este panel no puede contar nada. La única frontera es la lista de dominios permitidos del agente en ElevenLabs y el límite de gasto de la cuenta.', 'urkunina-5000' ); ?>
+							</p>
+						<?php endif; ?>
 					<?php else : ?>
 						<p class="uhpa-texto">
 							<span class="uhpa-punto uhpa-punto--error"></span>

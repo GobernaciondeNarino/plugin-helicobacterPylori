@@ -39,7 +39,16 @@ function uhp_limpiar_sitio() {
 	// Transitorios del plugin: caché de archivos, índice de municipios y
 	// contadores del límite de peticiones. Se borran por prefijo porque su
 	// nombre lleva un hash y no se pueden enumerar de otro modo.
-	$prefijos = array( 'uhp_json_', 'uhp_municipios_', 'uhp_rl_', 'uhp_aviso_', 'uhp_voz_cuota_' );
+	$prefijos = array(
+		'uhp_json_',
+		'uhp_municipios_',
+		'uhp_subregiones_',
+		'uhp_topojson_',
+		'uhp_rl_',
+		'uhp_aviso_',
+		'uhp_voz_cuota_',
+		'uhp_voz_tope_',
+	);
 	foreach ( $prefijos as $prefijo ) {
 		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(

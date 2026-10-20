@@ -12,11 +12,6 @@
    no existe. Flotando, además, sobrevive a que avisar() vacíe <main>.
    ===================================================================== */
 
-/* El contenedor del tablero pasa a ser el ancla de posicionamiento. El
-   único absoluto que colgaba de más arriba era .uhp-db__sr, recortado a
-   un píxel: le da igual dónde se ancle. */
-.uhp-db { position: relative; }
-
 .uhp-voz {
   position: absolute;
   right: 14px;
@@ -59,6 +54,8 @@
   outline: 2px solid var(--uhp-db-acc);
   outline-offset: 2px;
 }
+/* Mientras el script no lo cablea, el botón existe pero no promete nada. */
+.uhp-voz__abrir[disabled] { opacity: .55; cursor: default; }
 .uhp-voz__abrir[aria-expanded="true"] {
   background: var(--uhp-db-sel-fondo);
   border-color: var(--uhp-db-acc);
@@ -83,6 +80,7 @@
 .uhp-voz__panel {
   width: 100%;
   max-height: min(60vh, 460px);
+  overflow-y: auto;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 10px;
@@ -140,6 +138,11 @@
 
 /* ---------- Conversación ---------- */
 .uhp-voz__hilo {
+  /* Con el panel limitado por max-height y una ventana muy baja —320x256
+     es el tamaño efectivo al 400 % de zoom—, la fila 1fr del hilo se
+     quedaba en cero y la conversación desaparecía. Con un mínimo
+     garantizado, lo que se desplaza es el panel. */
+  min-height: 5.5em;
   overflow-y: auto;
   display: grid;
   gap: 8px;
@@ -243,7 +246,7 @@
 .uhp-voz__btn[disabled] { opacity: .5; cursor: default; }
 
 /* ---------- Escribir en vez de hablar ---------- */
-.uhp-voz__forma { display: flex; gap: 6px; width: 100%; }
+.uhp-voz__forma { display: flex; gap: 6px; flex: 1 1 12em; min-width: 0; }
 .uhp-voz__campo {
   flex: 1;
   min-width: 0;
@@ -288,6 +291,18 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Objetivos táctiles. En pantalla táctil, 31 px de alto es menos de lo
+   que exige WCAG 2.1 §2.5.5 (nivel AAA) y lo que recomienda §2.5.8; los
+   botones de confirmar municipio son además los que más caro salen si se
+   pulsa el de al lado. */
+@media (pointer: coarse) {
+  .uhp-voz__btn,
+  .uhp-voz__abrir {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
 }
 
 /* ---------- Pantallas estrechas ---------- */

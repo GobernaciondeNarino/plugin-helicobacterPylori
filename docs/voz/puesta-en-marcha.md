@@ -83,11 +83,17 @@ Para apagarlo en una página concreta sin apagarlo en el sitio:
 Si el servidor web aplica una CSP, el asistente necesita:
 
 ```
-script-src   https://cdn.jsdelivr.net
+script-src   https://cdn.jsdelivr.net blob:
 connect-src  https://api.elevenlabs.io wss://api.elevenlabs.io
 worker-src   'self' blob:
 media-src    'self' blob:
 ```
+
+El `blob:` de **`script-src`** no es opcional: los procesadores de audio del SDK
+se instalan con `AudioWorklet.addModule()` desde una URL `blob:`, y esa carga la
+gobierna `script-src` en los navegadores que la aplican. Sin él, el asistente
+conecta y no se oye nada. El panel genera la receta a partir de la URL real del
+SDK, así que si la sirve desde su propio dominio, la receta lo sigue.
 
 Con transporte **WebRTC** hay que añadir además los dominios de LiveKit
 (`*.livekit.cloud`, `*.livekit.run`), por donde va el audio. Con **WebSocket**

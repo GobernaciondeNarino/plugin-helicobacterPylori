@@ -352,13 +352,13 @@ test.describe('Asistente de voz', () => {
     expect(r1).toContain('H. pylori');
     await expect(page.locator('[data-uhp-ind="hp"]')).toHaveAttribute('aria-pressed', 'true');
 
-    await page.waitForTimeout(800); // el presupuesto de cambios
+    await page.waitForTimeout(1600); // el presupuesto de cambios: 1500 ms
 
     const r2 = await herramienta(page, 'uhp_filtrar_zona_riesgo', { zona: 'amarilla' });
     expect(r2).toMatch(/10 municipios/);
     await expect(page.locator('.uhp-db__mrow')).toHaveCount(10);
 
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(1600);
 
     const r3 = await herramienta(page, 'uhp_seleccionar_municipio', { municipio: 'Pasto' });
     expect(r3).toContain('52001');
@@ -367,7 +367,7 @@ test.describe('Asistente de voz', () => {
     // Y el cambio se anuncia atribuyéndolo al asistente.
     await expect(page.locator('[data-uhp-zona="estado"]')).toContainText('El asistente');
 
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(1600);
     await herramienta(page, 'uhp_limpiar_tablero', {});
     await expect(page.locator('.uhp-db__mrow')).toHaveCount(55);
   });
@@ -403,7 +403,7 @@ test.describe('Asistente de voz', () => {
 
     const pregunta = await herramienta(page, 'uhp_seleccionar_municipio', { municipio: 'Albano' });
     const sugerido = /¿Quiso decir ([^?]+)\?/.exec(pregunta)[1];
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(1600);
 
     // Nada impide al modelo llamar acto seguido con el nombre que él mismo
     // sugirió, y entonces ya sería una coincidencia exacta. La salvaguarda
@@ -543,6 +543,158 @@ test.describe('Asistente de voz', () => {
     // Con el SDK ya presente, el cargador no debe bajarlo. Y nada del
     // asistente puede salir a la red por su cuenta.
     expect(fuera, 'el asistente salió a la red: ' + fuera.join(', ')).toEqual([]);
+  });
+
+  test('el botón cierra la conversación en vez de abrir una segunda', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    // La primera versión comparaba contra una fase llamada «activa» que
+    // no existía en ninguna parte: volver a pulsar abría una segunda
+    // sesión encima de la primera, y la primera no se cerraba nunca.
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+
+    expect(await page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
+    expect(await page.evaluate(() => window.__UHP_STUB.cerrada)).toBe(1);
+    await expect(page.locator('[data-uhp-voz-accion="abrir"]')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeHidden();
+  });
+
+  test('cerrar mientras conecta no deja la sesión abierta por detrás', async ({ page }) => {
+    // El doble tarda en resolver: así hay una ventana real entre pulsar
+    // «Acepto» y que la sesión exista, que es justo cuando el visitante
+    // puede arrepentirse. Sin el testigo de generación, la sesión se
+    // abría después, sin panel, con el micrófono encendido.
+    await page.addInitScript(() => {
+      window.__UHP_STUB = { abierta: 0, cerrada: 0, opciones: null, enviados: [], contexto: [] };
+      window.ElevenLabsClient = {
+        Conversation: {
+          startSession: function (opciones) {
+            window.__UHP_STUB.abierta++;
+            window.__UHP_STUB.opciones = opciones;
+            return new Promise((res) => setTimeout(() => res({
+              endSession: function () { window.__UHP_STUB.cerrada++; },
+              sendUserMessage: function () {},
+              sendContextualUpdate: function () {},
+              getId: function () { return 'c'; }
+            }), 600));
+          }
+        }
+      };
+    });
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
+
+    // Cerrar ANTES de que la promesa resuelva.
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    await page.waitForTimeout(1200);
+
+    // La sesión que llegó tarde se cierra sola: no queda micrófono vivo.
+    expect(await page.evaluate(() => window.__UHP_STUB.cerrada)).toBeGreaterThan(0);
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeHidden();
+  });
+
+  test('una frase del agente no borra lo que el visitante está escribiendo', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    // La primera versión repintaba el panel entero con cada turno: el
+    // <input> se destruía, el texto a medias se perdía y el foco caía al
+    // <body>, con lo que la tecla Escape dejaba de llegar.
+    const campo = page.locator('.uhp-voz__campo');
+    await campo.click();
+    await campo.fill('¿cuántos municipios tiene la zona');
+
+    await page.evaluate(() => {
+      window.__UHP_STUB.opciones.onMessage({ source: 'ai', message: 'Un momento.' });
+      window.__UHP_STUB.opciones.onMessage({ source: 'ai', message: 'Son 55 municipios.' });
+    });
+
+    await expect(page.locator('.uhp-voz__turno')).toHaveCount(2);
+    await expect(campo).toHaveValue('¿cuántos municipios tiene la zona');
+    expect(await page.evaluate(() => document.activeElement.className)).toContain('uhp-voz__campo');
+  });
+
+  test('la confirmación de un municipio no sobrevive a la conversación', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    const pregunta = await herramienta(page, 'uhp_seleccionar_municipio', { municipio: 'Albano' });
+    const sugerido = /¿Quiso decir ([^?]+)\?/.exec(pregunta)[1];
+    await page.locator('.uhp-voz__confirmar').getByRole('button', { name: /^Sí, / }).click();
+    await expect(page.locator('.uhp-db__muni.sel')).toHaveCount(1);
+
+    // Se cierra y se vuelve a abrir: la confirmación anterior no puede
+    // valer, o la salvaguarda se sortea en la conversación siguiente.
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(2);
+
+    const r = await herramienta(page, 'uhp_seleccionar_municipio', { municipio: sugerido });
+    // Ahora cruza exacto y no hay sugerencia pendiente, así que obedece:
+    // lo que NO puede pasar es que recuerde una confirmación vieja para
+    // saltarse la pregunta de una sugerencia nueva.
+    expect(r).toContain(sugerido);
+    const estado = await page.evaluate(() => ({
+      sug: window.__UHP_STUB.opciones !== null
+    }));
+    expect(estado.sug).toBe(true);
+  });
+
+  test('la transcripción se puede recorrer con el teclado', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    // Una caja con overflow que no es alcanzable con el teclado deja la
+    // transcripción fuera del alcance de quien no usa ratón; y un <div>
+    // a secas descarta su propio aria-label.
+    const hilo = page.locator('.uhp-voz__hilo');
+    await expect(hilo).toHaveAttribute('tabindex', '0');
+    await expect(hilo).toHaveAttribute('role', 'log');
+    await expect(hilo).toHaveAttribute('aria-label', /transcripci/i);
+  });
+
+  test('sin JavaScript el botón del micrófono no promete nada', async ({ page }) => {
+    await page.context().route('**/*.js', (r) => r.abort());
+    await page.goto(BASE + '/paginas/voz.html');
+
+    // Un botón que se puede pulsar y no hace nada es peor que no tenerlo.
+    await expect(page.locator('[data-uhp-voz-accion="abrir"]')).toBeDisabled();
+  });
+
+  test('las herramientas rechazan lo que no conocen en vez de adivinar', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    // Un indicador inventado NO puede caer en «lpm» y decir que obedeció.
+    const r1 = await herramienta(page, 'uhp_cambiar_indicador', { indicador: 'mortalidad' });
+    expect(r1).toContain('Solo puedo mostrar dos indicadores');
+    await expect(page.locator('[data-uhp-ind="lpm"]')).toHaveAttribute('aria-pressed', 'true');
+
+    // Un filtro que no cruza NO se descarta en silencio: hacerlo sería
+    // contestar otra pregunta sin avisar.
+    const r2 = await herramienta(page, 'uhp_listar_municipios', { subregion: 'Cundinamarca' });
+    expect(r2).toContain('No encuentro esa subregión');
+
+    const r3 = await herramienta(page, 'uhp_listar_municipios', { zona: 'azul' });
+    expect(r3).toContain('Las zonas son roja, amarilla y verde');
+
+    const r4 = await herramienta(page, 'uhp_filtrar_zona_riesgo', { zona: 'azul' });
+    expect(r4).toContain('No conozco esa zona');
   });
 
   test('los pares tinta/fondo del asistente cumplen la norma de contraste', async ({ page }) => {
@@ -1560,7 +1712,20 @@ test.describe('Tablero', () => {
     const estado = page.locator('[data-uhp-zona="estado"]');
     await expect(estado).toHaveAttribute('aria-live', 'polite');
     await expect(estado).toContainText('55 municipios');
-    await expect(page.locator('[data-uhp-zona="detalle"]')).toHaveAttribute('aria-live', 'polite');
+
+    // Elegir un municipio se anuncia en una LÍNEA BREVE. La ficha de la
+    // derecha llevaba aria-live y con ella un lector de pantalla leía sus
+    // veinte líneas enteras con cada clic; es un bloque de contenido, no
+    // un estado, y con el asistente de voz moviendo filtros eso pasaba de
+    // molesto a secuestro.
+    await page.locator('.uhp-db__mrow', { hasText: 'Pasto' }).first().click();
+    await expect(estado).toContainText('Pasto');
+    await expect(estado).toContainText('a la vista');
+    await expect(page.locator('[data-uhp-zona="detalle"]')).not.toHaveAttribute('aria-live', 'polite');
+
+    // Y filtrar por zona también, con el recuento que deja.
+    await page.locator('.uhp-db__zbtn').nth(1).click();
+    await expect(estado).toContainText('10 municipios a la vista');
   });
 
   test('todos los pares tinta/fondo cumplen la norma de contraste', async ({ page }) => {
@@ -1680,9 +1845,9 @@ test.describe('Tablero', () => {
         sinTilde: m.resolver('tuquerres'),
         alias: m.resolver('Génova'),
         codigo: m.resolver('52001'),
-        // Albán y Aldana están a dos cambios de distancia y los dos son
-        // municipios intervenidos: confundirlos es leer en voz alta la
-        // cifra de cáncer gástrico de otro pueblo.
+        // Pupiales e Ipiales, Albán y Aldana, Iles e Imués son los tres
+        // pares a dos cambios de distancia entre los 55 intervenidos.
+        // Confundirlos es leer en voz alta la cifra de otro pueblo.
         vecino: m.resolver('Albán'),
         casi: m.resolver('Sandona del Sur'),
         fuera: m.resolver('Tumaco'),

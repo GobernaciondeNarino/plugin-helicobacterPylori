@@ -404,7 +404,11 @@
   /* ------------------------------------------------------------------ */
 
   function aplicarIndicador(st, clave, origen) {
-    var v = (clave === 'hp') ? 'hp' : 'lpm';
+    // Se rechaza lo que no se conoce en vez de caer en 'lpm' devolviendo
+    // éxito: un «cambia a mortalidad» dicho por voz movería la pantalla a
+    // lesión precursora y el agente diría que obedeció.
+    if (clave !== 'lpm' && clave !== 'hp') { return false; }
+    var v = clave;
     if (!RAMPAS[v]) { return false; }
     st.ind = v;
     sincronizarPestanas(st);
@@ -480,6 +484,11 @@
     return true;
   }
 
+  function mayuscula(t) {
+    var s = String(t == null ? '' : t);
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
   function municipioDe(st, nombre) {
     for (var i = 0; i < st.muns.length; i++) {
       if (st.muns[i].n === nombre) { return st.muns[i]; }
@@ -488,13 +497,20 @@
   }
 
   function notificar(st, origen, que) {
+    // Una línea breve, no la ficha entera. La ficha del municipio tenía
+    // aria-live y eso hacía que un lector de pantalla leyera sus veinte
+    // líneas con cada clic; con el asistente moviendo filtros, sin parar.
+    // Aquí se dice QUÉ cambió y cuántos municipios quedan a la vista, que
+    // es lo que alguien necesita para seguir trabajando.
+    var cuantos = seleccion(st).length;
+    var cola = '. ' + cuantos + (cuantos === 1 ? ' municipio' : ' municipios') + ' a la vista.';
+
     if (origen === 'agente') {
-      anunciar(st, 'El asistente cambió la vista a ' + que + '.');
-    } else if (st.nodos.estado && st.nodos.estado.textContent.indexOf('El asistente') === 0) {
-      // El aviso anterior era del asistente y el visitante acaba de
-      // actuar: dejarlo ahí haría que un lector de pantalla atribuyera
-      // al asistente un cambio que hizo quien está leyendo.
-      anunciar(st, '');
+      // Quien no ve la pantalla necesita distinguir lo que hizo él de lo
+      // que le hicieron.
+      anunciar(st, 'El asistente cambió la vista a ' + que + cola);
+    } else {
+      anunciar(st, mayuscula(que) + cola);
     }
     for (var i = 0; i < st.oyentes.length; i++) {
       try {
@@ -938,19 +954,23 @@
 
   /* Resuelve un nombre dictado contra los municipios del tablero.
 
-     NUNCA selecciona por aproximación. Hay tres pares de municipios
-     intervenidos a dos cambios de distancia —Albán y Aldana, Iles e
-     Imués, Linares y Leiva— y confundirlos significa leer en voz alta la
-     cifra de cáncer gástrico de otro pueblo. Cuando no hay coincidencia
-     exacta se devuelve la sugerencia para que alguien la confirme, y
-     cuando sí la hay pero tiene un vecino cercano, se devuelve el vecino
-     para poder advertirlo. */
+     NUNCA selecciona por aproximación. Entre los 55 municipios
+     intervenidos hay exactamente tres pares a dos cambios de distancia
+     —Pupiales e Ipiales, Albán y Aldana, Iles e Imués— y confundirlos
+     significa leer en voz alta la cifra de otro pueblo: Pupiales tiene
+     21,3 % de lesión precursora e Ipiales 37,2 %. Cuando no hay
+     coincidencia exacta se devuelve la sugerencia para que alguien la
+     confirme, y cuando sí la hay pero tiene un vecino cercano, se
+     devuelve el vecino para poder advertirlo.
+
+     Si hay EMPATE entre varios candidatos se devuelven todos: quedarse
+     con el primero de la lista escondería que hay otro igual de cerca. */
   function resolver(st, texto) {
     var buscado = normalizar(texto);
     if (!buscado) { return { estado: 'ninguno' }; }
 
     var exacto = null;
-    var cerca = null;
+    var cerca = [];
     var mejor = 99;
     st.muns.forEach(function (m) {
       var claves = clavesDe(m);
@@ -958,7 +978,8 @@
         if (claves[i] === buscado) { exacto = m; return; }
       }
       var d = distancia(buscado, normalizar(m.n));
-      if (d < mejor) { mejor = d; cerca = m; }
+      if (d < mejor) { mejor = d; cerca = [m]; }
+      else if (d === mejor) { cerca.push(m); }
     });
 
     if (exacto) {
@@ -976,7 +997,15 @@
     });
     if (fuera) { return { estado: 'fuera', municipio: { n: fuera.n, c: fuera.c, sub: fuera.sub } }; }
 
-    if (cerca && mejor <= 2) { return { estado: 'sugerencia', sugerencia: cerca.n }; }
+    if (cerca.length && mejor <= 2) {
+      var nombres = cerca.map(function (m) { return m.n; });
+      // Con empate se devuelven todos: quedarse con el primero de la
+      // lista escondería que hay otro candidato igual de cerca, y quien
+      // confirma no sabría que había alternativa.
+      return (nombres.length > 1)
+        ? { estado: 'ambiguo', sugerencias: nombres }
+        : { estado: 'sugerencia', sugerencia: nombres[0] };
+    }
     return { estado: 'ninguno' };
   }
 

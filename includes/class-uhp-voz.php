@@ -189,10 +189,15 @@ final class UHP_Voz {
 	 * @return array{agente:string,modo:string,transporte:string,texto:bool,recordar:bool,avisoVersion:int,ruta:string}
 	 */
 	public static function config_front() {
-		$c = self::cfg();
+		$c    = self::cfg();
+		$modo = 'publico' === $c['modo'] ? 'publico' : 'privado';
 		return array(
-			'agente'       => (string) $c['agente'],
-			'modo'         => 'publico' === $c['modo'] ? 'publico' : 'privado',
+			// En modo privado el navegador NO necesita el identificador:
+			// la sesión la abre con la URL firmada que le da el servidor.
+			// Publicarlo solo serviría para que alguien intentara usar el
+			// agente por su cuenta.
+			'agente'       => 'publico' === $modo ? (string) $c['agente'] : '',
+			'modo'         => $modo,
 			'transporte'   => 'webrtc' === $c['transporte'] ? 'webrtc' : 'websocket',
 			'texto'        => ! empty( $c['texto'] ),
 			'recordar'     => ! empty( $c['recordar'] ),
@@ -210,6 +215,11 @@ final class UHP_Voz {
 	public static function textos() {
 		return array(
 			'abrir'        => __( 'Preguntar por voz', 'urkunina-5000' ),
+			'cerrar'       => __( 'Cerrar el asistente', 'urkunina-5000' ),
+			'reanudar'     => __( 'Volver a preguntar', 'urkunina-5000' ),
+			'aviso_fase'   => __( 'Lea el aviso antes de continuar.', 'urkunina-5000' ),
+			'confirmar'    => __( 'Hay un municipio por confirmar.', 'urkunina-5000' ),
+			'no'           => __( 'No', 'urkunina-5000' ),
 			'aviso_corto'  => __( 'Su voz se envía a un proveedor en el exterior. El tablero funciona igual sin el asistente.', 'urkunina-5000' ),
 			'titulo'       => __( 'Asistente de voz', 'urkunina-5000' ),
 			'aceptar'      => __( 'Acepto y quiero hablar', 'urkunina-5000' ),
@@ -337,7 +347,13 @@ final class UHP_Voz {
 			aria-label="<?php echo esc_attr( $t['titulo'] ); ?>">
 
 			<div class="uhp-voz__barra">
-				<button type="button" class="uhp-voz__abrir" data-uhp-voz-accion="abrir"
+				<?php
+				/* Sale DESHABILITADO y lo habilita el script al cablearlo.
+				   Un botón de micrófono que se puede pulsar y no hace nada
+				   porque el JavaScript no llegó es peor que no tenerlo:
+				   promete algo que no va a ocurrir. */
+				?>
+				<button type="button" class="uhp-voz__abrir" data-uhp-voz-accion="abrir" disabled
 					aria-expanded="false" aria-controls="<?php echo esc_attr( $idv ); ?>-panel">
 					<span class="uhp-voz__icono" aria-hidden="true">
 						<svg viewBox="0 0 16 16" width="16" height="16" focusable="false">
@@ -354,8 +370,12 @@ final class UHP_Voz {
 			<div class="uhp-voz__panel" id="<?php echo esc_attr( $idv ); ?>-panel"
 				data-uhp-voz-zona="panel" hidden></div>
 
-			<!-- El aviso completo viaja en el HTML, no lo compone el script:
-				 así puede leerse y auditarse aunque el JavaScript falle. -->
+			<!-- El aviso completo viaja en el HTML y lo imprime PHP, no lo
+				 compone el script ni llega de la configuración de una
+				 cuenta ajena: así puede auditarse en el código fuente de
+				 la página. Va en un <template> porque solo se muestra al
+				 pulsar; sin JavaScript el botón sale deshabilitado y lo
+				 que queda visible es el aviso corto de arriba. -->
 			<template data-uhp-voz-zona="aviso">
 				<?php foreach ( $bloques as $b ) : ?>
 					<section class="uhp-voz__bloque">
@@ -399,6 +419,28 @@ final class UHP_Voz {
 	 * configuración del servidor. Lo que el navegador pida no puede cambiar
 	 * con qué agente se habla ni con qué clave.
 	 *
+	 * HASTA DÓNDE LLEGA LA PUERTA, DICHO SIN ADORNOS. Lo que esta ruta
+	 * entrega es una CREDENCIAL: una URL firmada, comprada con la clave de
+	 * la entidad, que abre una conversación facturable desde cualquier
+	 * máquina. Y quien la pide es un visitante anónimo, de modo que no hay
+	 * a quién autenticar. Las cuatro puertas que siguen encarecen el abuso
+	 * y lo acotan; ninguna lo hace imposible:
+	 *
+	 *   1. Origen igual al del sitio, fallando CERRADO. Frena al script que
+	 *      no manda cabeceras, que es el caso corriente. No frena a quien
+	 *      las falsifica.
+	 *   2. Cinco peticiones cada diez minutos por IP.
+	 *   3. Cupo diario de todo el sitio, reservado antes de gastar, con
+	 *      aviso en el registro cuando se agota.
+	 *   4. La lista de dominios permitidos del agente en ElevenLabs, que
+	 *      es un control de NAVEGADOR: no ata una URL firmada usada desde
+	 *      un script.
+	 *
+	 * Por eso el cupo diario importa de verdad y por eso el panel insiste
+	 * en ponerle un número que la entidad pueda perder sin dolor. La
+	 * última línea de defensa no está aquí: está en el límite de gasto de
+	 * la cuenta del proveedor. Ver docs/voz/privacidad.md.
+	 *
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function ruta_sesion() {
@@ -434,19 +476,22 @@ final class UHP_Voz {
 			);
 		}
 
-		if ( ! self::cuota_disponible( (int) $c['cuota_dia'] ) ) {
-			return new \WP_Error(
-				'uhp_voz_cuota',
-				self::textos()['sin_cuota'],
-				array( 'status' => 503 )
-			);
-		}
-
 		$clave = self::clave_api();
 		if ( '' === $clave ) {
 			return new \WP_Error(
 				'uhp_voz_sin_clave',
 				__( 'El asistente de voz no está disponible.', 'urkunina-5000' ),
+				array( 'status' => 503 )
+			);
+		}
+
+		// Se reserva ANTES de llamar al proveedor; si la llamada falla, se
+		// devuelve. Al revés, el tope se salta con peticiones simultáneas.
+		if ( ! self::cuota_reservar( (int) $c['cuota_dia'] ) ) {
+			self::anotar_tope( $c );
+			return new \WP_Error(
+				'uhp_voz_cuota',
+				self::textos()['sin_cuota'],
 				array( 'status' => 503 )
 			);
 		}
@@ -471,6 +516,7 @@ final class UHP_Voz {
 		);
 
 		if ( is_wp_error( $r ) ) {
+			self::cuota_devolver();
 			return new \WP_Error(
 				'uhp_voz_red',
 				self::textos()['sin_sesion'],
@@ -482,6 +528,7 @@ final class UHP_Voz {
 		$cuerpo = json_decode( (string) wp_remote_retrieve_body( $r ), true );
 
 		if ( 200 !== $codigo || ! is_array( $cuerpo ) || empty( $cuerpo['signed_url'] ) ) {
+			self::cuota_devolver();
 			// El detalle del proveedor se queda en el registro del sitio:
 			// devolverlo al navegador filtraría si el agente existe, si la
 			// clave es válida y qué cuenta hay detrás.
@@ -495,12 +542,33 @@ final class UHP_Voz {
 			);
 		}
 
-		self::cuota_consumir();
-
 		return rest_ensure_response(
 			array(
 				'url'        => (string) $cuerpo['signed_url'],
 				'transporte' => 'websocket',
+			)
+		);
+	}
+
+	/**
+	 * Deja constancia de que el cupo diario se agotó.
+	 *
+	 * Sin esto, el abuso es invisible: el ciudadano ve un botón que no
+	 * funciona el resto del día y nadie se entera de por qué. Se anota una
+	 * vez al día, no en cada petición rechazada.
+	 *
+	 * @param array $c Configuración vigente.
+	 */
+	private static function anotar_tope( $c ) {
+		$marca = 'uhp_voz_tope_' . wp_date( 'Ymd' );
+		if ( get_transient( $marca ) ) {
+			return;
+		}
+		set_transient( $marca, 1, DAY_IN_SECONDS );
+		error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			sprintf(
+				'[URKUNINA 5000] El asistente de voz agotó su cupo diario de %d sesiones. Si no lo esperaba, revise el registro de accesos a /wp-json/urkunina/v1/voz/sesion.',
+				(int) $c['cuota_dia']
 			)
 		);
 	}
@@ -526,52 +594,113 @@ final class UHP_Voz {
 	/**
 	 * ¿Viene la petición de este mismo sitio?
 	 *
+	 * FALLA CERRADA. Antes, sin ninguna de las dos cabeceras se dejaba
+	 * pasar «porque no se puede decidir», y eso abría de par en par el
+	 * único camino que importa: un `curl -X POST` no manda ni Origin ni
+	 * Referer, de modo que la comprobación solo frenaba a los navegadores,
+	 * que son justamente los que sí mandan Origin. Lo que se entregaba a
+	 * cambio no es una página: es una URL firmada, comprada con la clave
+	 * de la entidad y utilizable como credencial desde cualquier máquina.
+	 *
+	 * Sigue sin ser una frontera —un script puede falsificar la cabecera—
+	 * y por eso no es el único control: ver la nota de `ruta_sesion()`.
+	 *
 	 * @return bool
 	 */
 	private static function origen_valido() {
 		$propio = wp_parse_url( home_url(), PHP_URL_HOST );
+		if ( ! is_string( $propio ) || '' === $propio ) {
+			return false;
+		}
+
 		foreach ( array( 'HTTP_ORIGIN', 'HTTP_REFERER' ) as $k ) {
 			if ( empty( $_SERVER[ $k ] ) ) {
 				continue;
 			}
-			$host = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER[ $k ] ) ), PHP_URL_HOST );
-			return is_string( $host ) && strtolower( $host ) === strtolower( (string) $propio );
+			$partes = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER[ $k ] ) ) );
+			if ( ! is_array( $partes ) || empty( $partes['host'] ) ) {
+				return false;
+			}
+			// Esquema además de host: http://sitio y https://sitio no son
+			// el mismo origen, y aceptar el primero regala el tránsito.
+			$esquema_ok = ! isset( $partes['scheme'] )
+				|| strtolower( $partes['scheme'] ) === strtolower( (string) wp_parse_url( home_url(), PHP_URL_SCHEME ) );
+
+			return $esquema_ok && strtolower( $partes['host'] ) === strtolower( $propio );
 		}
-		// Sin ninguna de las dos cabeceras no se puede decidir; se deja
-		// pasar y queda el límite por IP y la allowlist del agente.
-		return true;
+
+		return false;
 	}
 
 	/**
-	 * Cupo diario de sesiones de todo el sitio.
+	 * Reserva una plaza del cupo diario ANTES de llamar al proveedor.
 	 *
-	 * El servicio se factura por minuto: sin tope, una tarde de tráfico
-	 * inesperado se lleva el presupuesto del trimestre.
+	 * Comprobar primero y apuntar después deja una ventana entre la
+	 * lectura y la escritura: veinte peticiones a la vez leen todas el
+	 * mismo número, todas pasan y todas escriben el mismo valor, de modo
+	 * que el tope se salta por donde más caro sale. Aquí se reserva y, si
+	 * la llamada al proveedor falla, se devuelve la reserva.
+	 *
+	 * Con caché de objetos persistente el incremento es atómico. Sin ella
+	 * —el caso de una instalación corriente— queda una ventana muy
+	 * estrecha que no se puede cerrar con la API de opciones de WordPress;
+	 * se documenta en vez de fingir que no está.
 	 *
 	 * @param int $tope Sesiones permitidas hoy.
 	 * @return bool
 	 */
-	private static function cuota_disponible( $tope ) {
-		$tope = max( 1, (int) $tope );
-		return (int) get_transient( self::clave_cuota() ) < $tope;
+	private static function cuota_reservar( $tope ) {
+		$tope  = max( 1, (int) $tope );
+		$clave = self::clave_cuota();
+
+		if ( wp_using_ext_object_cache() ) {
+			// add() solo crea si no existe, así que la primera petición
+			// del día fija el contador y las demás incrementan.
+			wp_cache_add( $clave, 0, 'uhp_voz', DAY_IN_SECONDS );
+			$n = wp_cache_incr( $clave, 1, 'uhp_voz' );
+			if ( false === $n ) {
+				$n = 1;
+			}
+			if ( $n > $tope ) {
+				wp_cache_decr( $clave, 1, 'uhp_voz' );
+				return false;
+			}
+			return true;
+		}
+
+		$n = (int) get_transient( $clave );
+		if ( $n >= $tope ) {
+			return false;
+		}
+		set_transient( $clave, $n + 1, DAY_IN_SECONDS );
+		return true;
 	}
 
 	/**
-	 * Apunta una sesión en el cupo de hoy.
+	 * Devuelve una reserva que no llegó a convertirse en sesión.
 	 */
-	private static function cuota_consumir() {
+	private static function cuota_devolver() {
 		$clave = self::clave_cuota();
-		$n     = (int) get_transient( $clave );
-		set_transient( $clave, $n + 1, DAY_IN_SECONDS );
+		if ( wp_using_ext_object_cache() ) {
+			wp_cache_decr( $clave, 1, 'uhp_voz' );
+			return;
+		}
+		$n = (int) get_transient( $clave );
+		if ( $n > 0 ) {
+			set_transient( $clave, $n - 1, DAY_IN_SECONDS );
+		}
 	}
 
 	/**
 	 * Clave del transitorio del cupo, por día.
 	 *
+	 * El día es el LOCAL del sitio y no UTC: en Nariño (UTC-5) un corte en
+	 * UTC reiniciaría el cupo a las siete de la tarde, en plena jornada.
+	 *
 	 * @return string
 	 */
 	private static function clave_cuota() {
-		return 'uhp_voz_cuota_' . gmdate( 'Ymd' );
+		return 'uhp_voz_cuota_' . wp_date( 'Ymd' );
 	}
 
 	/**
@@ -745,7 +874,7 @@ final class UHP_Voz {
 				'3. Cuando una herramienta te devuelva una cifra marcada como «de la subregión, no del municipio», dilo en voz alta. No la presentes como propia del municipio.',
 				'',
 				'MUNICIPIOS QUE SE PARECEN',
-				'- Albán y Aldana, Iles e Imués, Linares y Leiva están a dos letras de distancia y los seis existen. Si la herramienta te avisa de un municipio de nombre parecido, pregunta cuál quería ANTES de leer ninguna cifra.',
+				'- Hay tres pares de municipios intervenidos que se confunden al dictarlos: Pupiales e Ipiales, Albán y Aldana, Iles e Imués. Si la herramienta te avisa de un municipio de nombre parecido, pregunta cuál quería ANTES de leer ninguna cifra.',
 				'- Si la herramienta te pide una confirmación en pantalla, pídesela al visitante y espera. No vuelvas a llamarla con el mismo nombre.',
 				'',
 				'LO QUE NO HACES',
@@ -778,8 +907,21 @@ final class UHP_Voz {
 			$connect[] = 'wss://*.livekit.run';
 		}
 
+		// El host del SDK se deriva de su URL y no se escribe a mano: si
+		// la entidad lo sirve desde su propio dominio con el filtro
+		// `uhp_url_libreria`, la receta tiene que seguirlo.
+		$sdk  = UHP_Assets::voz_urls();
+		$host = wp_parse_url( $sdk['sdk'], PHP_URL_HOST );
+		$esq  = wp_parse_url( $sdk['sdk'], PHP_URL_SCHEME );
+		$origen_sdk = ( $host && $esq ) ? $esq . '://' . $host : 'https://cdn.jsdelivr.net';
+
 		return array(
-			'script-src'  => array( 'https://cdn.jsdelivr.net' ),
+			// blob: va en script-src y no solo en worker-src: los
+			// procesadores de audio del SDK se instalan con
+			// AudioWorklet.addModule() desde una URL blob:, y esa carga la
+			// gobierna script-src en los navegadores que la aplican. Sin
+			// ella, el asistente conecta y no se oye nada.
+			'script-src'  => array( $origen_sdk, 'blob:' ),
 			'connect-src' => $connect,
 			'worker-src'  => array( "'self'", 'blob:' ),
 			'media-src'   => array( "'self'", 'blob:' ),
