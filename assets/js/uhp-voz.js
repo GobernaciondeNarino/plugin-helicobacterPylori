@@ -424,6 +424,19 @@
      se puede hacer en la página que los tiene delante. El servidor no
      tiene tablero que mover. */
 
+  /* Todo lo que va a la consola pasa por aquí, con el mismo prefijo:
+     así `[URKUNINA 5000]` en el filtro de la consola saca la historia
+     entera del asistente. Antes había tres `console.*` sueltos y cuatro
+     caminos de fallo completamente mudos —el audio que no suena, el
+     micrófono que no transcribe—, que son justo los que alguien tiene
+     que diagnosticar desde el equipo de un visitante. */
+  function avisar(donde, detalle) {
+    if (!window.console || !console.warn) { return; }
+    try {
+      console.warn('[URKUNINA 5000] ' + donde + ':', detalle);
+    } catch (e) { /* una consola que falla no puede tumbar el panel */ }
+  }
+
   function pedir(ruta, cuerpo) {
     // La base la pone el núcleo, y se lee con la misma tolerancia que él:
     // `window.UHP.rest` a secas lanza un TypeError en una página donde el
@@ -435,16 +448,34 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cuerpo)
     }).then(function (r) {
-      if (!r.ok) {
-        var e = new Error(
-          r.status === 503 ? 'sin-cuota'
-            : (r.status === 429 ? 'muchas'
-              : (r.status === 413 ? 'larga' : 'sin-sesion'))
-        );
+      if (r.ok) { return r.json(); }
+
+      /* El cuerpo SÍ se lee. WordPress devuelve ahí el `code` del
+         WP_Error —uhp_voz_inactivo, uhp_voz_origen, uhp_voz_cuota,
+         uhp_voz_larga, uhp_voz_proveedor—, y sin él dos cosas muy
+         distintas se confundían: los dos 403 de las puertas (asistente
+         no disponible y origen no válido) caían los dos en «no pude
+         consultar», y el 503 de una voz sin configurar se anunciaba como
+         «alcanzó su límite de consultas de hoy», que es mentira.
+
+         Se lee para DIAGNOSTICAR, no para enseñárselo al visitante: lo
+         que se pinta en el panel sigue siendo la frase corta de siempre.
+         Un mensaje del servidor en pantalla no le dice nada a quien está
+         preguntando por el cáncer gástrico en su municipio. */
+      return r.json().catch(function () { return null; }).then(function (d) {
+        var codigo = (d && typeof d.code === 'string') ? d.code : '';
+        var clave = r.status === 429 ? 'muchas'
+          : (r.status === 413 ? 'larga'
+            : (r.status === 503 ? (codigo === 'uhp_voz_cuota' ? 'sin-cuota' : 'sin-sesion')
+              : 'sin-sesion'));
+
+        avisar('consulta a ' + ruta, 'HTTP ' + r.status + (codigo ? ' · ' + codigo : '') + ' → se muestra «' + clave + '»');
+
+        var e = new Error(clave);
         e.codigo = r.status;
+        e.servidor = codigo;
         throw e;
-      }
-      return r.json();
+      });
     });
   }
 
@@ -545,9 +576,7 @@
           r = fn(l.args || {});
         } catch (e) {
           r = 'La herramienta falló.';
-          if (window.console && console.warn) {
-            console.warn('[URKUNINA 5000] herramienta ' + l.nombre + ': ' + e);
-          }
+          avisar('herramienta ' + l.nombre, e);
         }
       }
       salida.push({
@@ -573,12 +602,19 @@
 
     pedir(CFG.rutaVoz, { texto: texto }).then(function (d) {
       if (mia !== v.gen) { return; }
-      if (!d || !d.audio) { fase(v, 'escucha'); return; }
+      if (!d || !d.audio) {
+        avisar('voz', 'el servidor contestó sin audio; revise el registro del sitio');
+        fase(v, 'escucha');
+        return;
+      }
       reproducir(v, d.tipo || 'audio/mpeg', d.audio);
-    }).catch(function () {
+    }).catch(function (e) {
       /* Que no suene no es un fallo de la conversación: la respuesta ya
-         está escrita en el panel. Se sigue, en silencio, en vez de
-         pintarle un error a quien ya tiene delante lo que preguntó. */
+         está escrita en el panel. Se sigue, en silencio PARA EL
+         VISITANTE, en vez de pintarle un error a quien ya tiene delante
+         lo que preguntó. Pero no en silencio para quien tenga que
+         averiguar por qué no suena: eso antes no dejaba ni un rastro. */
+      avisar('voz', 'no se pudo sintetizar: ' + ((e && e.message) || 'motivo desconocido'));
       if (mia === v.gen) { fase(v, 'escucha'); }
     });
   }
@@ -600,15 +636,25 @@
         if (v.fase === 'habla') { fase(v, 'escucha'); }
       };
       a.addEventListener('ended', fin);
-      a.addEventListener('error', fin);
+      a.addEventListener('error', function () {
+        avisar('voz', 'el navegador rechazó el audio (formato o datos corruptos)');
+        fin();
+      });
 
       var p = a.play();
       if (p && p.catch) {
         /* Un navegador puede negarse a reproducir sin un gesto previo del
-           visitante. No se insiste ni se avisa: el texto ya está ahí. */
-        p.catch(fin);
+           visitante. No se insiste ni se avisa AL VISITANTE: el texto ya
+           está ahí. Pero se anota, porque desde fuera «no suena» por
+           autoplay bloqueado y «no suena» por clave mal configurada se
+           ven exactamente igual, y el arreglo es distinto. */
+        p.catch(function (e) {
+          avisar('voz', 'el navegador no dejó reproducir: ' + ((e && e.name) || 'motivo desconocido'));
+          fin();
+        });
       }
     } catch (e) {
+      avisar('voz', 'no se pudo decodificar el audio: ' + ((e && e.message) || e));
       fase(v, 'escucha');
     }
   }
@@ -644,6 +690,9 @@
        servicio de Google que esos navegadores no tienen. Reintentar ahí
        es pedirle al visitante que pulse un botón roto. */
     if (!Motor || v.micMuerto) {
+      avisar('micrófono', Motor
+        ? 'apagado para esta visita tras un fallo del servicio de transcripción'
+        : 'este navegador no tiene SpeechRecognition (Firefox, Opera, Brave, Vivaldi)');
       v.errorMicro = true;
       v.error = T.sin_reconocimiento;
       fase(v, 'error');
@@ -663,6 +712,7 @@
     try {
       r = new Motor();
     } catch (e) {
+      avisar('micrófono', 'no se pudo crear el reconocedor: ' + ((e && e.message) || e));
       v.errorMicro = true;
       v.error = T.sin_reconocimiento;
       fase(v, 'error');
@@ -686,6 +736,14 @@
     r.onerror = function (e) {
       if (mia !== v.gen) { return; }
       var cual = (e && e.error) || '';
+      /* El motivo lo da el navegador y decide la frase y si se apaga el
+         micrófono, pero no se veía en ninguna parte. Es el dato que
+         separa «el visitante dijo que no» ('not-allowed') de «este
+         navegador no puede» ('network', 'service-not-allowed') de «no
+         hay micrófono» ('audio-capture'), y los tres se arreglan
+         distinto. */
+      avisar('micrófono', cual || 'motivo desconocido');
+
       // «Sin habla» es que el visitante no dijo nada: ni es un fallo ni
       // merece un cartel rojo.
       if ('no-speech' === cual || 'aborted' === cual) { return; }
@@ -726,6 +784,8 @@
       anunciar(v, T.oyendo);
       actualizarPie(v);
     } catch (e) {
+      // `start()` sobre un reconocedor ya activo lanza InvalidStateError.
+      avisar('micrófono', 'no arrancó: ' + ((e && e.name) || e));
       v.oyendo = false;
       v.escucha = null;
     }
@@ -785,9 +845,12 @@
     v.errorMicro = false;
     fase(v, 'error');
     actualizarPie(v);
-    if (window.console && console.warn) {
-      console.warn('[URKUNINA 5000] asistente: ' + (clave || 'desconocido'));
-    }
+    avisar(
+      'conversación',
+      (clave || 'desconocido')
+        + (err && err.codigo ? ' · HTTP ' + err.codigo : '')
+        + (err && err.servidor ? ' · ' + err.servidor : '')
+    );
   }
 
   /* ------------------------------------------------------------------ */
@@ -1090,7 +1153,7 @@
     try {
       return fn(m);
     } catch (e) {
-      if (window.console && console.error) { console.error('[URKUNINA 5000] herramienta de voz', e); }
+      avisar('herramienta de voz', e);
       return 'No pude hacer ese cambio.';
     }
   }

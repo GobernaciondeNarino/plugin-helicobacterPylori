@@ -213,7 +213,9 @@ test.describe('Asistente de voz', () => {
         chat: 0, hablar: 0, cuerpos: [], textos: [],
         // Lo que el doble va a contestar, en orden.
         guion: [], contador: 0,
-        // Para forzar un fallo: { ruta: 'chat'|'hablar', codigo: 503 }.
+        /* Para forzar un fallo: { ruta, codigo, code }. `code` es el del
+           WP_Error que WordPress serializa en el cuerpo, y es lo que
+           distingue dos 503 que significan cosas distintas. */
         fallo: null,
         // El micrófono. Cuántas veces se pidió y cuántas pistas quedaron
         // abiertas: en el canal escrito las dos tienen que ser cero.
@@ -298,7 +300,9 @@ test.describe('Asistente de voz', () => {
         if (u.indexOf('/voz/chat') !== -1) {
           S.chat++;
           S.cuerpos.push(cuerpo);
-          if (S.fallo && S.fallo.ruta === 'chat') { return responder({}, S.fallo.codigo); }
+          if (S.fallo && S.fallo.ruta === 'chat') {
+            return responder({ code: S.fallo.code || '', message: 'x' }, S.fallo.codigo);
+          }
           const siguiente = S.guion.length ? S.guion.shift() : { texto: 'No tengo guion.', llamadas: [] };
           return responder(siguiente);
         }
@@ -306,7 +310,9 @@ test.describe('Asistente de voz', () => {
         if (u.indexOf('/voz/hablar') !== -1) {
           S.hablar++;
           S.textos.push(cuerpo && cuerpo.texto);
-          if (S.fallo && S.fallo.ruta === 'hablar') { return responder({}, S.fallo.codigo); }
+          if (S.fallo && S.fallo.ruta === 'hablar') {
+            return responder({ code: S.fallo.code || '', message: 'x' }, S.fallo.codigo);
+          }
           /* Un MP3 de verdad, aunque mudo: el módulo lo decodifica a
              bytes y se lo da a un <audio>. Devolver basura haría fallar
              la decodificación y la prueba miraría la rama equivocada. */
@@ -1510,9 +1516,20 @@ test.describe('Asistente de voz', () => {
        demasiado larga— tienen que llegar al visitante como algo que
        entiende, no como «algo salió mal». */
     const reanudar = page.getByRole('button', { name: 'Volver a preguntar' });
-    for (const [codigo, aguja] of [[503, /hoy/i], [429, /espere|demasiadas/i], [413, /larga/i]]) {
+    const puertas = [
+      [503, 'uhp_voz_cuota', /hoy/i],
+      [429, 'uhp_voz_ritmo', /espere|demasiadas/i],
+      [413, 'uhp_voz_larga', /larga/i],
+      /* Y el que importa: un 503 que NO es el cupo. La ruta devuelve uno
+         cuando la voz no está configurada, y se anunciaba como «alcanzó
+         su límite de consultas de hoy» —una cifra que no se había
+         gastado y un límite que no existía—. El estado HTTP no basta
+         para clasificar: hace falta el código del servidor. */
+      [503, 'uhp_voz_sin_voz', /no pude consultar/i],
+    ];
+    for (const [codigo, code, aguja] of puertas) {
       if (await reanudar.count()) { await reanudar.click(); }
-      await page.evaluate((c) => { window.__UHP_STUB.fallo = { ruta: 'chat', codigo: c }; }, codigo);
+      await page.evaluate((f) => { window.__UHP_STUB.fallo = { ruta: 'chat', codigo: f[0], code: f[1] }; }, [codigo, code]);
       await enviar(page, 'una pregunta');
       await expect(page.locator('.uhp-voz__estado-txt')).toContainText(aguja);
 
@@ -1524,6 +1541,72 @@ test.describe('Asistente de voz', () => {
     // Y volver a preguntar funciona de verdad, no solo aparece el botón.
     await reanudar.click();
     await page.evaluate(() => { window.__UHP_STUB.fallo = null; });
+    await preguntar(page, '¿cuántos municipios hay?', [
+      { texto: 'Son 55 municipios priorizados.', llamadas: [] }
+    ]);
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText('Son 55 municipios');
+  });
+
+  test('lo que falla en silencio para el visitante deja rastro en la consola', async ({ page }) => {
+    const consola = [];
+    page.on('console', (m) => { if (m.text().includes('[URKUNINA 5000]')) { consola.push(m.text()); } });
+
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    /* Que no suene NO se le pinta al visitante: la respuesta ya está
+       escrita delante. Pero desde fuera, «no suena» por una clave mal
+       configurada y «no suena» porque el navegador bloqueó la
+       reproducción se ven exactamente igual, y se arreglan distinto.
+       Quien tenga que diagnosticarlo solo tiene el equipo del visitante,
+       y hasta ahora ahí no había absolutamente nada. */
+    await page.evaluate(() => { window.__UHP_STUB.fallo = { ruta: 'hablar', codigo: 502, code: 'uhp_voz_proveedor' }; });
+    await preguntar(page, '¿cuántos municipios hay?', [
+      { texto: 'Son 55 municipios priorizados.', llamadas: [] }
+    ]);
+
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText('Son 55 municipios');
+    await expect(page.locator('.uhp-voz__estado-txt')).not.toContainText(/error/i);
+
+    await expect.poll(() => consola.filter((l) => l.includes('voz:')).length).toBeGreaterThan(0);
+    expect(consola.join(' ')).toContain('HTTP 502');
+    expect(consola.join(' ')).toContain('uhp_voz_proveedor');
+  });
+
+  test('el motivo que da el navegador al fallar el micrófono llega a la consola', async ({ page }) => {
+    const consola = [];
+    page.on('console', (m) => { if (m.text().includes('[URKUNINA 5000]')) { consola.push(m.text()); } });
+
+    await conDoble(page, { dictadoFalla: 'service-not-allowed' });
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    /* El navegador dice 'not-allowed', 'network', 'service-not-allowed' o
+       'audio-capture', el plugin usa ese motivo para decidir la frase y
+       para apagar el micrófono… y no lo imprimía en ninguna parte. Son
+       cuatro arreglos distintos y el visitante ve el mismo cartel. */
+    await page.getByRole('button', { name: 'Hablar', exact: true }).click();
+    await expect(page.locator('.uhp-voz__estado-txt')).toContainText('no reconoce la voz');
+
+    await expect.poll(() => consola.filter((l) => l.includes('micrófono')).length).toBeGreaterThan(0);
+    expect(consola.join(' ')).toContain('service-not-allowed');
+  });
+
+  test('un navegador sin reconocimiento lo dice en la consola, no solo en pantalla', async ({ page }) => {
+    const consola = [];
+    page.on('console', (m) => { if (m.text().includes('[URKUNINA 5000]')) { consola.push(m.text()); } });
+
+    await conDoble(page, { dictado: false });
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    // Sin botón que pulsar, el único camino a la consola es preguntar
+    // por escrito y que el panel no prometa un micrófono que no hay.
+    await expect(page.getByRole('button', { name: 'Hablar', exact: true })).toHaveCount(0);
     await preguntar(page, '¿cuántos municipios hay?', [
       { texto: 'Son 55 municipios priorizados.', llamadas: [] }
     ]);

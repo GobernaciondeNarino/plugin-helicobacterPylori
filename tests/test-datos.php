@@ -2129,6 +2129,233 @@ update_option( 'uhp_voz', $voz_antes );
 delete_transient( UHP_Voz::VERIF );
 delete_transient( UHP_Voz::VERIF . '_voces' );
 
+
+/* ---------------------------------------------------------------- */
+echo "\n14. Asistente: la petición mínima y lo que se dice cuando falla\n";
+
+/* ESTA SECCIÓN EXISTE POR UN FALLO REAL EN PRODUCCIÓN. Un administrador
+   pulsó «Verificar las claves» y el panel contestó «Google Gemini no
+   respondió: el proveedor rechazó la petición por mal formada». Su clave
+   estaba bien; lo que estaba mal era la petición que mandaba el plugin.
+
+   La verificación es la ÚNICA petición del plugin que va sin
+   herramientas, y el adaptador construía el bloque de todas formas: con
+   la lista vacía salía `"tools":[{"functionDeclarations":[]}]`, y Gemini
+   rechaza la petición ENTERA si un Tool no declara ninguna función. Las
+   pruebas no lo vieron porque todas mandaban las diez herramientas. */
+$verif_voz = array_merge(
+	UHP_Voz::por_defecto(),
+	array( 'activo' => 1, 'voz_id' => '21m00Tcm4TlvDq8ikWAM' )
+);
+update_option( 'uhp_voz', $verif_voz );
+update_option( 'uhp_llm_clave', 'sk-de-prueba' );
+update_option( 'uhp_voz_clave', 'sk-el-de-prueba' );
+
+$cuerpo_de = function ( $proveedor, $herramientas ) {
+	uhp_test_http( array( array( 'response' => array( 'code' => 400 ), 'body' => '{}' ) ) );
+	UHP_LLM::conversar(
+		array(
+			'proveedor'    => $proveedor,
+			'clave'        => 'k',
+			'modelo'       => '',
+			'esfuerzo'     => 'low',
+			'sistema'      => 'x',
+			'mensajes'     => array( array( 'rol' => 'usuario', 'texto' => 'Di: listo' ) ),
+			'herramientas' => $herramientas,
+		)
+	);
+	$p = uhp_test_http_peticiones();
+	return json_decode( $p[0]['args']['body'], true );
+};
+
+foreach ( array( 'claude', 'openai', 'gemini' ) as $prov ) {
+	$sin = $cuerpo_de( $prov, array() );
+	comprobar(
+		! array_key_exists( 'tools', $sin ) && ! array_key_exists( 'toolConfig', $sin ) && ! array_key_exists( 'tool_choice', $sin ),
+		sprintf( 'Sin herramientas, a %s no se le manda ningún bloque de herramientas', $prov )
+	);
+
+	$con = $cuerpo_de( $prov, UHP_Voz::definiciones_herramientas() );
+	comprobar(
+		array_key_exists( 'tools', $con ),
+		sprintf( 'Y con ellas sí, que es lo que no se puede romper al arreglar lo anterior (%s)', $prov )
+	);
+}
+
+/* Y la comprobación concreta del fallo, por si alguien vuelve a
+   construir el bloque incondicionalmente en otro sitio: lo que Gemini
+   rechaza no es «tools» sino una lista de declaraciones VACÍA. */
+$g = $cuerpo_de( 'gemini', array() );
+comprobar(
+	false === strpos( wp_json_encode( $g ), 'functionDeclarations' ),
+	'La petición de verificación a Gemini no menciona functionDeclarations en ninguna parte'
+);
+
+/* LO QUE HIZO EL MENSAJE INÚTIL. Gemini explicaba con todas las letras
+   qué campo estaba mal, el plugin guardaba esa frase, y `motivo()` la
+   tiraba para publicar una traducción genérica del código HTTP. Un
+   diagnóstico que existe y no se enseña es peor que no tenerlo: manda a
+   buscar el fallo donde no está. */
+$motivo = new ReflectionMethod( 'GobernacionNarino\\Urkunina\\UHP_Voz', 'motivo' );
+$motivo->setAccessible( true );
+
+$cuerpo_gemini = 'http 400: ' . wp_json_encode(
+	array(
+		'error' => array(
+			'code'    => 400,
+			'message' => '* GenerateContentRequest.tools[0].function_declarations: at least one function declaration is required',
+			'status'  => 'INVALID_ARGUMENT',
+		),
+	)
+);
+$dicho = $motivo->invoke( null, $cuerpo_gemini, 400 );
+comprobar(
+	false !== strpos( $dicho, 'rechazó la petición' ),
+	'Un 400 sigue diciendo en castellano que el proveedor rechazó la petición'
+);
+comprobar(
+	false !== strpos( $dicho, 'function declaration' ),
+	'Y AÑADE lo que dijo el proveedor, que es lo único que señala el campo culpable'
+);
+
+// Cada proveedor anida su mensaje en un sitio distinto. Se buscan todos.
+foreach ( array(
+	'{"error":{"message":"Mensaje de Gemini y OpenAI"}}'      => 'Mensaje de Gemini y OpenAI',
+	'{"message":"Mensaje de Claude"}'                          => 'Mensaje de Claude',
+	'{"detail":{"status":"voice_not_found","message":"Mensaje de ElevenLabs"}}' => 'Mensaje de ElevenLabs',
+) as $json => $esperado ) {
+	comprobar(
+		false !== strpos( $motivo->invoke( null, 'http 401: ' . $json, 401 ), $esperado ),
+		'Se extrae el mensaje esté donde esté: ' . $esperado
+	);
+}
+
+/* NINGUNA URL sale en esos mensajes, y no es celo: se imprimen en una
+   página del panel, algunos proveedores devuelven la petición entera en
+   el error, y en una URL puede ir la clave. */
+$con_url = $motivo->invoke(
+	null,
+	'transporte: cURL error 60: SSL certificate problem (https://generativelanguage.googleapis.com/v1beta/models/x:generateContent?key=AIzaSECRETO)',
+	0
+);
+comprobar(
+	false === strpos( $con_url, 'AIzaSECRETO' ) && false === strpos( $con_url, '?key=' ),
+	'Una URL dentro del mensaje se tapa: ahí es donde algunos proveedores admiten la clave'
+);
+comprobar(
+	false !== strpos( $con_url, 'generativelanguage.googleapis.com' ),
+	'Pero el dominio se conserva, porque saber contra qué host se habló es parte del diagnóstico'
+);
+comprobar(
+	false !== strpos( $con_url, 'certificate' ),
+	'Y el motivo del transporte también: un certificado rechazado no se arregla como un cortafuegos'
+);
+
+/* Un 200 sin contenido NO es una respuesta. Antes se publicaba como
+   «responde» con un «Contestó: «»» vacío, que es peor que un error:
+   afirma que está todo bien. */
+uhp_test_http(
+	array(
+		array( 'response' => array( 'code' => 200 ), 'body' => wp_json_encode( array( 'candidates' => array( array( 'content' => array( 'parts' => array() ) ) ) ) ) ),
+		array( 'response' => array( 'code' => 200 ), 'body' => wp_json_encode( array( 'voices' => array( array( 'voice_id' => '21m00Tcm4TlvDq8ikWAM', 'name' => 'Lucía' ) ) ) ) ),
+	)
+);
+update_option( 'uhp_voz', array_merge( $verif_voz, array( 'proveedor' => 'gemini' ) ) );
+delete_transient( UHP_Voz::VERIF . '_voces' );
+$inf = UHP_Voz::verificar();
+comprobar(
+	false === $inf['llm']['ok'] && false !== strpos( $inf['llm']['mensaje'], 'no devolvió nada' ),
+	'Un 200 sin texto ni llamadas NO se publica como «responde»'
+);
+
+/* La verificación prueba lo que CORRE, no lo que está escrito. El modelo
+   se sanea igual que en la ruta real: antes, uno escrito con un espacio
+   fallaba aquí con 400 y funcionaba en producción, porque la ruta lo
+   descarta y usa el recomendado. */
+uhp_test_http(
+	array(
+		array( 'response' => array( 'code' => 200 ), 'body' => wp_json_encode( array( 'candidates' => array( array( 'content' => array( 'parts' => array( array( 'text' => 'listo' ) ) ) ) ) ) ) ),
+		array( 'response' => array( 'code' => 200 ), 'body' => wp_json_encode( array( 'voices' => array( array( 'voice_id' => '21m00Tcm4TlvDq8ikWAM', 'name' => 'Lucía' ) ) ) ) ),
+	)
+);
+update_option( 'uhp_voz', array_merge( $verif_voz, array( 'proveedor' => 'gemini', 'modelo' => 'modelo con espacios' ) ) );
+delete_transient( UHP_Voz::VERIF . '_voces' );
+$inf = UHP_Voz::verificar();
+$pedido = json_decode( uhp_test_http_peticiones()[0]['args']['body'], true );
+comprobar(
+	true === $inf['llm']['ok'],
+	'Un modelo mal escrito no hace fallar la verificación: la ruta real también lo descartaría'
+);
+comprobar(
+	false !== strpos( uhp_test_http_peticiones()[0]['url'], UHP_LLM::modelo_por_defecto( 'gemini' ) ),
+	'Y se prueba el modelo que la ruta real usaría, no la cadena guardada'
+);
+comprobar(
+	false !== strpos( $inf['llm']['detalle'], 'se descartó' ),
+	'El panel dice que lo escrito se descartó, en vez de dar por bueno un nombre que nunca se usa'
+);
+
+/* El segundo error que vio el administrador: la lista de voces daba
+   NOMBRES cuando el campo pide IDENTIFICADORES. No se podía copiar nada
+   de ese texto. */
+uhp_test_http(
+	array(
+		array( 'response' => array( 'code' => 200 ), 'body' => wp_json_encode( array( 'candidates' => array( array( 'content' => array( 'parts' => array( array( 'text' => 'listo' ) ) ) ) ) ) ) ),
+		array(
+			'response' => array( 'code' => 200 ),
+			'body'     => wp_json_encode(
+				array(
+					'voices' => array(
+						array( 'voice_id' => 'aaaaaaaaaaaaaaaaaaaa', 'name' => 'Lumina' ),
+						array( 'voice_id' => 'bbbbbbbbbbbbbbbbbbbb', 'name' => 'Luis Casiano' ),
+					),
+				)
+			),
+		),
+	)
+);
+update_option( 'uhp_voz', array_merge( $verif_voz, array( 'proveedor' => 'gemini', 'voz_id' => 'zzzzzzzzzzzzzzzzzzzz' ) ) );
+delete_transient( UHP_Voz::VERIF . '_voces' );
+$inf = UHP_Voz::verificar();
+comprobar(
+	false === $inf['voz']['ok'],
+	'Una voz que no está en la cuenta se sigue detectando'
+);
+comprobar(
+	false !== strpos( $inf['voz']['detalle'], 'aaaaaaaaaaaaaaaaaaaa' )
+		&& false !== strpos( $inf['voz']['detalle'], 'Lumina' ),
+	'Y ahora se listan los IDENTIFICADORES junto al nombre, que es lo que hay que copiar'
+);
+comprobar(
+	false !== strpos( $inf['voz']['detalle'], 'zzzzzzzzzzzzzzzzzzzz' ),
+	'Y se dice cuál está configurado ahora, para poder compararlo'
+);
+
+/* Y cuando ElevenLabs no contesta, se dice contra qué host se preguntó:
+   con el filtro de residencia de datos puesto, la verificación y la
+   síntesis pueden ir a dominios distintos. */
+uhp_test_http(
+	array(
+		array( 'response' => array( 'code' => 200 ), 'body' => wp_json_encode( array( 'candidates' => array( array( 'content' => array( 'parts' => array( array( 'text' => 'listo' ) ) ) ) ) ) ) ),
+		array( 'response' => array( 'code' => 401 ), 'body' => '{"detail":{"status":"invalid_api_key","message":"La clave fue revocada"}}' ),
+	)
+);
+update_option( 'uhp_voz', array_merge( $verif_voz, array( 'proveedor' => 'gemini' ) ) );
+delete_transient( UHP_Voz::VERIF . '_voces' );
+$inf = UHP_Voz::verificar();
+comprobar(
+	false !== strpos( $inf['voz']['mensaje'], 'La clave fue revocada' ),
+	'Lo que dice ElevenLabs en un 401 llega al panel, en vez de «no respondió» a secas'
+);
+comprobar(
+	false !== strpos( $inf['voz']['detalle'], 'elevenlabs.io' ),
+	'Y contra qué host se preguntó, que con residencia de datos puede no ser el de la síntesis'
+);
+
+update_option( 'uhp_voz', $voz_antes );
+delete_transient( UHP_Voz::VERIF );
+delete_transient( UHP_Voz::VERIF . '_voces' );
+
 /* ---------------------------------------------------------------- */
 echo "\n";
 if ( $fallos ) {

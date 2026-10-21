@@ -1862,23 +1862,63 @@ final class UHP_Admin {
 						</p>
 
 						<p>
-							<label class="uhpa-label" for="uhp-voz-id"><?php esc_html_e( 'Identificador de la voz', 'urkunina-5000' ); ?></label>
-							<input type="text" id="uhp-voz-id" class="uhpa-input" name="uhp_voz[voz_id]"
-								value="<?php echo esc_attr( $cfg['voz_id'] ); ?>"
-								<?php echo $voces_ok && ! empty( $voces ) ? 'list="uhp-voz-lista"' : ''; ?>
-								placeholder="<?php esc_attr_e( 'vacío = sin voz, solo por escrito', 'urkunina-5000' ); ?>">
+							<label class="uhpa-label" for="uhp-voz-id"><?php esc_html_e( 'Voz', 'urkunina-5000' ); ?></label>
 							<?php if ( $voces_ok && ! empty( $voces ) ) : ?>
-								<datalist id="uhp-voz-lista">
+								<?php
+								// Las voces de la cuenta, para ELEGIR. Mientras
+								// esto fue un campo de texto, lo que se pegaba
+								// era el identificador de los ejemplos de la
+								// documentación de ElevenLabs, que tiene forma
+								// válida y no está en ninguna cuenta: se
+								// guardaba sin protestar y fallaba al hablar.
+								$suelta = '' !== $cfg['voz_id'] && ! isset( $voces[ $cfg['voz_id'] ] );
+								?>
+								<select id="uhp-voz-id" class="uhpa-input" name="uhp_voz[voz_id]">
+									<option value="" <?php selected( '', $cfg['voz_id'] ); ?>><?php esc_html_e( '— Sin voz: el asistente responde solo por escrito —', 'urkunina-5000' ); ?></option>
 									<?php foreach ( $voces as $id => $nombre ) : ?>
-										<option value="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $nombre ); ?></option>
+										<option value="<?php echo esc_attr( $id ); ?>" <?php selected( $id, $cfg['voz_id'] ); ?>>
+											<?php echo esc_html( $nombre . ' — ' . $id ); ?>
+										</option>
 									<?php endforeach; ?>
-								</datalist>
-								<span class="uhpa-nota">
-									<?php esc_html_e( 'El campo sugiere las voces de su cuenta. Son las que hay:', 'urkunina-5000' ); ?>
-									<?php echo esc_html( implode( ' · ', array_slice( array_values( $voces ), 0, 10 ) ) ); ?>
-								</span>
+									<?php if ( $suelta ) : ?>
+										<option value="<?php echo esc_attr( $cfg['voz_id'] ); ?>" selected>
+											<?php
+											printf(
+												/* translators: %s: identificador configurado. */
+												esc_html__( '%s — NO está en esta cuenta', 'urkunina-5000' ),
+												esc_html( $cfg['voz_id'] )
+											);
+											?>
+										</option>
+									<?php endif; ?>
+								</select>
+								<?php if ( $suelta ) : ?>
+									<span class="uhpa-alerta uhpa-alerta--error">
+										<?php esc_html_e( 'La voz guardada no pertenece a esta cuenta de ElevenLabs. Elija una de la lista: mientras siga así, el asistente responderá por escrito y no dirá nada en alto.', 'urkunina-5000' ); ?>
+									</span>
+								<?php endif; ?>
+								<span class="uhpa-nota"><?php esc_html_e( 'Son las voces guardadas en su cuenta, leídas de ElevenLabs. Elija una que hable español de verdad: una voz entrenada en inglés lee «Ipiales» y «EPS» como lo que no son. En el canal escrito no se usa.', 'urkunina-5000' ); ?></span>
+							<?php else : ?>
+								<input type="text" id="uhp-voz-id" class="uhpa-input" name="uhp_voz[voz_id]"
+									value="<?php echo esc_attr( $cfg['voz_id'] ); ?>"
+									placeholder="<?php esc_attr_e( 'vacío = sin voz, solo por escrito', 'urkunina-5000' ); ?>">
+								<?php if ( is_array( $voces ) && isset( $voces['__error'] ) ) : ?>
+									<span class="uhpa-alerta uhpa-alerta--error">
+										<?php
+										printf(
+											/* translators: %s: motivo. */
+											esc_html__( 'No se pudo leer la lista de voces de la cuenta: %s', 'urkunina-5000' ),
+											esc_html( $voces['__error'] )
+										);
+										?>
+										<?php esc_html_e( 'Por eso este campo es de texto y no una lista. Arregle la clave y vuelva a cargar la página para elegir de la lista.', 'urkunina-5000' ); ?>
+									</span>
+								<?php elseif ( ! $tiene_el ) : ?>
+									<span class="uhpa-nota"><?php esc_html_e( 'Guarde primero la clave de ElevenLabs y vuelva a cargar esta página: entonces este campo se convierte en una lista con las voces de su cuenta y no hay que copiar identificadores a mano.', 'urkunina-5000' ); ?></span>
+								<?php else : ?>
+									<span class="uhpa-nota"><?php esc_html_e( 'La cuenta no tiene ninguna voz guardada. Añada una desde la biblioteca de ElevenLabs y vuelva a cargar esta página.', 'urkunina-5000' ); ?></span>
+								<?php endif; ?>
 							<?php endif; ?>
-							<span class="uhpa-nota"><?php esc_html_e( 'El timbre con que se lee la respuesta: una cadena de letras y números, sin prefijo, que ElevenLabs muestra en cada voz de su biblioteca. Elija una que hable español de verdad; una voz entrenada en inglés lee «Ipiales» y «EPS» como lo que no son. En el canal escrito no se usa.', 'urkunina-5000' ); ?></span>
 						</p>
 
 						<p>
