@@ -234,6 +234,11 @@ micrófono tiene que estar permitido para este origen o el dictado no arranca.
 - [ ] Mirar el código fuente de la página y buscar las claves. No pueden estar.
 - [ ] Comprobar el **tope diario** y el límite de gasto del proveedor.
 
+Si algo de esto falla, el reporte de los errores de configuración ya
+diagnosticados —qué significa cada mensaje del panel, qué líneas escribe el
+plugin en el registro de PHP y en la consola del navegador, y qué mirar en
+cada caso— está en [`diagnostico.md`](diagnostico.md).
+
 El JSON con las definiciones de las diez herramientas está en
 [`herramientas.json`](herramientas.json). No hay que pegarlo en ninguna parte:
 el servidor se lo manda al modelo en cada pregunta. Está ahí para poder leerlo

@@ -163,6 +163,66 @@ final class UHP_LLM {
 	}
 
 	/**
+	 * Un trozo del cuerpo, en una línea y sin desbordar el registro.
+	 *
+	 * @param string $cuerpo Cuerpo crudo.
+	 * @return string
+	 */
+	private static function recortar( $cuerpo ) {
+		$t = trim( preg_replace( '/\s+/', ' ', (string) $cuerpo ) );
+		return '' === $t ? '(cuerpo vacío)' : mb_substr( $t, 0, 300 );
+	}
+
+	/**
+	 * El mensaje de un WP_Error con cualquier URL tapada.
+	 *
+	 * Tapar y no borrar: saber que el host era otro —un proxy, un espejo
+	 * puesto por un filtro— es parte del diagnóstico, y el esquema y el
+	 * dominio no son el secreto. Lo que se quita es la ruta y la cadena
+	 * de consulta, que es donde algunos proveedores admiten la clave.
+	 *
+	 * @param \WP_Error $e Error del transporte.
+	 * @return string
+	 */
+	private static function sin_url( $e ) {
+		$codigo  = method_exists( $e, 'get_error_code' ) ? (string) $e->get_error_code() : '';
+		$mensaje = method_exists( $e, 'get_error_message' ) ? (string) $e->get_error_message() : '';
+
+		$mensaje = preg_replace_callback(
+			'#\bhttps?://([^/\s]+)\S*#i',
+			function ( $m ) {
+				return $m[1] . '/…';
+			},
+			$mensaje
+		);
+
+		$texto = trim( $codigo . ( '' !== $codigo && '' !== $mensaje ? ' · ' : '' ) . $mensaje );
+		return '' === $texto ? 'sin detalle' : self::recortar( $texto );
+	}
+
+	/**
+	 * ¿Esta petición va sin herramientas?
+	 *
+	 * Importa más de lo que parece. Los tres proveedores tratan de forma
+	 * distinta un bloque de herramientas VACÍO, y el único caso del
+	 * plugin que lo produce es la verificación de la clave: un mensaje de
+	 * una línea, sin herramientas, que es lo primero que un administrador
+	 * ejecuta al configurar.
+	 *
+	 * Gemini rechaza la petición entera con 400 INVALID_ARGUMENT si
+	 * recibe un `Tool` con `functionDeclarations` vacío. Claude y OpenAI
+	 * toleran `tools: []`, pero mandarlo tampoco significa nada: declarar
+	 * «cero herramientas» y no declarar herramientas son lo mismo para el
+	 * modelo y distinto para el validador. Así que no se manda.
+	 *
+	 * @param array $pet Petición en formato neutro.
+	 * @return bool
+	 */
+	private static function sin_herramientas( $pet ) {
+		return empty( $pet['herramientas'] ) || ! is_array( $pet['herramientas'] );
+	}
+
+	/**
 	 * Resultado vacío con un error, para no repetirlo en cada rama.
 	 *
 	 * @param string $error  Mensaje interno.
@@ -199,10 +259,14 @@ final class UHP_LLM {
 		);
 
 		if ( is_wp_error( $r ) ) {
-			// El mensaje del transporte NO se devuelve tal cual: puede
-			// traer la URL completa, y en algunos proveedores la clave
-			// viaja en la URL.
-			return array( '__fallo' => self::fallo( 'transporte' ) );
+			/* El mensaje del transporte no se devuelve TAL CUAL: puede
+			   traer la URL completa, y una URL puede llevar la clave. Lo
+			   que sí se conserva es el código de WordPress y el mensaje
+			   con la URL tapada, porque sin eso «no se pudo conectar» no
+			   distingue un cortafuegos de un certificado rechazado ni de
+			   un tiempo de espera agotado, y son tres arreglos
+			   distintos. */
+			return array( '__fallo' => self::fallo( 'transporte: ' . self::sin_url( $r ) ) );
 		}
 
 		$codigo = (int) wp_remote_retrieve_response_code( $r );
@@ -213,12 +277,17 @@ final class UHP_LLM {
 			   registro del sitio es de la entidad: aun así, un proveedor
 			   que devuelva la petición completa en el error devolvería
 			   también la conversación del ciudadano. */
-			return array( '__fallo' => self::fallo( 'http ' . $codigo . ': ' . substr( $cuerpo, 0, 200 ), $codigo ) );
+			return array( '__fallo' => self::fallo( 'http ' . $codigo . ': ' . self::recortar( $cuerpo ), $codigo ) );
 		}
 
 		$d = json_decode( $cuerpo, true );
 		if ( ! is_array( $d ) ) {
-			return array( '__fallo' => self::fallo( 'respuesta que no es JSON' ) );
+			/* Con un trozo del cuerpo: este caso es casi siempre un proxy
+			   corporativo o un cortafuegos de aplicación devolviendo una
+			   página HTML con 200, y las primeras líneas de esa página
+			   dicen cuál. Sin ellas, el panel solo puede decir «respuesta
+			   que no es JSON», que no lleva a ninguna parte. */
+			return array( '__fallo' => self::fallo( 'respuesta que no es JSON: ' . self::recortar( $cuerpo ) ) );
 		}
 		return $d;
 	}
@@ -301,14 +370,20 @@ final class UHP_LLM {
 				),
 			),
 			'messages'   => $mensajes,
-			'tools'      => self::herramientas_claude( $pet['herramientas'] ),
+			'output_config' => array( 'effort' => isset( $pet['esfuerzo'] ) ? $pet['esfuerzo'] : 'low' ),
+		);
+
+		/* El bloque de herramientas SOLO si hay alguna. Véase la nota de
+		   `sin_herramientas()`: una lista vacía no es «ninguna
+		   herramienta», es una declaración mal formada. */
+		if ( ! self::sin_herramientas( $pet ) ) {
+			$cuerpo['tools'] = self::herramientas_claude( $pet['herramientas'] );
 			/* `auto` y no `any`: forzar la llamada a una herramienta
 			   devuelve 400 en los modelos actuales, y además aquí no se
 			   quiere forzar nada —hay preguntas que se contestan sin
 			   tocar el tablero—. */
-			'tool_choice' => array( 'type' => 'auto' ),
-			'output_config' => array( 'effort' => isset( $pet['esfuerzo'] ) ? $pet['esfuerzo'] : 'low' ),
-		);
+			$cuerpo['tool_choice'] = array( 'type' => 'auto' );
+		}
 
 		$d = self::pedir(
 			'https://api.anthropic.com/v1/messages',
@@ -465,24 +540,29 @@ final class UHP_LLM {
 			);
 		}
 
+		$cuerpo = array(
+			'model'             => $modelo,
+			// El sistema va en su propio campo, no como un mensaje
+			// con rol dentro del historial.
+			'instructions'      => $pet['sistema'],
+			'input'             => $entrada,
+			'max_output_tokens' => self::TOPE_SALIDA,
+			/* NO se guarda la conversación en el proveedor. Por
+			   omisión la almacena, y lo que pasa por aquí son las
+			   preguntas de ciudadanos a una entidad pública: no hay
+			   ninguna razón para dejar una copia en casa ajena. */
+			'store'             => false,
+		);
+
+		if ( ! self::sin_herramientas( $pet ) ) {
+			$cuerpo['tools']       = $herramientas;
+			$cuerpo['tool_choice'] = 'auto';
+		}
+
 		$d = self::pedir(
 			'https://api.openai.com/v1/responses',
 			array( 'Authorization' => 'Bearer ' . $pet['clave'] ),
-			array(
-				'model'             => $modelo,
-				// El sistema va en su propio campo, no como un mensaje
-				// con rol dentro del historial.
-				'instructions'      => $pet['sistema'],
-				'input'             => $entrada,
-				'tools'             => $herramientas,
-				'tool_choice'       => 'auto',
-				'max_output_tokens' => self::TOPE_SALIDA,
-				/* NO se guarda la conversación en el proveedor. Por
-				   omisión la almacena, y lo que pasa por aquí son las
-				   preguntas de ciudadanos a una entidad pública: no hay
-				   ninguna razón para dejar una copia en casa ajena. */
-				'store'             => false,
-			)
+			$cuerpo
 		);
 		if ( isset( $d['__fallo'] ) ) {
 			return $d['__fallo'];
@@ -615,6 +695,29 @@ final class UHP_LLM {
 
 		$modelo_ruta = ( 0 === strpos( $modelo, 'models/' ) ) ? $modelo : 'models/' . $modelo;
 
+		$cuerpo = array(
+			// El sistema es un Content aparte, no un rol del historial.
+			'systemInstruction' => array( 'parts' => array( array( 'text' => $pet['sistema'] ) ) ),
+			'contents'          => $contenidos,
+			'generationConfig'  => array( 'maxOutputTokens' => self::TOPE_SALIDA ),
+		);
+
+		/* AQUÍ ESTABA EL FALLO que rechazaba la verificación con un 400.
+		   El bloque se construía siempre, de modo que una petición sin
+		   herramientas —la de verificar la clave, que es justo la que un
+		   administrador ejecuta primero— mandaba
+		   `"tools":[{"functionDeclarations":[]}]`. Gemini exige al menos
+		   una declaración dentro de cada Tool y rechaza la petición
+		   ENTERA, no solo el bloque. Por eso fallaba la verificación
+		   mientras una conversación de verdad funcionaba: esa sí lleva
+		   las diez herramientas. */
+		if ( ! self::sin_herramientas( $pet ) ) {
+			$cuerpo['tools']      = array( array( 'functionDeclarations' => $declaraciones ) );
+			$cuerpo['toolConfig'] = array(
+				'functionCallingConfig' => array( 'mode' => 'AUTO' ),
+			);
+		}
+
 		$d = self::pedir(
 			'https://generativelanguage.googleapis.com/v1beta/' . $modelo_ruta . ':generateContent',
 			/* La clave en CABECERA y no en la cadena de consulta. Las dos
@@ -622,16 +725,7 @@ final class UHP_LLM {
 			   accesos del servidor, en el del proxy y en cualquier traza
 			   de error que alguien pegue en un correo. */
 			array( 'x-goog-api-key' => $pet['clave'] ),
-			array(
-				// El sistema es un Content aparte, no un rol del historial.
-				'systemInstruction' => array( 'parts' => array( array( 'text' => $pet['sistema'] ) ) ),
-				'contents'          => $contenidos,
-				'tools'             => array( array( 'functionDeclarations' => $declaraciones ) ),
-				'toolConfig'        => array(
-					'functionCallingConfig' => array( 'mode' => 'AUTO' ),
-				),
-				'generationConfig'  => array( 'maxOutputTokens' => self::TOPE_SALIDA ),
-			)
+			$cuerpo
 		);
 		if ( isset( $d['__fallo'] ) ) {
 			return $d['__fallo'];

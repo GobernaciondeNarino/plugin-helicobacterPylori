@@ -308,7 +308,10 @@ cada cosa.
 
 Puesta en marcha, definiciones de las herramientas y CSP en
 [`docs/voz/puesta-en-marcha.md`](docs/voz/puesta-en-marcha.md). El análisis de
-protección de datos, en [`docs/voz/privacidad.md`](docs/voz/privacidad.md).
+protección de datos, en [`docs/voz/privacidad.md`](docs/voz/privacidad.md). Y
+qué significa cada error del panel, con las líneas que el plugin escribe en el
+registro y en la consola, en
+[`docs/voz/diagnostico.md`](docs/voz/diagnostico.md).
 
 ---
 
@@ -316,8 +319,8 @@ protección de datos, en [`docs/voz/privacidad.md`](docs/voz/privacidad.md).
 
 ```bash
 npm install          # instala Playwright
-npm run test:datos   # 590 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 127 pruebas de navegador
+npm run test:datos   # 614 comprobaciones de la capa de datos, sin WordPress
+npm test             # lo anterior más 130 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los

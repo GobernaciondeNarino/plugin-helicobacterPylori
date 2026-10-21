@@ -907,8 +907,8 @@ final class UHP_Voz {
 
 		if ( empty( $r['ok'] ) ) {
 			self::cuota_devolver();
-			if ( '' !== $r['error'] && function_exists( 'error_log' ) ) {
-				error_log( '[URKUNINA 5000] voz/chat: ' . $r['error'] ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			if ( '' !== $r['error'] ) {
+				self::anotar( 'voz/chat', $r['error'] );
 			}
 			return new \WP_Error(
 				'uhp_voz_proveedor',
@@ -1037,14 +1037,16 @@ final class UHP_Voz {
 		);
 
 		if ( is_wp_error( $r ) ) {
+			// Antes esta rama era muda: el no-200 se registraba y el fallo
+			// de transporte no, que es justo el que no deja rastro en
+			// ningún otro sitio.
+			self::anotar( 'voz/hablar', 'transporte: ' . ( method_exists( $r, 'get_error_message' ) ? $r->get_error_message() : '' ) );
 			return new \WP_Error( 'uhp_voz_red', self::textos()['sin_sesion'], array( 'status' => 502 ) );
 		}
 
 		$codigo = (int) wp_remote_retrieve_response_code( $r );
 		if ( 200 !== $codigo ) {
-			if ( function_exists( 'error_log' ) ) {
-				error_log( '[URKUNINA 5000] voz/hablar: ' . $codigo . ' ' . substr( (string) wp_remote_retrieve_body( $r ), 0, 200 ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			}
+			self::anotar( 'voz/hablar', 'http ' . $codigo . ': ' . substr( (string) wp_remote_retrieve_body( $r ), 0, 200 ) . ' · voz=' . $voz . ' modelo=' . $modelo );
 			return new \WP_Error( 'uhp_voz_proveedor', self::textos()['sin_sesion'], array( 'status' => 502 ) );
 		}
 
@@ -1072,6 +1074,14 @@ final class UHP_Voz {
 	 * @return array|\WP_Error
 	 */
 	private static function sanear_conversacion( $crudo ) {
+		/* Lo descartado se CUENTA. Esta función tira cosas en nueve
+		   puntos distintos y la respuesta sigue siendo 200, de modo que
+		   ni el visitante ni el administrador se enteraban. El caso que
+		   de verdad importa es el de una llamada a una herramienta cuyo
+		   nombre ya no existe —lo que pasa al actualizar el plugin con
+		   una pestaña abierta—: el asistente se queda sin poder hacer lo
+		   que acaba de anunciar y nada lo explica. */
+		$tirado = array();
 		if ( ! is_array( $crudo ) || ! $crudo ) {
 			return new \WP_Error( 'uhp_voz_vacio', __( 'No hay conversación.', 'urkunina-5000' ), array( 'status' => 400 ) );
 		}
@@ -1120,6 +1130,7 @@ final class UHP_Voz {
 					// Solo herramientas que este plugin declara. Un nombre
 					// inventado no llega al proveedor.
 					if ( ! isset( $nombres[ $l['nombre'] ] ) ) {
+						$tirado[] = 'llamada a herramienta desconocida «' . sanitize_text_field( mb_substr( (string) $l['nombre'], 0, 40 ) ) . '»';
 						continue;
 					}
 					$llamadas[] = array(
@@ -1152,6 +1163,7 @@ final class UHP_Voz {
 						continue;
 					}
 					if ( ! isset( $nombres[ $r['nombre'] ] ) ) {
+						$tirado[] = 'resultado de herramienta desconocida «' . sanitize_text_field( mb_substr( (string) $r['nombre'], 0, 40 ) ) . '»';
 						continue;
 					}
 					$salida_tool = isset( $r['salida'] ) ? (string) $r['salida'] : '';
@@ -1191,6 +1203,16 @@ final class UHP_Voz {
 		}
 		if ( ! $salida ) {
 			return new \WP_Error( 'uhp_voz_vacio', __( 'No hay conversación.', 'urkunina-5000' ), array( 'status' => 400 ) );
+		}
+
+		/* Una sola línea con lo descartado. No se interrumpe la
+		   conversación por esto —el visitante no tiene la culpa ni puede
+		   hacer nada— pero deja de pasar en silencio: es la pista de que
+		   el navegador trae una versión del plugin distinta de la del
+		   servidor, que es lo que ocurre al actualizar con pestañas
+		   abiertas. */
+		if ( $tirado ) {
+			self::anotar( 'voz/chat', 'se descartó del historial: ' . implode( ', ', array_unique( $tirado ) ) );
 		}
 
 		return $salida;
@@ -1238,9 +1260,14 @@ final class UHP_Voz {
 			return;
 		}
 		set_transient( $marca, 1, DAY_IN_SECONDS );
-		error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		// La ruta del mensaje decía `/voz/sesion`, que es de la
+		// arquitectura anterior y ya no existe: quien siguiera la
+		// instrucción no encontraría una sola línea en el registro de
+		// accesos y concluiría que no hubo tráfico.
+		self::anotar(
+			'cupo',
 			sprintf(
-				'[URKUNINA 5000] El asistente de voz agotó su cupo diario de %d sesiones. Si no lo esperaba, revise el registro de accesos a /wp-json/urkunina/v1/voz/sesion.',
+				'El asistente agotó su cupo diario de %d preguntas. Si no lo esperaba, revise el registro de accesos a /wp-json/urkunina/v1/voz/chat.',
 				(int) $c['cuota_dia']
 			)
 		);
@@ -1385,6 +1412,31 @@ final class UHP_Voz {
 		return (int) get_transient( self::clave_cuota() );
 	}
 
+	/**
+	 * Deja constancia en el registro de errores del sitio.
+	 *
+	 * Existe porque el camino que más falta hacía era el único mudo: el
+	 * botón «Verificar las claves» no escribía una sola línea, de modo
+	 * que cuando el panel decía algo incompleto no quedaba dónde mirar.
+	 *
+	 * Todo con el mismo prefijo, para que `grep '[URKUNINA 5000]'` sobre
+	 * el registro saque la historia entera del asistente y no haya que
+	 * saber de antemano qué buscar.
+	 *
+	 * No lleva ni claves ni la pregunta del visitante: lo que se le pasa
+	 * son códigos, nombres de modelo y cuerpos de error del proveedor, ya
+	 * recortados por quien llama.
+	 *
+	 * @param string $donde Qué parte habla.
+	 * @param string $que   Qué pasó.
+	 */
+	private static function anotar( $donde, $que ) {
+		if ( ! function_exists( 'error_log' ) ) {
+			return;
+		}
+		error_log( '[URKUNINA 5000] ' . $donde . ': ' . trim( preg_replace( '/\s+/', ' ', (string) $que ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+	}
+
 	/* ================================================================= */
 	/* Verificación                                                      */
 	/* ================================================================= */
@@ -1423,6 +1475,15 @@ final class UHP_Voz {
 
 		set_transient( self::VERIF, $informe, 12 * HOUR_IN_SECONDS );
 
+		self::anotar(
+			'verificar',
+			sprintf(
+				'modelo=%s voz=%s',
+				true === $informe['llm']['ok'] ? 'ok' : 'FALLO · ' . $informe['llm']['mensaje'],
+				null === $informe['voz']['ok'] ? 'apagada' : ( $informe['voz']['ok'] ? 'ok' : 'FALLO · ' . $informe['voz']['mensaje'] )
+			)
+		);
+
 		return $informe;
 	}
 
@@ -1449,7 +1510,30 @@ final class UHP_Voz {
 	 */
 	private static function verificar_llm( $c ) {
 		$clave = self::clave_llm();
-		$nom   = UHP_LLM::nombre( $c['proveedor'] );
+
+		/* SANEADOS, igual que `ruta_chat()`. Antes se probaban en crudo y
+		   el informe no decía la verdad en los dos sentidos: un modelo
+		   escrito con un espacio fallaba aquí con 400 y funcionaba en
+		   producción —porque la ruta lo descarta y usa el recomendado—, y
+		   al revés el panel podía dar por bueno un nombre que la ruta
+		   nunca llega a usar. Una verificación tiene que probar lo que
+		   corre, no lo que está escrito. */
+		$proveedor = self::sanear_proveedor( $c['proveedor'] );
+		$pedido    = self::sanear_modelo( $c['modelo'] );
+		$nom       = UHP_LLM::nombre( $proveedor );
+
+		// Y se dice CUÁL se probó y por qué, que es la otra mitad del
+		// problema: «Modelo solicitado: X» no decía si X era lo que el
+		// administrador escribió o el valor por omisión del plugin.
+		if ( '' !== $pedido ) {
+			$modelo = $pedido;
+			$origen = __( 'el que usted escribió', 'urkunina-5000' );
+		} else {
+			$modelo = UHP_LLM::modelo_por_defecto( $proveedor );
+			$origen = '' === trim( (string) $c['modelo'] )
+				? __( 'el recomendado, porque dejó el campo vacío', 'urkunina-5000' )
+				: __( 'el recomendado: lo que usted escribió no tiene forma de nombre de modelo y se descartó', 'urkunina-5000' );
+		}
 
 		if ( '' === $clave ) {
 			return array(
@@ -1462,9 +1546,9 @@ final class UHP_Voz {
 
 		$r = UHP_LLM::conversar(
 			array(
-				'proveedor'    => $c['proveedor'],
+				'proveedor'    => $proveedor,
 				'clave'        => $clave,
-				'modelo'       => $c['modelo'],
+				'modelo'       => $modelo,
 				'esfuerzo'     => 'low',
 				'sistema'      => 'Responde con una sola palabra.',
 				'mensajes'     => array(
@@ -1477,22 +1561,47 @@ final class UHP_Voz {
 			)
 		);
 
+		$ficha = sprintf(
+			/* translators: 1: nombre del modelo, 2: de dónde sale ese nombre. */
+			__( 'Modelo probado: %1$s (%2$s).', 'urkunina-5000' ),
+			$modelo,
+			$origen
+		);
+
 		if ( empty( $r['ok'] ) ) {
-			$modelo = '' !== $c['modelo'] ? $c['modelo'] : UHP_LLM::modelo_por_defecto( $c['proveedor'] );
+			self::anotar(
+				'verificar/' . $proveedor,
+				sprintf( 'modelo=%s codigo=%d %s', $modelo, isset( $r['codigo'] ) ? (int) $r['codigo'] : 0, isset( $r['error'] ) ? $r['error'] : '' )
+			);
 
 			return array(
 				'ok'      => false,
 				'mensaje' => sprintf(
-					/* translators: 1: proveedor, 2: motivo interno. */
+					/* translators: 1: proveedor, 2: motivo. */
 					__( '%1$s no respondió: %2$s', 'urkunina-5000' ),
 					$nom,
 					self::motivo( isset( $r['error'] ) ? $r['error'] : '', isset( $r['codigo'] ) ? (int) $r['codigo'] : 0 )
 				),
-				'detalle' => sprintf(
-					/* translators: %s: nombre del modelo. */
-					__( 'Modelo solicitado: %s', 'urkunina-5000' ),
-					$modelo
+				'detalle' => $ficha,
+			);
+		}
+
+		/* Un 200 no es una respuesta. El proveedor puede contestar sin
+		   texto —corte por longitud, bloqueo de seguridad— y hasta ahora
+		   eso se publicaba como «responde» con un «Contestó: «»» vacío,
+		   que es peor que un error: dice que está todo bien. */
+		$dicho = trim( sanitize_text_field( (string) $r['texto'] ) );
+		if ( '' === $dicho && empty( $r['llamadas'] ) ) {
+			self::anotar( 'verificar/' . $proveedor, 'respuesta 200 sin texto ni llamadas, modelo=' . $modelo );
+
+			return array(
+				'ok'      => false,
+				'mensaje' => sprintf(
+					/* translators: %s: proveedor. */
+					__( '%s aceptó la petición pero no devolvió nada.', 'urkunina-5000' ),
+					$nom
 				),
+				'detalle' => $ficha . ' ' . __( 'Suele ser un corte por longitud o un filtro de seguridad del proveedor. La clave y el modelo son correctos.', 'urkunina-5000' ),
 			);
 		}
 
@@ -1500,11 +1609,10 @@ final class UHP_Voz {
 			'ok'      => true,
 			/* translators: %s: nombre del proveedor. */
 			'mensaje' => sprintf( __( '%s responde.', 'urkunina-5000' ), $nom ),
-			'detalle' => sprintf(
-				/* translators: 1: modelo, 2: lo que contestó. */
-				__( 'Modelo %1$s. Contestó: «%2$s»', 'urkunina-5000' ),
-				'' !== $c['modelo'] ? $c['modelo'] : UHP_LLM::modelo_por_defecto( $c['proveedor'] ),
-				trim( mb_substr( sanitize_text_field( (string) $r['texto'] ), 0, 60 ) )
+			'detalle' => $ficha . ' ' . sprintf(
+				/* translators: %s: lo que contestó el modelo. */
+				__( 'Contestó: «%s»', 'urkunina-5000' ),
+				mb_substr( $dicho, 0, 60 )
 			),
 		);
 	}
@@ -1543,25 +1651,58 @@ final class UHP_Voz {
 			return array(
 				'ok'      => false,
 				'mensaje' => sprintf(
-					/* translators: %s: motivo interno. */
+					/* translators: %s: motivo. */
 					__( 'ElevenLabs no respondió: %s', 'urkunina-5000' ),
 					$lista['__error']
 				),
-				'detalle' => '',
+				// Contra qué host se preguntó. Con el filtro de residencia
+				// de datos puesto, la verificación y la síntesis pueden ir
+				// a dominios distintos y el panel no lo decía.
+				'detalle' => sprintf(
+					/* translators: %s: dominio consultado. */
+					__( 'Se consultó %s/v2/voices.', 'urkunina-5000' ),
+					self::api_base()
+				),
 			);
 		}
 
 		if ( ! isset( $lista[ $voz ] ) ) {
+			/* AQUÍ ESTABA EL SEGUNDO FALLO que vio el administrador: se
+			   listaban los NOMBRES («Lumina», «Luis Casiano») cuando el
+			   campo que hay que rellenar pide el IDENTIFICADOR. No se
+			   podía copiar nada de ese texto. Ahora va el par entero, se
+			   dice cuál está puesto ahora, y si la lista se corta se
+			   dice cuántas faltan en vez de callarlo. */
+			$pares = array();
+			foreach ( $lista as $id => $nombre ) {
+				$pares[] = $nombre . ' → ' . $id;
+			}
+			$muestra = array_slice( $pares, 0, 8 );
+			$resto   = count( $pares ) - count( $muestra );
+
+			$detalle = empty( $pares )
+				? __( 'La cuenta no tiene ninguna voz guardada. Añada una desde la biblioteca de ElevenLabs y vuelva a verificar.', 'urkunina-5000' )
+				: sprintf(
+					/* translators: 1: identificador configurado, 2: lista de voces. */
+					__( 'Configurado ahora: %1$s. Voces de la cuenta, con el identificador que hay que copiar: %2$s', 'urkunina-5000' ),
+					$voz,
+					implode( ' · ', $muestra )
+				);
+
+			if ( $resto > 0 ) {
+				$detalle .= ' ' . sprintf(
+					/* translators: %d: cuántas voces más hay. */
+					_n( '…y %d voz más en la lista desplegable de abajo.', '…y %d voces más en la lista desplegable de abajo.', $resto, 'urkunina-5000' ),
+					$resto
+				);
+			}
+
+			self::anotar( 'verificar/voz', 'voz configurada no está en la cuenta: ' . $voz );
+
 			return array(
 				'ok'      => false,
 				'mensaje' => __( 'La clave sirve, pero esa voz no está en la cuenta.', 'urkunina-5000' ),
-				'detalle' => empty( $lista )
-					? __( 'La cuenta no tiene ninguna voz guardada. Añada una desde la biblioteca de ElevenLabs y vuelva a verificar.', 'urkunina-5000' )
-					: sprintf(
-						/* translators: %s: nombres de voces separados por comas. */
-						__( 'Voces disponibles: %s', 'urkunina-5000' ),
-						implode( ', ', array_slice( array_values( $lista ), 0, 8 ) )
-					),
+				'detalle' => $detalle,
 			);
 		}
 
@@ -1596,8 +1737,12 @@ final class UHP_Voz {
 			}
 		}
 
+		/* `api_base()` y NO la constante: es la que usa la síntesis, y
+		   pasa por el filtro de residencia de datos. Verificar contra un
+		   host y sintetizar contra otro produce un informe en verde y un
+		   panel mudo. */
 		$r = wp_remote_get(
-			self::API . '/v2/voices?page_size=100',
+			self::api_base() . '/v2/voices?page_size=100',
 			array(
 				'timeout' => 15,
 				'headers' => array( 'xi-api-key' => $clave ),
@@ -1605,17 +1750,32 @@ final class UHP_Voz {
 		);
 
 		if ( is_wp_error( $r ) ) {
-			return array( '__error' => __( 'no se pudo abrir la conexión', 'urkunina-5000' ) );
+			$detalle = method_exists( $r, 'get_error_message' ) ? (string) $r->get_error_message() : '';
+			self::anotar( 'voces', 'transporte: ' . $detalle );
+			return array( '__error' => self::motivo( 'transporte: ' . $detalle, 0 ) );
 		}
 
 		$codigo = (int) wp_remote_retrieve_response_code( $r );
+		$crudo  = (string) wp_remote_retrieve_body( $r );
+
 		if ( 200 !== $codigo ) {
-			return array( '__error' => self::motivo( '', $codigo ) );
+			// El cuerpo SÍ se lee: ElevenLabs explica en él si la clave
+			// está revocada, si le falta el permiso de lectura de voces o
+			// si la cuenta está suspendida, y son tres arreglos distintos.
+			self::anotar( 'voces', 'http ' . $codigo . ': ' . substr( $crudo, 0, 200 ) );
+			return array( '__error' => self::motivo( 'http ' . $codigo . ': ' . $crudo, $codigo ) );
 		}
 
-		$json = json_decode( (string) wp_remote_retrieve_body( $r ), true );
+		$json = json_decode( $crudo, true );
 		if ( ! is_array( $json ) || ! isset( $json['voices'] ) || ! is_array( $json['voices'] ) ) {
-			return array( '__error' => __( 'respuesta inesperada', 'urkunina-5000' ) );
+			self::anotar( 'voces', 'respuesta inesperada: ' . substr( $crudo, 0, 200 ) );
+			return array(
+				'__error' => sprintf(
+					/* translators: %s: trozo de la respuesta. */
+					__( 'respuesta inesperada: %s', 'urkunina-5000' ),
+					sanitize_text_field( mb_substr( trim( preg_replace( '/\s+/', ' ', $crudo ) ), 0, 120 ) )
+				),
+			);
 		}
 
 		$salida = array();
@@ -1640,34 +1800,124 @@ final class UHP_Voz {
 	/**
 	 * Traduce un fallo a algo que un administrador pueda accionar.
 	 *
-	 * @param string $error  Motivo interno.
+	 * La traducción del código va PRIMERO y el texto del proveedor
+	 * DETRÁS, nunca en su lugar. Esa fue la lección del 400 de Gemini: el
+	 * proveedor explicaba con todas las letras qué campo estaba mal
+	 * —«at least one function declaration is required»—, el plugin se
+	 * guardaba esa frase, y aquí se tiraba para publicar «el proveedor
+	 * rechazó la petición por mal formada», que no lleva a ninguna parte.
+	 * El diagnóstico existía y lo perdía esta función.
+	 *
+	 * @param string $error  Motivo interno, que puede traer el cuerpo del proveedor.
 	 * @param int    $codigo HTTP.
 	 * @return string
 	 */
 	private static function motivo( $error, $codigo ) {
+		$frase = '';
+
 		if ( 401 === $codigo || 403 === $codigo ) {
-			return __( 'la clave no es válida o no tiene permiso', 'urkunina-5000' );
-		}
-		if ( 404 === $codigo ) {
-			return __( 'el modelo o la voz no existen con ese nombre', 'urkunina-5000' );
-		}
-		if ( 429 === $codigo ) {
-			return __( 'la cuenta llegó a su límite de peticiones', 'urkunina-5000' );
-		}
-		if ( 402 === $codigo ) {
-			return __( 'la cuenta no tiene saldo', 'urkunina-5000' );
-		}
-		if ( $codigo >= 500 ) {
-			return __( 'el proveedor tuvo un fallo interno; no es un problema de esta configuración', 'urkunina-5000' );
-		}
-		if ( 'transporte' === $error ) {
-			return __( 'este servidor no pudo abrir la conexión (cortafuegos o DNS)', 'urkunina-5000' );
-		}
-		if ( 400 === $codigo ) {
-			return __( 'el proveedor rechazó la petición por mal formada', 'urkunina-5000' );
+			$frase = __( 'la clave no es válida o no tiene permiso', 'urkunina-5000' );
+		} elseif ( 404 === $codigo ) {
+			$frase = __( 'el modelo o la voz no existen con ese nombre', 'urkunina-5000' );
+		} elseif ( 429 === $codigo ) {
+			$frase = __( 'la cuenta llegó a su límite de peticiones', 'urkunina-5000' );
+		} elseif ( 402 === $codigo ) {
+			$frase = __( 'la cuenta no tiene saldo', 'urkunina-5000' );
+		} elseif ( $codigo >= 500 ) {
+			$frase = __( 'el proveedor tuvo un fallo interno; no es un problema de esta configuración', 'urkunina-5000' );
+		} elseif ( 400 === $codigo ) {
+			$frase = __( 'el proveedor rechazó la petición', 'urkunina-5000' );
+		} elseif ( 0 === strpos( (string) $error, 'transporte' ) ) {
+			$frase = __( 'este servidor no pudo abrir la conexión (cortafuegos, DNS o certificado)', 'urkunina-5000' );
 		}
 
-		return '' !== $error ? sanitize_text_field( $error ) : __( 'motivo desconocido', 'urkunina-5000' );
+		$dicho = self::dicho_por_proveedor( $error );
+
+		if ( '' === $frase ) {
+			return '' !== $dicho ? $dicho : __( 'motivo desconocido', 'urkunina-5000' );
+		}
+
+		return '' !== $dicho
+			/* translators: 1: explicación del plugin, 2: lo que contestó el proveedor. */
+			? sprintf( __( '%1$s. Dijo: %2$s', 'urkunina-5000' ), $frase, $dicho )
+			: $frase;
+	}
+
+	/**
+	 * Saca del motivo interno lo que de verdad contestó el proveedor.
+	 *
+	 * El motivo llega con la forma «http 400: {json}» o «transporte: …».
+	 * De un JSON de error se extrae el mensaje legible, que es la línea
+	 * que el administrador necesita; si no se reconoce la forma, se
+	 * devuelve el trozo tal cual, saneado. Es texto ajeno y se imprime en
+	 * el panel, de modo que pasa por `sanitize_text_field()` igual que
+	 * cualquier otra cosa que venga de fuera.
+	 *
+	 * @param string $error Motivo interno.
+	 * @return string
+	 */
+	private static function dicho_por_proveedor( $error ) {
+		$e = trim( (string) $error );
+		if ( '' === $e ) {
+			return '';
+		}
+
+		$cuerpo = $e;
+		if ( preg_match( '/^http\s+\d+:\s*(.*)$/s', $e, $m ) ) {
+			$cuerpo = $m[1];
+		} elseif ( 0 === strpos( $e, 'transporte: ' ) ) {
+			$cuerpo = substr( $e, strlen( 'transporte: ' ) );
+		}
+
+		$json = json_decode( $cuerpo, true );
+		if ( is_array( $json ) ) {
+			/* Los tres proveedores y ElevenLabs anidan el mensaje en
+			   sitios distintos. Se buscan todos en vez de elegir uno:
+			   acertar con el proveedor de turno no vale la pena cuando
+			   probar los cuatro cuesta lo mismo. */
+			$rutas = array(
+				array( 'error', 'message' ),       // Gemini y OpenAI.
+				array( 'error', 'detail' ),
+				array( 'message' ),                // Claude.
+				array( 'detail', 'message' ),      // ElevenLabs.
+				array( 'detail' ),
+			);
+			foreach ( $rutas as $ruta ) {
+				$v = $json;
+				foreach ( $ruta as $paso ) {
+					if ( ! is_array( $v ) || ! isset( $v[ $paso ] ) ) {
+						$v = null;
+						break;
+					}
+					$v = $v[ $paso ];
+				}
+				if ( is_string( $v ) && '' !== trim( $v ) ) {
+					$cuerpo = $v;
+					break;
+				}
+			}
+		}
+
+		/* Cualquier URL, tapada. `UHP_LLM::sin_url()` ya lo hace con el
+		   mensaje del transporte, pero esto es lo que CONTESTÓ el
+		   proveedor y algunos devuelven la petición entera en el error:
+		   la ruta y la cadena de consulta son donde puede ir una clave, y
+		   esto se va a imprimir en una página del panel. Dos veces no
+		   sobra cuando lo que está en juego es publicar un secreto. */
+		$cuerpo = preg_replace_callback(
+			'#\bhttps?://([^/\s]+)\S*#i',
+			function ( $m ) {
+				return $m[1] . '/…';
+			},
+			(string) $cuerpo
+		);
+
+		$cuerpo = trim( preg_replace( '/\s+/', ' ', (string) $cuerpo ) );
+		if ( '' === $cuerpo || '(cuerpo vacío)' === $cuerpo ) {
+			return '';
+		}
+
+		return sanitize_text_field( mb_substr( $cuerpo, 0, 240 ) );
 	}
 
 
