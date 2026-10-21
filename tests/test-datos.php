@@ -1395,7 +1395,7 @@ comprobar(
 	'Ni qué proveedor está detrás, que el navegador no necesita saber'
 );
 
-$permitidas = array( 'entrada', 'texto', 'voz', 'aviso', 'recordar', 'avisoVersion', 'turnos', 'rutaChat', 'rutaVoz' );
+$permitidas = array( 'micro', 'voz', 'aviso', 'recordar', 'avisoVersion', 'turnos', 'rutaChat', 'rutaVoz' );
 $sobran     = array_diff( array_keys( $front ), $permitidas );
 comprobar(
 	! $sobran,
@@ -1563,24 +1563,42 @@ comprobar(
 	'Entrada y visibilidad caen en el valor más conservador ante un valor extraño'
 );
 
-/* La receta de CSP del canal escrito. No hay audio que reproducir, de
-   modo que tampoco hace falta blob:. Una entidad que solo quiera el canal
-   escrito no tiene que tocar su política por nada. */
+/* LA SEPARACIÓN QUE ARREGLÓ EL SILENCIO. El micrófono es una forma de
+   ENTRAR —la pone el navegador y no cuesta nada— y la voz una de SALIR
+   —la pone ElevenLabs—. Estaban en la misma condición, y por eso quien
+   entraba escribiendo no recibía respuesta hablada ni con la voz
+   perfectamente configurada. Ahora la CSP depende de que haya VOZ. */
 $solo_texto            = $lleno;
 $solo_texto['entrada'] = 'texto';
 update_option( 'uhp_voz', $solo_texto );
 comprobar(
-	! UHP_Voz::hosts_csp(),
-	'En modo escrito la receta de CSP queda vacía: no hay audio que servir'
+	isset( UHP_Voz::hosts_csp()['media-src'] ),
+	'Sin micrófono la CSP sigue necesitando media-src: la respuesta se lee en alto igual'
 );
-
-// En modo escrito el campo de escritura es la ÚNICA entrada: apagarlo
-// dejaría un panel sin forma de preguntar nada.
-$solo_texto['texto'] = 0;
-update_option( 'uhp_voz', $solo_texto );
 comprobar(
-	true === UHP_Voz::config_front()['texto'],
-	'En modo escrito el campo de texto no se puede apagar'
+	UHP_Voz::con_voz() && ! UHP_Voz::con_micro(),
+	'Se puede tener voz sin micrófono, que antes era imposible de expresar'
+);
+$mudo_con_micro            = $lleno;
+$mudo_con_micro['voz_id']  = '';
+$mudo_con_micro['entrada'] = 'ambos';
+update_option( 'uhp_voz', $mudo_con_micro );
+comprobar(
+	! UHP_Voz::con_voz() && UHP_Voz::con_micro() && ! UHP_Voz::hosts_csp(),
+	'Y micrófono sin voz: se dicta la pregunta y se lee la respuesta, sin tocar la CSP'
+);
+update_option( 'uhp_voz', $solo_texto );
+
+/* El cuadro de escritura ya no es un ajuste: está SIEMPRE. Era la
+   alternativa equivalente que pide la Resolución 1519 de 2020, y hacerla
+   depender de una casilla era dejar que una configuración la apagara. */
+comprobar(
+	! array_key_exists( 'texto', UHP_Voz::config_front() ),
+	'El campo de escritura ya no es un ajuste: no hay nada que apagar'
+);
+comprobar(
+	! array_key_exists( 'texto', UHP_Voz::por_defecto() ),
+	'Y el ajuste desapareció también de los valores por omisión'
 );
 
 // Y al navegador no viaja el identificador de la voz, ni saneado: no lo
@@ -1595,13 +1613,15 @@ comprobar(
 	true === $fv['voz'] && false === strpos( wp_json_encode( $fv ), '21m00Tcm4TlvDq8ikWAM' ),
 	'Al navegador le llega que HAY voz, nunca cuál'
 );
-// Y en el canal escrito no hay voz que reproducir aunque esté
-// configurada: pedirle al proveedor que sintetice algo que nadie va a oír
-// se paga igual, por carácter.
+/* Y SIN micrófono la voz sigue viajando. Es la comprobación que habría
+   impedido el fallo que vio el usuario: antes aquí salía false, de modo
+   que el navegador no pedía audio nunca y el asistente mostraba texto
+   sin conversar. */
 update_option( 'uhp_voz', $solo_texto );
+$fv_txt = UHP_Voz::config_front();
 comprobar(
-	false === UHP_Voz::config_front()['voz'],
-	'En modo escrito no viaja voz aunque la cuenta la tenga configurada'
+	true === $fv_txt['voz'] && false === $fv_txt['micro'],
+	'Sin micrófono la respuesta se lee en alto igual: entrar y salir son cosas distintas'
 );
 
 /* El marcado. El aviso previo es un AJUSTE, no una puerta: apagado —que
@@ -1611,25 +1631,41 @@ $solo_texto['voz_id'] = '';
 update_option( 'uhp_voz', $solo_texto );
 $html_txt = UHP_Voz::control_html( 'x' );
 comprobar(
-	false !== strpos( $html_txt, 'data-uhp-voz-canal="texto"' )
-		&& false === strpos( $html_txt, 'data-uhp-voz-canal="voz"' ),
-	'En modo escrito solo se pinta el lanzador del canal escrito'
+	1 === substr_count( $html_txt, 'data-uhp-voz-accion="abrir"' )
+		&& false !== strpos( $html_txt, '>Asistente<' ),
+	'Un solo lanzador, y se llama «Asistente»'
+);
+comprobar(
+	false !== strpos( $html_txt, 'data-uhp-voz-micro="no"' ),
+	'Y dice que esta página no ofrece micrófono, que es lo único que cambia'
 );
 comprobar(
 	false === strpos( $html_txt, '<template' ) && false === strpos( $html_txt, 'uhp-voz__aviso-corto' ),
 	'Con el aviso apagado no se imprime ninguna plantilla de aviso'
 );
 
-/* Encendido, en cambio, cada canal recibe el suyo: mandar al navegador un
-   texto que describe algo que no puede pasar en esa página es pedir una
-   autorización que sobra. */
+/* Encendido, UNA plantilla, y la que corresponde. Los dos avisos NO se
+   fusionaron al unificar los canales: el de una página con micrófono
+   informa del tratamiento de una muestra de voz —dato biométrico— y el
+   de una sin él no, porque no ocurre. Fusionarlos pediría autorización
+   por algo que no pasa, o la recogería sin informar. Las dos cosas
+   incumplen igual el artículo 9. */
 $solo_texto['aviso'] = 1;
 update_option( 'uhp_voz', $solo_texto );
 $html_txt = UHP_Voz::control_html( 'x' );
 comprobar(
-	false !== strpos( $html_txt, 'data-uhp-voz-zona="aviso-texto"' )
-		&& false === strpos( $html_txt, 'data-uhp-voz-zona="aviso"' ),
-	'Y solo viaja su aviso, no el de la voz'
+	1 === substr_count( $html_txt, '<template' )
+		&& false === strpos( $html_txt, 'permiso para usar el micr' ),
+	'Sin micrófono viaja un solo aviso, y no menciona un micrófono que no se enciende'
+);
+$con_micro            = $solo_texto;
+$con_micro['entrada'] = 'ambos';
+update_option( 'uhp_voz', $con_micro );
+$html_mic = UHP_Voz::control_html( 'x' );
+comprobar(
+	1 === substr_count( $html_mic, '<template' )
+		&& false !== strpos( $html_mic, 'permiso para usar el micr' ),
+	'Con micrófono viaja el otro, que sí informa del dato biométrico'
 );
 $solo_texto['aviso'] = 0;
 update_option( 'uhp_voz', $solo_texto );
@@ -1638,7 +1674,7 @@ update_option( 'uhp_voz', $solo_texto );
    un post lo edita cualquiera con permiso de edición, y por dónde sale la
    voz de un ciudadano no es una decisión de redacción. */
 comprobar(
-	false === strpos( UHP_Voz::control_html( 'x', array( 'entrada' => 'voz' ) ), 'data-uhp-voz-canal="voz"' ),
+	false !== strpos( UHP_Voz::control_html( 'x', array( 'entrada' => 'voz' ) ), 'data-uhp-voz-micro="no"' ),
 	'Un atributo de página no puede encender el micrófono donde el sitio no lo permite'
 );
 $ambos            = $lleno;
@@ -1646,13 +1682,13 @@ $ambos['entrada'] = 'ambos';
 update_option( 'uhp_voz', $ambos );
 $h_ambos = UHP_Voz::control_html( 'x' );
 comprobar(
-	false !== strpos( $h_ambos, 'data-uhp-voz-canal="voz"' )
-		&& false !== strpos( $h_ambos, 'data-uhp-voz-canal="texto"' ),
-	'Con los dos canales se pintan los dos lanzadores'
+	1 === substr_count( $h_ambos, 'data-uhp-voz-accion="abrir"' )
+		&& false !== strpos( $h_ambos, 'data-uhp-voz-micro="si"' ),
+	'Con micrófono sigue habiendo UN solo lanzador: no vuelven los dos'
 );
 comprobar(
-	false === strpos( UHP_Voz::control_html( 'x', array( 'entrada' => 'texto' ) ), 'data-uhp-voz-canal="voz"' ),
-	'Pero una página concreta sí puede quedarse solo con el escrito'
+	false !== strpos( UHP_Voz::control_html( 'x', array( 'entrada' => 'texto' ) ), 'data-uhp-voz-micro="no"' ),
+	'Pero una página concreta sí puede quitarle el micrófono'
 );
 
 // Visibilidad «oculto»: el panel se carga y el botón no se pinta, para que

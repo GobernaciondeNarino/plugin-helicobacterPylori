@@ -27,7 +27,7 @@ $salida = array(
 		'generado_por' => 'tests/generar-herramientas.php desde UHP_Voz::definiciones_herramientas()',
 		'nota'        => 'Las ejecuta el navegador del visitante sobre su propio tablero; el servidor solo transporta la llamada y su resultado. Las que llevan "espera": true devuelven un dato que el modelo necesita para seguir, y la respuesta se detiene hasta tenerlo; las demás solo mueven la pantalla.',
 	),
-	'prompt' => UHP_Voz::prompt_sistema( 'texto' ),
+	'prompt' => UHP_Voz::prompt_sistema(),
 	'herramientas' => UHP_Voz::definiciones_herramientas(),
 );
 

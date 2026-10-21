@@ -263,11 +263,29 @@ asistente lo dice con esas palabras en vez de dejar un botón que falla. Quien
 no quiera ese tratamiento puede dejar el asistente en «solo por escrito», y
 entonces no se pide el micrófono nunca.
 
-**Se puede entrar hablando o escribiendo, y el canal escrito no es el hablado
-con el micrófono apagado:** no se pide el permiso del micrófono, no se manda
-nada a sintetizar —ElevenLabs cobra por carácter leído, y un audio que nadie va
-a oír se factura igual— y las instrucciones que recibe el modelo son otras,
-porque una lista de once subregiones se lee distinto que se escribe.
+**Un botón, «Asistente», y dentro tres controles:** un cuadro de texto, el
+icono de enviar y el icono del micrófono. Nada más. Antes eran dos lanzadores
+—«Preguntar por voz» y «Preguntar por escrito»— y hasta cinco botones dentro
+del panel.
+
+**Dictar y hablar son cosas distintas, y se configuran aparte.** El micrófono
+es una forma de ENTRAR: lo pone el navegador del visitante, no cuesta nada y no
+necesita la clave de ElevenLabs. La voz es una forma de SALIR: la pone
+ElevenLabs desde el servidor. Una instalación puede tener micrófono sin voz,
+voz sin micrófono, las dos o ninguna, y las cuatro son conversaciones
+completas.
+
+Juntarlas en la misma condición era un defecto con consecuencias: una
+conversación abierta por el lanzador escrito no sonaba **nunca**, ni con la voz
+perfectamente configurada. Como el panel se abría casi siempre por ahí, el
+asistente mostraba texto y no conversaba.
+
+**Cada pregunta mueve el tablero.** Las instrucciones que recibe el modelo le
+exigen consultar una herramienta antes de responder —no tiene ni una cifra del
+proyecto en la memoria— y dejar en pantalla aquello de lo que habla: si
+preguntan por un municipio lo selecciona, si preguntan por un indicador lo
+cambia, si preguntan por una subregión la filtra. Y lo dice en una frase, porque
+quien escucha sin mirar necesita saber que la pantalla se movió.
 
 **Nace apagado.** Encenderlo pide el interruptor y la clave del modelo de
 lenguaje, que es quien entiende la pregunta; hasta entonces el tablero sale
@@ -319,8 +337,8 @@ registro y en la consola, en
 
 ```bash
 npm install          # instala Playwright
-npm run test:datos   # 614 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 130 pruebas de navegador
+npm run test:datos   # 619 comprobaciones de la capa de datos, sin WordPress
+npm test             # lo anterior más 131 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los

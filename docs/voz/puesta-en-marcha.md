@@ -89,21 +89,26 @@ la borra. Para eliminar una, escriba `borrar`.
 
 ### Por dónde pregunta el visitante
 
-| | Por voz | Por escrito |
+Hay **un botón**, «Asistente», y dentro tres controles: un cuadro de texto, el
+icono de enviar y el icono del micrófono.
+
+El **cuadro de texto está siempre**, con el micrófono ofrecido o sin él: es la
+alternativa equivalente que pide la Resolución 1519 de 2020 y no puede depender
+de ningún ajuste.
+
+Lo único que se configura es si además aparece el **icono del micrófono**. Y
+conviene no confundirlo con la voz:
+
+| | Micrófono | Voz |
 |---|---|---|
-| Micrófono | Lo pide el **navegador**, no este plugin | **No se pide nunca** |
-| Qué sale de este sitio | Texto: lo que el navegador transcribió | Texto: lo que se tecleó |
-| Lo que factura ElevenLabs | Cada carácter leído en alto | Nada |
-| Instrucciones que recibe el modelo | Resumir: una lista de once no se retiene de oído | Enumerar: se puede releer |
-| CSP que necesita el sitio | `media-src 'self' blob:` | Nada |
+| Qué es | Una forma de **entrar**: dictar la pregunta | Una forma de **salir**: leer la respuesta en alto |
+| Quién lo pone | El **navegador** del visitante | **ElevenLabs**, desde este servidor |
+| Qué necesita | Nada. No usa la clave de ElevenLabs | Clave e identificador de voz |
+| Cómo se apaga | Desmarcando la casilla del panel | Dejando la voz sin configurar |
 
-**Lo recomendable es dejar los dos.** La Resolución 1519 de 2020 pide una
-alternativa equivalente, y el canal escrito es la que sirve a quien no puede
-hablar, no tiene micrófono, usa un navegador sin dictado o está en un sitio
-donde no va a hablarle en voz alta a una página web.
-
-Si la voz no está configurada, el canal escrito aparece de todas formas aunque
-el ajuste diga «solo voz»: quedarse sin ninguno de los dos no es una opción.
+Las cuatro combinaciones son conversaciones completas: micrófono sin voz —se
+dicta y se lee en pantalla—, voz sin micrófono —se escribe y se escucha—, las
+dos, o ninguna.
 
 ### El dictado por micrófono no lo hace este plugin
 

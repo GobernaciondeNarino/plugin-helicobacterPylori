@@ -332,7 +332,7 @@ test.describe('Asistente de voz', () => {
   /** Escribe una pregunta y la envía. */
   async function enviar(page, texto) {
     await page.locator('.uhp-voz__campo').fill(texto);
-    await page.locator('.uhp-voz__forma').getByRole('button', { name: 'Enviar' }).click();
+    await page.locator('[data-uhp-voz-accion="enviar"]').click();
   }
 
   /** Una pregunta completa: se guionan las respuestas y se espera a que
@@ -384,26 +384,19 @@ test.describe('Asistente de voz', () => {
     await expect(page.locator('.uhp-db__mrow')).toHaveCount(55);
   }
 
-  /** Abre el panel por el canal HABLADO y acepta su aviso si lo hay. Se
-   *  nombra el canal porque en una página con los dos, «el lanzador» son
-   *  dos. */
+  /** Abre el panel con el único lanzador y acepta su aviso si lo hay. */
   async function conversar(page) {
-    await page.locator('[data-uhp-voz-canal="voz"]').click();
-    const acepta = page.getByRole('button', { name: 'Acepto y quiero hablar' });
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    const acepta = page.getByRole('button', { name: /^Acepto/ });
     if (await acepta.count()) { await acepta.click(); }
     await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeVisible();
     await expect(page.locator('.uhp-voz__turno')).not.toHaveCount(0);
   }
 
-  /** Lo mismo por el canal escrito, que tiene su propio aviso y su propio
-   *  botón de aceptación: aceptar uno no acepta el otro. */
-  async function conversarEscribiendo(page) {
-    await page.locator('[data-uhp-voz-canal="texto"]').click();
-    const acepta = page.getByRole('button', { name: 'Acepto y quiero escribir' });
-    if (await acepta.count()) { await acepta.click(); }
-    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeVisible();
-    await expect(page.locator('.uhp-voz__turno')).not.toHaveCount(0);
-  }
+  /* Queda como alias del anterior: ya no hay dos canales, pero muchas
+     pruebas se llamaban así y el nombre sigue describiendo lo que hacen
+     —preguntar escribiendo—, que es lo que de verdad ejercitan. */
+  const conversarEscribiendo = conversar;
 
   test('el tablero sin asistente configurado sale exactamente como antes', async ({ page }) => {
     await page.goto(BASE + '/paginas/tablero.html');
@@ -455,7 +448,7 @@ test.describe('Asistente de voz', () => {
     await expect(page.locator('.uhp-voz__turno')).toHaveCount(0);
     expect(await page.evaluate(() => window.__UHP_STUB.chat)).toBe(0);
 
-    await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
+    await page.getByRole('button', { name: /^Acepto/ }).click();
     await expect(page.locator('.uhp-voz__turno')).not.toHaveCount(0);
 
     /* Y el saludo lo pone el navegador, no el proveedor: abrir el panel no
@@ -473,7 +466,7 @@ test.describe('Asistente de voz', () => {
        nace— no hay nada que aceptar. Con esta arquitectura el asistente no
        graba ni guarda la voz de nadie: el dictado lo convierte en texto el
        navegador y lo que sale de aquí es texto. */
-    await page.locator('[data-uhp-voz-canal="voz"]').click();
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
     await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeVisible();
     await expect(page.locator('.uhp-voz__turno')).not.toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Acepto/ })).toHaveCount(0);
@@ -537,7 +530,6 @@ test.describe('Asistente de voz', () => {
     await preguntar(page, '¿Cuántos municipios hay?');
     const cuerpo = await page.evaluate(() => window.__UHP_STUB.cuerpos[0]);
     const todo = JSON.stringify(cuerpo);
-    expect(cuerpo.canal).toBe('voz');
     expect(todo).toContain('55');
     expect(todo).toContain('lesión precursora');
   });
@@ -826,7 +818,7 @@ test.describe('Asistente de voz', () => {
     });
 
     await enviar(page, '¿cuántos municipios hay?');
-    await page.locator('[data-uhp-voz-canal="voz"]').click();
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
     await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeHidden();
 
     await page.waitForTimeout(1500);
@@ -1009,7 +1001,7 @@ test.describe('Asistente de voz', () => {
     ]));
 
     // Estado 3: la conversación, con un turno de cada parte.
-    await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
+    await page.getByRole('button', { name: /^Acepto/ }).click();
     await expect(page.locator('.uhp-voz__turno')).not.toHaveCount(0);
     await preguntar(page, '¿cuántos municipios hay?', [
       { texto: 'Hay 55 municipios.', llamadas: [] }
@@ -1023,30 +1015,40 @@ test.describe('Asistente de voz', () => {
   /* Canal escrito                                                    */
   /* ---------------------------------------------------------------- */
 
-  test('en modo solo escrito no hay botón de micrófono ni aviso de voz', async ({ page }) => {
+  test('un solo lanzador, llamado «Asistente», en todas las páginas', async ({ page }) => {
+    for (const pagina of ['voz', 'voz-dos', 'voz-texto', 'voz-muda', 'voz-sin-aviso']) {
+      await page.goto(BASE + '/paginas/' + pagina + '.html');
+      const b = page.locator('[data-uhp-voz-accion="abrir"]');
+      await expect(b, pagina).toHaveCount(1);
+      await expect(b, pagina).toContainText('Asistente');
+    }
+  });
+
+  test('sin micrófono no viaja un aviso que lo mencione', async ({ page }) => {
     await page.goto(BASE + '/paginas/voz-texto.html');
 
-    // Un solo lanzador, y es el del canal escrito.
-    await expect(page.locator('[data-uhp-voz-accion="abrir"]')).toHaveCount(1);
-    await expect(page.locator('[data-uhp-voz-canal="texto"]')).toHaveCount(1);
-    await expect(page.locator('[data-uhp-voz-canal="voz"]')).toHaveCount(0);
-
-    // Y el aviso de la voz no viaja: describe algo que en esta página no
-    // puede ocurrir, y pedir autorización para tratar una muestra de voz
-    // que nunca se captura es recoger una autorización que sobra.
-    await expect(page.locator('template[data-uhp-voz-zona="aviso"]')).toHaveCount(0);
-    await expect(page.locator('template[data-uhp-voz-zona="aviso-texto"]')).toHaveCount(1);
+    /* UNA plantilla, y la que corresponde. Los dos avisos NO se
+       fusionaron al unificar los canales: el de una página con micrófono
+       informa del tratamiento de una muestra de voz —dato biométrico— y
+       el de una sin él no, porque no ocurre. Pedir autorización por algo
+       que no pasa, o recogerla sin informar, incumple igual el
+       artículo 9 de la Ley 1581. */
+    await expect(page.locator('template[data-uhp-voz-zona="aviso"]')).toHaveCount(1);
+    await expect(page.locator('[data-uhp-voz-micro="no"]')).toHaveCount(1);
 
     const corto = page.locator('.uhp-voz__aviso-corto');
     await expect(corto).toContainText('Lo que escriba');
     await expect(corto).not.toContainText('Su voz');
   });
 
-  test('el canal escrito no pide el micrófono ni una vez', async ({ page }) => {
+  test('sin micrófono no se pide el permiso, pero la respuesta SÍ se lee en alto', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz-texto.html');
     await listo(page);
-    await conversarEscribiendo(page);
+    await conversar(page);
+
+    // No hay icono de micrófono: el ajuste del sitio lo quitó.
+    await expect(page.locator('[data-uhp-voz-accion="dictar"]')).toHaveCount(0);
 
     await preguntar(page, '¿cuántos municipios hay?', [
       { texto: 'Son 55 municipios priorizados.', llamadas: [] }
@@ -1055,8 +1057,7 @@ test.describe('Asistente de voz', () => {
     const st = await page.evaluate(() => ({
       microfono: window.__UHP_STUB.microfono,
       dictados: window.__UHP_STUB.dictados,
-      hablar: window.__UHP_STUB.hablar,
-      canal: window.__UHP_STUB.cuerpos[0].canal
+      hablar: window.__UHP_STUB.hablar
     }));
 
     // La diferencia entre «no hay audio» y «no se pide permiso para el
@@ -1065,46 +1066,63 @@ test.describe('Asistente de voz', () => {
     expect(st.microfono).toBe(0);
     expect(st.dictados).toBe(0);
 
-    /* Y no se manda a sintetizar NADA, aunque el sitio tenga la voz
-       configurada: ElevenLabs cobra por carácter leído, y un audio que
-       nadie va a oír se factura igual que uno que sí. */
-    expect(st.hablar).toBe(0);
-
-    // El servidor sabe por qué canal va, que es lo que cambia el prompt.
-    expect(st.canal).toBe('texto');
+    /* Y ESTA ES LA INVERSIÓN. Antes aquí se comprobaba que NO se
+       sintetizaba nada. Era la causa del fallo que vio la entidad: quien
+       entraba escribiendo no recibía respuesta hablada ni con la voz
+       perfectamente configurada, y como el panel se abría casi siempre
+       por ahí, el asistente mostraba texto y no conversaba. Entrar y
+       salir son cosas distintas: no ofrecer micrófono no es motivo para
+       no leer la respuesta. */
+    expect(st.hablar).toBe(1);
   });
 
-  test('el canal escrito dice «escriba», no «escuchando»', async ({ page }) => {
+  test('el rótulo de estado dice qué hacer, y el campo está desde el principio', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz-texto.html');
     await listo(page);
-    await conversarEscribiendo(page);
+    await conversar(page);
 
     // Quien no ve la pantalla depende de este rótulo: decirle
     // «escuchando» a quien está teclando le describe algo que no existe.
     const estado = page.locator('.uhp-voz__estado-txt');
-    await expect(estado).toContainText('Escriba su pregunta');
+    await expect(estado).toContainText('Escriba');
     await expect(estado).not.toContainText('Escuchando');
-    await expect(page.locator('.uhp-voz__cab h3')).toContainText('escrito');
 
-    // El campo está desde el primer momento: es la única entrada.
+    // El campo está desde el primer momento, aquí y en todas partes: es
+    // la alternativa equivalente y ya no depende de ningún ajuste.
     await expect(page.locator('.uhp-voz__campo')).toBeVisible();
   });
 
-  test('aceptar el aviso escrito NO autoriza el micrófono', async ({ page }) => {
+  test('la autorización se puede retirar con el panel cerrado', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz-dos.html');
     await listo(page);
 
-    await conversarEscribiendo(page);
-    await page.keyboard.press('Escape');
+    /* El botón perdió su sitio al reducir la fila a tres controles, y no
+       podía perderse: el artículo 8(e) de la Ley 1581 da derecho a
+       revocar, y un derecho que solo se puede ejercer abriendo primero
+       aquello de lo que uno se quiere ir no es un derecho ejercible.
+       Vive fuera del panel, junto al aviso corto. */
+    const retirar = page.getByRole('button', { name: 'Retirar autorización' });
+    await expect(retirar).toBeHidden();
 
-    // El aviso del canal hablado incluye el tratamiento de una muestra de
-    // voz, que es un dato biométrico. Si aceptar el pequeño abriera el
-    // grande, la autorización del artículo 9 dejaría de estar informada.
-    await page.locator('[data-uhp-voz-canal="voz"]').click();
-    await expect(page.getByRole('button', { name: 'Acepto y quiero hablar' })).toBeVisible();
-    await expect(page.locator('.uhp-voz__turno')).toHaveCount(0);
+    await conversar(page);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeHidden();
+
+    // Con el panel CERRADO, que es cuando alguien decide que no sigue.
+    await expect(retirar).toBeVisible();
+    await retirar.click();
+    await expect(retirar).toBeHidden();
+
+    expect(await page.evaluate(() => {
+      try { return window.sessionStorage.getItem('uhp_voz_consentimiento_v1'); }
+      catch (e) { return null; }
+    })).toBeNull();
+
+    // Y al volver a pulsar, el aviso aparece otra vez.
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    await expect(page.getByRole('button', { name: /^Acepto/ })).toBeVisible();
   });
 
   test('aceptar el aviso de voz sí cubre el canal escrito', async ({ page }) => {
@@ -1118,10 +1136,10 @@ test.describe('Asistente de voz', () => {
     // En este sentido sí: el aviso de la voz dice con esas palabras que
     // «puede escribir sus preguntas en lugar de hablarlas». Volver a
     // pedirlo sería fricción por algo más estrecho de lo ya autorizado.
-    await page.locator('[data-uhp-voz-canal="texto"]').click();
+    await page.locator('[data-uhp-voz-accion="abrir"]').click();
     await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeVisible();
     await expect(page.locator('.uhp-voz__turno')).not.toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Acepto y quiero escribir' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Acepto/ })).toHaveCount(0);
   });
 
   test('los dos lanzadores declaran el mismo estado del panel', async ({ page }) => {
@@ -1129,8 +1147,8 @@ test.describe('Asistente de voz', () => {
     await page.goto(BASE + '/paginas/voz-dos.html');
     await listo(page);
 
-    const voz = page.locator('[data-uhp-voz-canal="voz"]');
-    const txt = page.locator('[data-uhp-voz-canal="texto"]');
+    const voz = page.locator('[data-uhp-voz-accion="abrir"]');
+    const txt = page.locator('[data-uhp-voz-accion="abrir"]');
     await expect(voz).toHaveAttribute('aria-expanded', 'false');
     await expect(txt).toHaveAttribute('aria-expanded', 'false');
 
@@ -1218,11 +1236,11 @@ test.describe('Asistente de voz', () => {
     /* `exact` porque getByRole casa el nombre por SUBCADENA: sin él,
        «Escribir en vez de hablar» cuenta como «Hablar» y la prueba
        aprueba un botón que no existe. */
-    const mic = page.getByRole('button', { name: 'Hablar', exact: true });
+    const mic = page.locator('[data-uhp-voz-accion="dictar"]');
     await expect(mic).toHaveAttribute('aria-pressed', 'false');
     await mic.click();
     await expect.poll(() => page.evaluate(() => window.__UHP_STUB.dictados)).toBe(1);
-    await expect(page.getByRole('button', { name: 'Dejar de hablar', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-uhp-voz-accion="dictar"]')).toHaveAttribute('aria-pressed', 'true');
 
     // Y lo dictado entra como una pregunta más.
     await page.evaluate(() => {
@@ -1247,7 +1265,7 @@ test.describe('Asistente de voz', () => {
     ]);
     await expect.poll(() => page.evaluate(() => window.__UHP_STUB.hablar)).toBe(1);
 
-    await page.getByRole('button', { name: 'Hablar', exact: true }).click();
+    await page.locator('[data-uhp-voz-accion="dictar"]').click();
     const sonando = await page.evaluate(() => {
       const a = document.querySelectorAll('audio');
       for (let i = 0; i < a.length; i++) { if (!a[i].paused) { return true; } }
@@ -1265,7 +1283,7 @@ test.describe('Asistente de voz', () => {
     /* Firefox, Opera, Brave y Vivaldi no reconocen voz. No es un caso
        raro: es una parte del público. Prometerles un botón de micrófono
        que no funciona es peor que no ofrecerlo. */
-    await expect(page.getByRole('button', { name: 'Hablar', exact: true })).toHaveCount(0);
+    await expect(page.locator('[data-uhp-voz-accion="dictar"]')).toHaveCount(0);
     await expect(page.locator('.uhp-voz__campo')).toBeVisible();
 
     await preguntar(page, '¿cuántos municipios hay?', [
@@ -1281,7 +1299,7 @@ test.describe('Asistente de voz', () => {
     await conversar(page);
 
     const antes = await page.evaluate(() => window.__UHP_STUB.chat);
-    await page.getByRole('button', { name: 'Hablar', exact: true }).click();
+    await page.locator('[data-uhp-voz-accion="dictar"]').click();
     await expect(page.locator('.uhp-voz__estado-txt')).toContainText('micrófono');
 
     /* LO QUE IMPORTA: no se gasta una pregunta. Una negativa del
@@ -1309,25 +1327,26 @@ test.describe('Asistente de voz', () => {
        tiempo de ejecución, porque el motor de transcripción es un
        servicio de Google que esos navegadores no tienen. Reintentar ahí
        es pedirle al visitante que pulse un botón roto. */
-    await page.getByRole('button', { name: 'Hablar', exact: true }).click();
+    await page.locator('[data-uhp-voz-accion="dictar"]').click();
     await expect(page.locator('.uhp-voz__estado-txt')).toContainText('no reconoce la voz');
-    await expect(page.getByRole('button', { name: 'Hablar', exact: true })).toHaveCount(0);
+    await expect(page.locator('[data-uhp-voz-accion="dictar"]')).toHaveCount(0);
     await expect(page.locator('.uhp-voz__campo')).toBeVisible();
   });
 
-  test('el canal viaja en cada pregunta, porque cambia las instrucciones', async ({ page }) => {
+  test('el navegador no le dice al servidor qué instrucciones usar', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz-texto.html');
     await listo(page);
-    await conversarEscribiendo(page);
+    await conversar(page);
 
-    /* Antes esto eran ocho variables interpoladas en el prompt del
-       agente, y si faltaba una sola el proveedor rechazaba la sesión
-       entera. Ahora el prompt es estático y lo único que el navegador
-       tiene que decir es por dónde va la conversación: de eso depende que
-       el modelo lea una lista de once subregiones o la resuma. */
+    /* Antes el navegador mandaba un «canal» y el servidor elegía con él
+       cuál de los dos prompts enviaba al proveedor. Eso era dejar que un
+       parámetro escrito por el cliente decidiera algo facturable. Ahora
+       el prompt es uno solo y lo pone el servidor; el cuerpo lleva la
+       conversación y nada más. */
     await preguntar(page, '¿cuántos municipios hay?');
-    expect(await page.evaluate(() => window.__UHP_STUB.cuerpos[0].canal)).toBe('texto');
+    const cuerpo = await page.evaluate(() => window.__UHP_STUB.cuerpos[0]);
+    expect(Object.keys(cuerpo)).toEqual(['mensajes']);
   });
 
   /* ---------------------------------------------------------------- */
@@ -1344,15 +1363,16 @@ test.describe('Asistente de voz', () => {
 
     // La cifra de una barra es SUBREGIONAL y publicada como tal. No es el
     // promedio de los municipios intervenidos, porque la subregión
-    // incluye municipios donde el proyecto no estuvo.
-    expect(r).toContain('cifras de la subregión');
-    expect(r).toContain('no de los municipios');
+    // incluye municipios donde el proyecto no estuvo. El rótulo va
+    // PEGADO a cada cifra y no solo en la cabecera: lo que se copia de
+    // una conversación sale sin el resto del párrafo.
+    expect(r).toContain('cada cifra es SUBREGIONAL publicada');
+    expect(r).toContain('(cifra de la subregión)');
     expect(r).toContain('NO es el promedio');
     expect(r).toContain('uhp_consultar_municipio');
 
-    // Río Mayo es la más alta de lesión precursora, 44,3 %.
-    expect(r).toContain('La más alta');
-    expect(r).toContain('Río Mayo');
+    // Río Mayo es la más alta de lesión precursora, 44,3 %: va primera.
+    expect(r).toContain('1. Río Mayo');
 
     /* Y LO QUE IMPORTA: Nariño tiene trece subregiones y el informe
        publica once. Las dos de la costa no se dibujan porque no hay barra
@@ -1364,23 +1384,27 @@ test.describe('Asistente de voz', () => {
     expect(r).toContain('NO filtrables');
   });
 
-  test('por voz el ranking no enumera once subregiones seguidas', async ({ page }) => {
+  test('la herramienta devuelve las once subregiones: el recorte lo decide el prompt', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz.html');
     await listo(page);
     await conversar(page);
 
+    /* Antes esta herramienta recortaba a tres cuando la conversación iba
+       por voz. Era decidir por el modelo con información que él no
+       tiene, y lo dejaba sin con qué contestar si le pedían la lista
+       completa. Las herramientas dan DATOS; cuántos se dicen en alto lo
+       decide el prompt, que es donde vive esa regla. */
     const r = await herramienta(page, 'uhp_comparar_subregiones', {});
-    // Una enumeración hablada de once elementos no se retiene: por voz van
-    // los extremos y un par más, y quien quiera la lista entera la pide.
     const nombradas = ['Río Mayo', 'La Sabana', 'Occidente', 'La Cordillera',
       'Los Abades', 'Juanambú', 'Guambuyaco', 'Obando', 'Telembí', 'Centro',
       'Piedemonte Costero'].filter((n) => r.includes(n));
-    expect(nombradas.length).toBeLessThanOrEqual(5);
-    expect(r).toContain('Piedemonte Costero');
+    expect(nombradas.length).toBe(11);
 
-    const todas = await herramienta(page, 'uhp_comparar_subregiones', { cuantas: 11 });
-    expect(todas).toContain('Guambuyaco');
+    // Y el recorte explícito se sigue respetando.
+    const tres = await herramienta(page, 'uhp_comparar_subregiones', { cuantas: 3 });
+    expect(tres).toContain('Río Mayo');
+    expect(tres).not.toContain('Guambuyaco');
   });
 
   test('por escrito el rótulo viaja pegado a cada cifra', async ({ page }) => {
@@ -1491,14 +1515,17 @@ test.describe('Asistente de voz', () => {
     await page.goto(BASE + '/paginas/voz-muda.html');
     await listo(page);
 
-    /* La voz es opcional, pero a medias no: con la clave del modelo y sin
-       la de ElevenLabs el asistente responde entero por escrito. Pintar
-       un lanzador de voz prometería algo que el servidor no puede hacer,
-       y el fallo sería mudo —nunca mejor dicho— en producción. */
-    await expect(page.locator('[data-uhp-voz-canal="voz"]')).toHaveCount(0);
-    await expect(page.locator('[data-uhp-voz-canal="texto"]')).toHaveCount(1);
+    /* LA OTRA INVERSIÓN, y es la que separa dictar de hablar. Antes, sin
+       clave de ElevenLabs no se pintaba micrófono. Estaba mal: el
+       dictado lo hace el NAVEGADOR y no necesita ninguna clave. Quien
+       no puede teclear cómodo perdía el micrófono por un ajuste que no
+       tiene nada que ver con él. Ahora se dicta la pregunta y se lee la
+       respuesta en pantalla: una conversación completa. */
+    await expect(page.locator('[data-uhp-voz-accion="abrir"]')).toHaveCount(1);
 
-    await conversarEscribiendo(page);
+    await conversar(page);
+    await expect(page.locator('[data-uhp-voz-accion="dictar"]')).toHaveCount(1);
+
     await preguntar(page, '¿cuántos municipios hay?', [
       { texto: 'Son 55 municipios priorizados.', llamadas: [] }
     ]);
@@ -1515,7 +1542,7 @@ test.describe('Asistente de voz', () => {
     /* Las puertas del servidor —cupo diario, límite por IP, pregunta
        demasiado larga— tienen que llegar al visitante como algo que
        entiende, no como «algo salió mal». */
-    const reanudar = page.getByRole('button', { name: 'Volver a preguntar' });
+    const campo = page.locator('.uhp-voz__campo');
     const puertas = [
       [503, 'uhp_voz_cuota', /hoy/i],
       [429, 'uhp_voz_ritmo', /espere|demasiadas/i],
@@ -1528,18 +1555,21 @@ test.describe('Asistente de voz', () => {
       [503, 'uhp_voz_sin_voz', /no pude consultar/i],
     ];
     for (const [codigo, code, aguja] of puertas) {
-      if (await reanudar.count()) { await reanudar.click(); }
       await page.evaluate((f) => { window.__UHP_STUB.fallo = { ruta: 'chat', codigo: f[0], code: f[1] }; }, [codigo, code]);
       await enviar(page, 'una pregunta');
       await expect(page.locator('.uhp-voz__estado-txt')).toContainText(aguja);
 
-      /* Y nunca se queda sin salida: un mensaje que dice «inténtelo de
-         nuevo» con nada que pulsar es peor que no decir nada. */
-      await expect(reanudar).toBeVisible();
+      /* Y nunca se queda sin salida. El botón «Volver a preguntar»
+         desapareció al reducir la fila a tres controles, y no hacía
+         falta sustituirlo: el campo no se desmonta nunca, de modo que
+         volver a preguntar es volver a escribir. Un mensaje que dice
+         «inténtelo de nuevo» con nada que pulsar es peor que no decir
+         nada, y esto lo comprueba en cada una de las cuatro puertas. */
+      await expect(campo).toBeVisible();
+      await expect(campo).toBeEnabled();
     }
 
-    // Y volver a preguntar funciona de verdad, no solo aparece el botón.
-    await reanudar.click();
+    // Y volver a preguntar funciona de verdad, sin tocar nada más.
     await page.evaluate(() => { window.__UHP_STUB.fallo = null; });
     await preguntar(page, '¿cuántos municipios hay?', [
       { texto: 'Son 55 municipios priorizados.', llamadas: [] }
@@ -1588,7 +1618,7 @@ test.describe('Asistente de voz', () => {
        'audio-capture', el plugin usa ese motivo para decidir la frase y
        para apagar el micrófono… y no lo imprimía en ninguna parte. Son
        cuatro arreglos distintos y el visitante ve el mismo cartel. */
-    await page.getByRole('button', { name: 'Hablar', exact: true }).click();
+    await page.locator('[data-uhp-voz-accion="dictar"]').click();
     await expect(page.locator('.uhp-voz__estado-txt')).toContainText('no reconoce la voz');
 
     await expect.poll(() => consola.filter((l) => l.includes('micrófono')).length).toBeGreaterThan(0);
@@ -1606,7 +1636,7 @@ test.describe('Asistente de voz', () => {
 
     // Sin botón que pulsar, el único camino a la consola es preguntar
     // por escrito y que el panel no prometa un micrófono que no hay.
-    await expect(page.getByRole('button', { name: 'Hablar', exact: true })).toHaveCount(0);
+    await expect(page.locator('[data-uhp-voz-accion="dictar"]')).toHaveCount(0);
     await preguntar(page, '¿cuántos municipios hay?', [
       { texto: 'Son 55 municipios priorizados.', llamadas: [] }
     ]);
