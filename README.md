@@ -235,34 +235,58 @@ cáncer detectado: esa información no está en los documentos fuente.
 
 El tablero puede responder preguntas y mover sus propios filtros mientras lo
 hace: «muéstrame la zona roja», «¿cuánto tiene Túquerres?», «cambia a H.
-pylori», «¿qué subregión está peor?». El motor de conversación lo pone
-ElevenLabs; todo lo que el ciudadano ve lo pone el plugin, con los mismos
-colores y los mismos controles que el resto del tablero.
+pylori», «¿qué subregión está peor?». Todo lo que el ciudadano ve lo pone el
+plugin, con los mismos colores y los mismos controles que el resto del tablero.
+
+**Son dos piezas y solo una es obligatoria.** Un **modelo de lenguaje** —Claude,
+ChatGPT o Gemini, a elegir— entiende la pregunta, decide qué herramienta del
+tablero usar y redacta la respuesta con los datos que el tablero le devuelve.
+Y, si la entidad quiere, **ElevenLabs** lee esa respuesta en alto. Sin la
+segunda, el asistente funciona entero por escrito, que es un canal completo y
+no una versión capada.
+
+**Ninguna clave llega al navegador.** El visitante pregunta a una ruta de este
+mismo sitio y es el servidor quien habla con el proveedor, de modo que el tope
+diario de preguntas, el límite por IP y la comprobación de origen se aplican de
+verdad y el panel puede contarlos. El navegador no habla con ningún dominio
+externo: no hay SDK que descargar de una CDN, ni WebSocket contra el proveedor,
+ni dominios de terceros que abrir en la política de seguridad de contenido.
+
+**El dictado por micrófono, en cambio, no lo hace este plugin.** Lo hace el
+navegador del visitante, y conviene saber qué significa eso antes de
+encenderlo: en Chrome, Edge y Safari el audio se envía a servidores de Google o
+de Apple para convertirlo en texto. Ni este sitio ni ElevenLabs intervienen
+ahí, y la entidad no controla ese tratamiento ni puede pactarlo, porque es del
+navegador que el ciudadano eligió. En Firefox, Opera, Brave y Vivaldi no
+funciona en absoluto, y esos visitantes solo tendrán el canal escrito: el
+asistente lo dice con esas palabras en vez de dejar un botón que falla. Quien
+no quiera ese tratamiento puede dejar el asistente en «solo por escrito», y
+entonces no se pide el micrófono nunca.
 
 **Se puede entrar hablando o escribiendo, y el canal escrito no es el hablado
-con el micrófono apagado:** no se pide el permiso del micrófono, no se captura
-ninguna muestra de voz, el aviso de habeas data es otro —sin dato biométrico que
-autorizar—, el proveedor no sintetiza audio, y la política de seguridad de
-contenido que necesita el sitio se encoge. Aceptar el aviso escrito **no**
-autoriza el micrófono.
+con el micrófono apagado:** no se pide el permiso del micrófono, no se manda
+nada a sintetizar —ElevenLabs cobra por carácter leído, y un audio que nadie va
+a oír se factura igual— y las instrucciones que recibe el modelo son otras,
+porque una lista de once subregiones se lee distinto que se escribe.
 
-**Nace apagado.** No basta con encenderlo: hasta que no están el identificador
-del agente, el enlace a la política de tratamiento de datos, dos canales para
-ejercer los derechos del titular, lo que el proveedor declare por escrito sobre
-retención y la firma de la evaluación de accesibilidad, el tablero sale byte
-por byte como si esta función no existiera.
+**Nace apagado.** Encenderlo pide el interruptor y la clave del modelo de
+lenguaje, que es quien entiende la pregunta; hasta entonces el tablero sale
+byte por byte como si esta función no existiera. El aviso previo al visitante
+es un **ajuste**, no un requisito: viene apagado porque con esta arquitectura
+no se graba ni se guarda la voz de nadie, y se puede encender si el área
+jurídica de la entidad lo pide o si se prefiere avisar de que la pregunta viaja
+a un proveedor fuera del país.
 
 **Publicar y ser visible son dos ejes distintos.** La entidad puede dejarlo
 configurado y visible solo para quien pueda editar contenido, para ensayarlo en
 el sitio de verdad antes de ponerlo delante de un ciudadano; o cargarlo sin
 botón, para abrirlo desde un control propio de la plantilla.
 
-Antes de empezar, el visitante lee el aviso completo de habeas data de su canal
-y lo acepta. Puede retirar la autorización en cualquier momento con un botón
-—retira las dos—, y los cuatro filtros siguen manejándose con el teclado y con
-el ratón: el asistente no es la única vía para nada.
+El visitante puede terminar la conversación en cualquier momento, y los cuatro
+filtros siguen manejándose con el teclado y con el ratón: el asistente no es la
+única vía para nada.
 
-El agente no inventa: cada cifra sale de una herramienta que lee el tablero, y
+El asistente no inventa: cada cifra sale de una herramienta que lee el tablero, y
 cuando una cifra es de la subregión y no del municipio, lo dice. Un municipio
 que el proyecto no intervino se responde con esas palabras —«allí no hubo
 tamizaje»—, no como si faltara el dato. Y un nombre que no cruce exacto nunca
@@ -292,8 +316,8 @@ protección de datos, en [`docs/voz/privacidad.md`](docs/voz/privacidad.md).
 
 ```bash
 npm install          # instala Playwright
-npm run test:datos   # 506 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 96 pruebas de navegador
+npm run test:datos   # 590 comprobaciones de la capa de datos, sin WordPress
+npm test             # lo anterior más 127 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los
