@@ -281,39 +281,48 @@ $paginas['objeto-3d-desplazamiento'] = construir(
 	'[urkunina_3d]'
 );
 
-/* El tablero CON el asistente de voz encendido.
+/* El tablero CON el asistente encendido.
 
    Se configura aquí y no en la opción por defecto porque el asistente
-   nace apagado: encenderlo exige, además del interruptor, los cuatro
-   campos del aviso de habeas data y la firma de la evaluación de
-   accesibilidad. Esta página comprueba justamente eso, que el bloque solo
-   aparece cuando la configuración está completa.
+   nace apagado: encenderlo exige el interruptor y la clave del modelo de
+   lenguaje, que es quien entiende la pregunta. Esta página comprueba
+   justamente eso, que el bloque solo aparece cuando hay con qué
+   responder.
 
-   Modo público a propósito: así la sesión no pasa por el servidor y la
-   prueba puede ejercitar el módulo entero con un doble del SDK, sin
-   inventar una respuesta firmada. */
+   Las claves se ponen porque el servidor las necesita para publicarse,
+   pero la conversación de estas páginas no sale a ningún proveedor: el
+   doble del navegador intercepta las dos rutas. Ninguna de las dos puede
+   aparecer en el HTML, y hay una prueba que lo comprueba. */
+update_option( 'uhp_llm_clave', 'sk-ant-que-no-debe-salir-nunca' );
+update_option( 'uhp_voz_clave', 'sk-el-que-no-debe-salir-nunca' );
 update_option(
 	'uhp_voz',
 	array(
-		'activo'          => 1,
-		'agente'          => 'agent_pruebadelasuite0000',
-		'modo'            => 'publico',
-		'transporte'      => 'websocket',
-		'cuota_dia'       => 200,
+		'activo'        => 1,
+		'proveedor'     => 'claude',
+		'modelo'        => '',
+		'esfuerzo'      => 'low',
+		'cuota_dia'     => 200,
+		'turnos_max'    => 8,
 		// Esta página ejercita el canal HABLADO y nada más: un solo
 		// lanzador, para que las pruebas que ya existían sigan apuntando a
 		// un único botón. Los dos canales y el escrito a secas tienen cada
 		// uno su propia página más abajo.
-		'entrada'         => 'voz',
-		'texto'           => 1,
-		'recordar'        => 1,
-		'aviso_version'   => 1,
-		'politica'        => 'https://ejemplo.narino.gov.co/politica',
-		'correo'          => 'datos@narino.gov.co',
-		'canal'           => 'Calle 19 No. 23-78, Pasto',
-		'retencion'       => 'El proveedor declara conservar las grabaciones 30 días.',
-		'aviso_extra'     => '',
-		'evaluacion_a11y' => 1,
+		'entrada'       => 'voz',
+		'texto'         => 1,
+		'voz_id'        => 'VozDePruebaDeLaSuite00',
+		'voz_modelo'    => '',
+		'voz_velocidad' => 0.9,
+		'recordar'      => 1,
+		// Encendido en ESTA página, porque es la que comprueba el aviso.
+		// Apagado es como nace, y las páginas de abajo lo apagan.
+		'aviso'         => 1,
+		'aviso_version' => 1,
+		'politica'      => 'https://ejemplo.narino.gov.co/politica',
+		'correo'        => 'datos@narino.gov.co',
+		'canal'         => 'Calle 19 No. 23-78, Pasto',
+		'retencion'     => 'El proveedor declara conservar lo que recibe 30 días.',
+		'aviso_extra'   => '',
 	)
 );
 
@@ -326,18 +335,13 @@ $paginas['voz'] = construir(
 	'[urkunina_dashboard]'
 );
 
-/* La misma configuración, con los DOS canales y con sustituciones de voz
-   puestas: dos lanzadores, dos avisos distintos en el HTML y un evento de
-   inicio que lleva overrides.tts. */
+/* La misma configuración con los DOS canales: dos lanzadores y dos avisos
+   distintos en el HTML, porque aceptar uno no acepta el otro. */
 update_option(
 	'uhp_voz',
 	array_merge(
 		get_option( 'uhp_voz' ),
-		array(
-			'entrada'       => 'ambos',
-			'voz_id'        => 'VozDePruebaDeLaSuite00',
-			'voz_velocidad' => 0.9,
-		)
+		array( 'entrada' => 'ambos' )
 	)
 );
 
@@ -350,8 +354,9 @@ $paginas['voz-dos'] = construir(
 	'[urkunina_dashboard]'
 );
 
-/* Y solo escrito. Aquí no tiene que haber ni botón de micrófono, ni
-   aviso de voz en el HTML, ni llamada a getUserMedia. */
+/* Y solo escrito. Aquí no tiene que haber ni botón de micrófono, ni aviso
+   de voz en el HTML, ni dictado, ni una petición a la ruta que sintetiza:
+   el canal escrito no suena, y lo que no suena no se factura. */
 update_option(
 	'uhp_voz',
 	array_merge(
@@ -369,35 +374,44 @@ $paginas['voz-texto'] = construir(
 	'[urkunina_dashboard]'
 );
 
-/* Y el modo PRIVADO, que es el recomendado y hasta ahora no tenía página:
-   el navegador no conoce el identificador del agente y abre la sesión con
-   la URL firmada que le entrega el servidor. Sin verificación guardada, no
-   viaja ninguna sustitución. */
+/* Y la página SIN aviso previo, que es como nace el asistente. Pulsar
+   tiene que abrir la conversación directamente: el aviso es un ajuste y
+   no una puerta. */
 update_option(
 	'uhp_voz',
 	array_merge(
 		get_option( 'uhp_voz' ),
 		array(
-			'modo'    => 'privado',
 			'entrada' => 'ambos',
+			'aviso'   => 0,
 		)
 	)
 );
-/* Un agente privado sin clave no se publica: publicar el botón sería
-   ofrecer algo que falla al pulsarlo. Y de paso, esta página es la que
-   comprueba que la clave NO aparece en el HTML. */
-update_option( 'uhp_voz_clave', 'sk_clave_que_no_debe_salir_nunca' );
 
-$paginas['voz-privado'] = construir(
-	'voz-privado',
-	'Tablero con asistente privado',
+$paginas['voz-sin-aviso'] = construir(
+	'voz-sin-aviso',
+	'Tablero con asistente sin aviso previo',
 	function ( $sc ) {
 		return $sc->sc_dashboard( array() );
 	},
 	'[urkunina_dashboard]'
 );
 
+/* Y sin voz: hay clave del modelo pero no de ElevenLabs. El asistente se
+   publica igual y responde por escrito, pero no debe pintar un botón de
+   micrófono que no va a hablar. */
 delete_option( 'uhp_voz_clave' );
+
+$paginas['voz-muda'] = construir(
+	'voz-muda',
+	'Tablero con asistente sin voz',
+	function ( $sc ) {
+		return $sc->sc_dashboard( array() );
+	},
+	'[urkunina_dashboard]'
+);
+
+update_option( 'uhp_voz_clave', 'sk-el-que-no-debe-salir-nunca' );
 
 // El resto de páginas vuelven a verlo apagado: el tablero de siempre no
 // puede cambiar porque exista esta función.

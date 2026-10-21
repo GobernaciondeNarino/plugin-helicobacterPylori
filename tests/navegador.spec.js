@@ -192,29 +192,40 @@ test.describe('Objeto 3D', () => {
 /* ================================================================== */
 test.describe('Asistente de voz', () => {
 
-  /* Doble del SDK de ElevenLabs.
+  /* Doble de las DOS rutas del asistente.
 
-     Se instala ANTES de que corra ningún script de la página, de modo que
-     el cargador del asistente encuentra window.ElevenLabsClient ya puesto
-     y no baja el megabyte del CDN. Guarda las opciones con las que se
-     abrió la sesión —ahí van las herramientas de cliente— y deja que la
-     prueba dispare los callbacks como si hablara el agente. */
+     Ya no hay SDK que doblar: el navegador no habla con ningún proveedor.
+     Le pregunta a /voz/chat —que devuelve lo que el modelo dijo y las
+     herramientas que quiere usar— y a /voz/hablar —que devuelve el audio
+     ya sintetizado—, las dos de este mismo sitio. El doble intercepta
+     fetch antes de que corra nada de la página, guarda lo que se mandó y
+     responde con el guion que ponga cada prueba.
+
+     Eso hace que estas pruebas ejerciten el camino de verdad: la vuelta
+     de herramientas, el tablero moviéndose y el turno pintándose. Lo
+     único fingido es lo que diría el modelo, que es justo lo que no se
+     puede comprobar en una suite. */
   async function conDoble(page, ajustes) {
-    const cfg = Object.assign({ microfono: true }, ajustes || {});
+    const cfg = Object.assign({ microfono: true, dictado: true }, ajustes || {});
     await page.addInitScript((cfg) => {
       window.__UHP_STUB = {
-        abierta: 0, opciones: null, enviados: [], contexto: [], cerrada: 0,
-        // Cuántas veces se pidió el micrófono y cuántas pistas quedaron
-        // abiertas: en el canal escrito las dos tienen que ser cero, y en
-        // el hablado la segunda tiene que volver a cero.
-        microfono: 0, pistasVivas: 0, tipo: null
+        // Peticiones a cada ruta, y lo que iba en ellas.
+        chat: 0, hablar: 0, cuerpos: [], textos: [],
+        // Lo que el doble va a contestar, en orden.
+        guion: [], contador: 0,
+        // Para forzar un fallo: { ruta: 'chat'|'hablar', codigo: 503 }.
+        fallo: null,
+        // El micrófono. Cuántas veces se pidió y cuántas pistas quedaron
+        // abiertas: en el canal escrito las dos tienen que ser cero.
+        microfono: 0, pistasVivas: 0,
+        // El dictado del navegador: cuántas veces arrancó y la instancia
+        // viva, para que la prueba le dispare un resultado.
+        dictados: 0, viva: null, abortados: 0
       };
 
       /* El micrófono. Un Chromium sin tarjeta de sonido no se comporta
          como el equipo de un visitante, así que se sustituye por un doble
-         que CUENTA. Una de las cosas que hay que verificar es que en el
-         canal escrito no se llama ni una vez: es la diferencia entre
-         «no hay audio» y «no se pide permiso para el audio». */
+         que CUENTA. */
       const falso = {
         getUserMedia: function () {
           window.__UHP_STUB.microfono++;
@@ -235,45 +246,130 @@ test.describe('Asistente de voz', () => {
         Object.defineProperty(navigator, 'mediaDevices', { value: falso, configurable: true });
       } catch (e) { window.navigator.mediaDevices = falso; }
 
-      window.ElevenLabsClient = {
-        Conversation: {
-          startSession: function (opciones) {
-            window.__UHP_STUB.abierta++;
-            window.__UHP_STUB.opciones = opciones;
-            const esTexto = opciones.textOnly === true;
-            window.__UHP_STUB.tipo = esTexto ? 'text' : 'voice';
-            const conv = {
-              type: esTexto ? 'text' : 'voice',
-              endSession: function () { window.__UHP_STUB.cerrada++; },
-              sendUserMessage: function (t) { window.__UHP_STUB.enviados.push(t); },
-              sendContextualUpdate: function (t) { window.__UHP_STUB.contexto.push(t); },
-              sendUserActivity: function () {},
-              getId: function () { return 'conv_prueba'; },
-              /* Como el SDK real: en un TextConversation estas dos LANZAN.
-                 Si el plugin las llamara en el canal escrito, la prueba lo
-                 vería en vez de pasar de largo. */
-              setVolume: function () {
-                if (esTexto) { throw new Error('setVolume is not supported in text conversations'); }
-              },
-              setMicMuted: function () {
-                if (esTexto) { throw new Error('setMicMuted is not supported in text conversations'); }
-              }
-            };
-            // Como el SDK real: avisa de que conectó en cuanto puede.
-            if (opciones.onConnect) { setTimeout(() => opciones.onConnect({}), 0); }
-            return Promise.resolve(conv);
-          }
+      /* El dictado. Lo pone el navegador, no el plugin, y en un Chromium
+         de pruebas no existe: sin doble, todas las pruebas de voz caerían
+         por la rama de «su navegador no sabe dictar», que es precisamente
+         la que hay que poder distinguir de las demás. */
+      if (cfg.dictado) {
+        window.SpeechRecognition = function () {
+          const yo = this;
+          this.lang = ''; this.continuous = null; this.interimResults = null;
+          this.start = function () {
+            window.__UHP_STUB.dictados++;
+            window.__UHP_STUB.viva = yo;
+            if (cfg.dictadoFalla) {
+              setTimeout(function () {
+                if (yo.onerror) { yo.onerror({ error: cfg.dictadoFalla }); }
+                if (yo.onend) { yo.onend({}); }
+              }, 0);
+            }
+          };
+          this.stop = function () {
+            window.__UHP_STUB.abortados++;
+            if (yo.onend) { yo.onend({}); }
+          };
+          this.abort = this.stop;
+        };
+        window.webkitSpeechRecognition = window.SpeechRecognition;
+      } else {
+        try { delete window.SpeechRecognition; } catch (e) { window.SpeechRecognition = undefined; }
+        try { delete window.webkitSpeechRecognition; } catch (e) { window.webkitSpeechRecognition = undefined; }
+      }
+
+      /* Las dos rutas. Se responde con un objeto mínimo y no con un
+         Response de verdad: el módulo solo mira `ok`, `status` y `json()`,
+         y un doble que imite más de lo que se usa esconde lo que se usa. */
+      const original = window.fetch;
+      function responder(datos, codigo) {
+        const c = codigo || 200;
+        return Promise.resolve({
+          ok: c >= 200 && c < 300,
+          status: c,
+          json: function () { return Promise.resolve(datos); }
+        });
+      }
+
+      window.fetch = function (url, opciones) {
+        const u = String(url);
+        const S = window.__UHP_STUB;
+        let cuerpo = null;
+        try { cuerpo = JSON.parse((opciones && opciones.body) || 'null'); } catch (e) { cuerpo = null; }
+
+        if (u.indexOf('/voz/chat') !== -1) {
+          S.chat++;
+          S.cuerpos.push(cuerpo);
+          if (S.fallo && S.fallo.ruta === 'chat') { return responder({}, S.fallo.codigo); }
+          const siguiente = S.guion.length ? S.guion.shift() : { texto: 'No tengo guion.', llamadas: [] };
+          return responder(siguiente);
         }
+
+        if (u.indexOf('/voz/hablar') !== -1) {
+          S.hablar++;
+          S.textos.push(cuerpo && cuerpo.texto);
+          if (S.fallo && S.fallo.ruta === 'hablar') { return responder({}, S.fallo.codigo); }
+          /* Un MP3 de verdad, aunque mudo: el módulo lo decodifica a
+             bytes y se lo da a un <audio>. Devolver basura haría fallar
+             la decodificación y la prueba miraría la rama equivocada. */
+          return responder({ tipo: 'audio/mpeg', audio: '//uQZ' });
+        }
+
+        return original.apply(this, arguments);
       };
     }, cfg);
   }
 
-  /** Llama a una herramienta de cliente como la llamaría el agente. */
+  /** Lo que el doble contestará a la siguiente pregunta, en orden. */
+  async function responde(page, guion) {
+    await page.evaluate((g) => { window.__UHP_STUB.guion = g.slice(); }, guion);
+  }
+
+  /** Escribe una pregunta y la envía. */
+  async function enviar(page, texto) {
+    await page.locator('.uhp-voz__campo').fill(texto);
+    await page.locator('.uhp-voz__forma').getByRole('button', { name: 'Enviar' }).click();
+  }
+
+  /** Una pregunta completa: se guionan las respuestas y se espera a que
+   *  el asistente termine de contestar. */
+  async function preguntar(page, texto, guion) {
+    const antes = await page.evaluate(() => window.__UHP_STUB.chat);
+    await responde(page, guion || [{ texto: 'Listo.', llamadas: [] }]);
+    await enviar(page, texto);
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.chat))
+      .toBe(antes + (guion ? guion.length : 1));
+  }
+
+  /** Llama a una herramienta como la llamaría el modelo, y devuelve lo
+   *  que el navegador le contestó: eso es lo que el modelo leerá. */
   async function herramienta(page, nombre, args) {
-    return page.evaluate(([n, a]) => {
-      const t = window.__UHP_STUB.opciones.clientTools;
-      return Promise.resolve(t[n](a));
+    const antes = await page.evaluate(() => window.__UHP_STUB.chat);
+    await page.evaluate(([n, a]) => {
+      const S = window.__UHP_STUB;
+      S.contador++;
+      S.guion = [
+        { texto: '', llamadas: [{ id: 'tu_' + S.contador, nombre: n, args: a || {} }] },
+        { texto: 'Listo.', llamadas: [] }
+      ];
     }, [nombre, args || {}]);
+    await enviar(page, 'una pregunta cualquiera');
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.chat)).toBe(antes + 2);
+    return page.evaluate(() => {
+      const S = window.__UHP_STUB;
+      const ultimo = S.cuerpos[S.cuerpos.length - 1];
+      const mensajes = ultimo.mensajes;
+      const fin = mensajes[mensajes.length - 1];
+      return fin.resultados[0].salida;
+    });
+  }
+
+  /** Las herramientas que el navegador acaba de ejecutar en esa vuelta. */
+  async function llamadasHechas(page) {
+    return page.evaluate(() => {
+      const S = window.__UHP_STUB;
+      const ultimo = S.cuerpos[S.cuerpos.length - 1];
+      const fin = ultimo.mensajes[ultimo.mensajes.length - 1];
+      return fin.resultados.map(function (r) { return r.nombre; });
+    });
   }
 
   /** El tablero ya terminó de cargar sus datos. */
@@ -282,27 +378,32 @@ test.describe('Asistente de voz', () => {
     await expect(page.locator('.uhp-db__mrow')).toHaveCount(55);
   }
 
-  /** Abre el panel por el canal HABLADO y acepta su aviso. Se nombra el
-   *  canal porque en una página con los dos, «el lanzador» son dos. */
+  /** Abre el panel por el canal HABLADO y acepta su aviso si lo hay. Se
+   *  nombra el canal porque en una página con los dos, «el lanzador» son
+   *  dos. */
   async function conversar(page) {
     await page.locator('[data-uhp-voz-canal="voz"]').click();
-    await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
-    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
+    const acepta = page.getByRole('button', { name: 'Acepto y quiero hablar' });
+    if (await acepta.count()) { await acepta.click(); }
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeVisible();
+    await expect(page.locator('.uhp-voz__turno')).not.toHaveCount(0);
   }
 
   /** Lo mismo por el canal escrito, que tiene su propio aviso y su propio
    *  botón de aceptación: aceptar uno no acepta el otro. */
   async function conversarEscribiendo(page) {
     await page.locator('[data-uhp-voz-canal="texto"]').click();
-    await page.getByRole('button', { name: 'Acepto y quiero escribir' }).click();
-    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
+    const acepta = page.getByRole('button', { name: 'Acepto y quiero escribir' });
+    if (await acepta.count()) { await acepta.click(); }
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeVisible();
+    await expect(page.locator('.uhp-voz__turno')).not.toHaveCount(0);
   }
 
   test('el tablero sin asistente configurado sale exactamente como antes', async ({ page }) => {
     await page.goto(BASE + '/paginas/tablero.html');
     await listo(page);
-    // Nace apagado: mientras falte un solo campo del aviso de habeas data
-    // o la firma de accesibilidad, el botón no se imprime.
+    // Nace apagado: sin la clave del modelo de lenguaje no hay con qué
+    // responder, y el botón no se imprime.
     await expect(page.locator('[data-uhp-voz]')).toHaveCount(0);
   });
 
@@ -317,7 +418,7 @@ test.describe('Asistente de voz', () => {
     await expect(aviso).toContainText('funciona igual sin el asistente');
   });
 
-  test('pulsar abre el aviso completo y no abre sesión hasta que se acepta', async ({ page }) => {
+  test('pulsar abre el aviso completo y no conversa hasta que se acepta', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz.html');
     await listo(page);
@@ -344,11 +445,33 @@ test.describe('Asistente de voz', () => {
       await expect(panel).toContainText(texto);
     }
 
-    // Nada se ha abierto todavía.
-    expect(await page.evaluate(() => window.__UHP_STUB.abierta)).toBe(0);
+    // Nada se ha abierto todavía: ni transcripción, ni campo.
+    await expect(page.locator('.uhp-voz__turno')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__UHP_STUB.chat)).toBe(0);
 
     await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
-    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
+    await expect(page.locator('.uhp-voz__turno')).not.toHaveCount(0);
+
+    /* Y el saludo lo pone el navegador, no el proveedor: abrir el panel no
+       puede costar una pregunta. Quien lo abra por curiosidad y lo cierre
+       no debe haber gastado nada de la entidad. */
+    expect(await page.evaluate(() => window.__UHP_STUB.chat)).toBe(0);
+  });
+
+  test('sin aviso configurado, pulsar abre la conversación directamente', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-sin-aviso.html');
+    await listo(page);
+
+    /* El aviso previo es un ajuste y no una puerta: apagado —que es como
+       nace— no hay nada que aceptar. Con esta arquitectura el asistente no
+       graba ni guarda la voz de nadie: el dictado lo convierte en texto el
+       navegador y lo que sale de aquí es texto. */
+    await page.locator('[data-uhp-voz-canal="voz"]').click();
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeVisible();
+    await expect(page.locator('.uhp-voz__turno')).not.toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Acepto/ })).toHaveCount(0);
+    await expect(page.locator('.uhp-voz__aviso-corto')).toHaveCount(0);
   });
 
   test('cancelar el aviso no abre nada y devuelve el foco', async ({ page }) => {
@@ -359,24 +482,23 @@ test.describe('Asistente de voz', () => {
     await page.locator('[data-uhp-voz-accion="abrir"]').click();
     await page.getByRole('button', { name: 'Cancelar' }).click();
 
-    expect(await page.evaluate(() => window.__UHP_STUB.abierta)).toBe(0);
+    await expect(page.locator('.uhp-voz__turno')).toHaveCount(0);
     await expect(page.locator('[data-uhp-voz-accion="abrir"]')).toHaveAttribute('aria-expanded', 'false');
     await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeHidden();
   });
 
-  test('la sesión registra las diez herramientas y el estado de la pantalla', async ({ page }) => {
+  test('el navegador sabe ejecutar las diez herramientas', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz.html');
     await listo(page);
     await conversar(page);
 
-    const o = await page.evaluate(() => ({
-      tools: Object.keys(window.__UHP_STUB.opciones.clientTools).sort(),
-      vars: window.__UHP_STUB.opciones.dynamicVariables,
-      agente: window.__UHP_STUB.opciones.agentId
-    }));
-
-    expect(o.tools).toEqual([
+    /* Las definiciones las manda el SERVIDOR al modelo; lo que se puede
+       comprobar aquí es lo otro, que es lo que de verdad se rompe: que el
+       navegador sepa ejecutar las diez por su nombre. Una herramienta que
+       el servidor declara y el navegador no reconoce devuelve «no existe»
+       y el modelo se queda sin poder hacer lo que acaba de anunciar. */
+    const nombres = [
       'uhp_cambiar_indicador',
       'uhp_comparar_subregiones',
       'uhp_consultar_municipio',
@@ -387,12 +509,31 @@ test.describe('Asistente de voz', () => {
       'uhp_limpiar_tablero',
       'uhp_listar_municipios',
       'uhp_seleccionar_municipio'
-    ]);
-    // El agente arranca sabiendo qué hay en pantalla: sin esto, la
-    // primera pregunta obliga a una llamada antes de poder responder.
-    expect(o.vars.municipios_visibles).toBe('55');
-    expect(o.vars.indicador).toContain('lesión precursora');
-    expect(o.agente).toBe('agent_pruebadelasuite0000');
+    ];
+    for (const n of nombres) {
+      const r = await herramienta(page, n, n === 'uhp_cambiar_indicador' ? { indicador: 'hp' } : {});
+      expect(r, n).not.toContain('No existe una herramienta');
+      expect(r, n).not.toContain('La herramienta falló');
+    }
+  });
+
+  test('la primera pregunta ya lleva el estado de la pantalla', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    /* El modelo tiene que arrancar sabiendo qué hay en pantalla. Antes se
+       interpolaba en el prompt del agente y una variable que faltara
+       tumbaba la sesión entera; ahora va como un turno más de la
+       conversación, de modo que si falta, falta un dato y no la
+       conversación. */
+    await preguntar(page, '¿Cuántos municipios hay?');
+    const cuerpo = await page.evaluate(() => window.__UHP_STUB.cuerpos[0]);
+    const todo = JSON.stringify(cuerpo);
+    expect(cuerpo.canal).toBe('voz');
+    expect(todo).toContain('55');
+    expect(todo).toContain('lesión precursora');
   });
 
   test('las herramientas mueven el tablero de verdad', async ({ page }) => {
@@ -492,33 +633,43 @@ test.describe('Asistente de voz', () => {
     await listo(page);
     await conversar(page);
 
-    // Las herramientas que mutan no esperan respuesta: el agente puede
-    // encadenarlas sin frenar, y un modelo atascado dispara decenas.
-    const respuestas = await page.evaluate(async () => {
-      const t = window.__UHP_STUB.opciones.clientTools;
-      const salida = [];
-      for (let i = 0; i < 12; i++) {
-        salida.push(await t.uhp_cambiar_indicador({ indicador: i % 2 ? 'hp' : 'lpm' }));
-      }
-      return salida;
+    /* Los tres proveedores pueden pedir varias herramientas en una sola
+       respuesta, y un modelo atascado pide doce. Se ejecutan todas, pero
+       el tablero no puede repintarse doce veces seguidas: quien usa un
+       lector de pantalla recibiría doce anuncios. */
+    const llamadas = [];
+    for (let i = 0; i < 12; i++) {
+      llamadas.push({ id: 'r' + i, nombre: 'uhp_cambiar_indicador', args: { indicador: i % 2 ? 'hp' : 'lpm' } });
+    }
+    await preguntar(page, 'cambia el indicador muchas veces', [
+      { texto: '', llamadas: llamadas },
+      { texto: 'Listo.', llamadas: [] }
+    ]);
+
+    const respuestas = await page.evaluate(() => {
+      const S = window.__UHP_STUB;
+      const ultimo = S.cuerpos[S.cuerpos.length - 1];
+      const fin = ultimo.mensajes[ultimo.mensajes.length - 1];
+      return fin.resultados.map(function (r) { return r.salida; });
     });
 
+    expect(respuestas).toHaveLength(12);
     const frenadas = respuestas.filter((r) => /demasiados cambios/i.test(r));
     expect(frenadas.length).toBeGreaterThan(8);
   });
 
-  test('lo que dice el agente se pinta como texto, nunca como HTML', async ({ page }) => {
+  test('lo que dice el modelo se pinta como texto, nunca como HTML', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz.html');
     await listo(page);
     await conversar(page);
 
-    await page.evaluate(() => {
-      window.__UHP_STUB.opciones.onMessage({
-        source: 'ai',
-        message: '<img src=x onerror="window.__INYECTADO=1"> y <b>negrita</b>'
-      });
-    });
+    /* Lo que devuelve un proveedor es texto ajeno, por mucho que la
+       cuenta sea de la entidad. Y el camino entero —petición, respuesta,
+       pintado— tiene que tratarlo como tal. */
+    await preguntar(page, 'dime algo', [
+      { texto: '<img src=x onerror="window.__INYECTADO=1"> y <b>negrita</b>', llamadas: [] }
+    ]);
 
     const turno = page.locator('.uhp-voz__turno').last();
     await expect(turno).toContainText('<img src=x');
@@ -527,7 +678,7 @@ test.describe('Asistente de voz', () => {
     expect(await page.evaluate(() => window.__INYECTADO)).toBeUndefined();
   });
 
-  test('escribir en vez de hablar llega al agente', async ({ page }) => {
+  test('escribir en vez de hablar llega al modelo', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz.html');
     await listo(page);
@@ -535,16 +686,22 @@ test.describe('Asistente de voz', () => {
 
     // La alternativa equivalente que exige la Resolución 1519: quien no
     // puede o no quiere hablar tiene que poder preguntar igual.
-    const campo = page.locator('.uhp-voz__campo');
-    await expect(campo).toBeVisible();
-    await campo.fill('¿Cuántos municipios hay?');
-    await page.locator('.uhp-voz__forma').getByRole('button', { name: 'Enviar' }).click();
+    await expect(page.locator('.uhp-voz__campo')).toBeVisible();
+    await preguntar(page, '¿Cuántos municipios hay?', [
+      { texto: 'Son 55 municipios priorizados.', llamadas: [] }
+    ]);
 
-    expect(await page.evaluate(() => window.__UHP_STUB.enviados)).toEqual(['¿Cuántos municipios hay?']);
+    const enviado = await page.evaluate(() => {
+      const m = window.__UHP_STUB.cuerpos[0].mensajes;
+      return m[m.length - 1];
+    });
+    expect(enviado.rol).toBe('usuario');
+    expect(enviado.texto).toBe('¿Cuántos municipios hay?');
     await expect(page.locator('.uhp-voz__turno--usted')).toContainText('¿Cuántos municipios hay?');
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText('Son 55 municipios');
   });
 
-  test('retirar la autorización cierra la sesión y borra la aceptación', async ({ page }) => {
+  test('retirar la autorización cierra la conversación y borra la aceptación', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz.html');
     await listo(page);
@@ -553,7 +710,7 @@ test.describe('Asistente de voz', () => {
     // El artículo 8(e) de la Ley 1581 da derecho a revocar la
     // autorización, y revocarla tiene que notarse en el acto.
     await page.getByRole('button', { name: 'Retirar autorización' }).click();
-    expect(await page.evaluate(() => window.__UHP_STUB.cerrada)).toBe(1);
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeHidden();
     expect(await page.evaluate(() => {
       try { return window.sessionStorage.getItem('uhp_voz_consentimiento_v1'); }
       catch (e) { return null; }
@@ -564,22 +721,42 @@ test.describe('Asistente de voz', () => {
     await expect(page.locator('[data-uhp-voz-zona="panel"]')).toContainText('artículo 9 de la Ley 1581');
   });
 
-  test('un clic del visitante le llega al agente como contexto', async ({ page }) => {
+  test('un clic del visitante le llega al modelo con la siguiente pregunta', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz.html');
     await listo(page);
     await conversar(page);
 
-    // Si el visitante mueve el tablero a mano y el agente no se entera,
-    // seguirá hablando de una pantalla que ya no existe.
+    // Si el visitante mueve el tablero a mano y el modelo no se entera,
+    // seguirá hablando de una pantalla que ya no existe y le leerá a
+    // alguien la cifra de otro municipio.
     await page.locator('.uhp-db__mrow', { hasText: 'Pasto' }).first().click();
-    await expect.poll(
-      () => page.evaluate(() => window.__UHP_STUB.contexto.length),
-      { timeout: 4000 }
-    ).toBeGreaterThan(0);
-    const ctx = await page.evaluate(() => window.__UHP_STUB.contexto.join(' '));
-    expect(ctx).toContain('El visitante cambió el tablero');
-    expect(ctx).toContain('Pasto');
+    await expect(page.locator('[data-uhp-zona="detalle"] .big')).toHaveText('Pasto');
+
+    await preguntar(page, '¿y aquí qué tal?');
+    const mensajes = await page.evaluate(() => window.__UHP_STUB.cuerpos[0].mensajes);
+    const texto = mensajes.map((m) => m.texto || '').join(' ');
+    expect(texto).toContain('En pantalla ahora mismo');
+    expect(texto).toContain('Pasto');
+  });
+
+  test('el estado de la pantalla no se repite si no cambió', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    /* Va en cada pregunta solo cuando cambió. Repetirlo intacto engorda
+       el historial, que viaja ENTERO en cada vuelta de herramientas: se
+       paga tres o cuatro veces por pregunta. */
+    await preguntar(page, 'primera');
+    await preguntar(page, 'segunda');
+
+    const cuantas = await page.evaluate(() => {
+      const m = window.__UHP_STUB.cuerpos[window.__UHP_STUB.cuerpos.length - 1].mensajes;
+      return m.filter((x) => (x.texto || '').indexOf('En pantalla ahora mismo') === 0).length;
+    });
+    expect(cuantas).toBe(1);
   });
 
   test('el asistente no pide nada a un servidor externo', async ({ page }) => {
@@ -595,8 +772,11 @@ test.describe('Asistente de voz', () => {
     await conversar(page);
     await herramienta(page, 'uhp_leer_estado_tablero', {});
 
-    // Con el SDK ya presente, el cargador no debe bajarlo. Y nada del
-    // asistente puede salir a la red por su cuenta.
+    /* Es la propiedad central de la arquitectura: el navegador habla con
+       ESTE sitio y con nadie más. Ni CDN del que bajar un SDK, ni
+       WebSocket contra el proveedor, ni dominios de LiveKit. Quien tenga
+       que escribir la política de seguridad de contenido de este sitio
+       necesita que esto siga siendo verdad. */
     expect(fuera, 'el asistente salió a la red: ' + fuera.join(', ')).toEqual([]);
   });
 
@@ -608,67 +788,49 @@ test.describe('Asistente de voz', () => {
 
     // La primera versión comparaba contra una fase llamada «activa» que
     // no existía en ninguna parte: volver a pulsar abría una segunda
-    // sesión encima de la primera, y la primera no se cerraba nunca.
+    // conversación encima de la primera, y la primera no se cerraba.
     await page.locator('[data-uhp-voz-accion="abrir"]').click();
 
-    expect(await page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
-    expect(await page.evaluate(() => window.__UHP_STUB.cerrada)).toBe(1);
+    await expect(page.locator('.uhp-voz__turno')).toHaveCount(0);
     await expect(page.locator('[data-uhp-voz-accion="abrir"]')).toHaveAttribute('aria-expanded', 'false');
     await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeHidden();
   });
 
-  test('cerrar mientras conecta no deja la sesión abierta por detrás', async ({ page }) => {
-    // El doble tarda en resolver: así hay una ventana real entre pulsar
-    // «Acepto» y que la sesión exista, que es justo cuando el visitante
-    // puede arrepentirse. Sin el testigo de generación, la sesión se
-    // abría después, sin panel, con el micrófono encendido.
-    await page.addInitScript(() => {
-      window.__UHP_STUB = { abierta: 0, cerrada: 0, opciones: null, enviados: [], contexto: [] };
-      // El micrófono también: esta prueba trae su propio doble del SDK y
-      // sin él llegaba al getUserMedia de verdad, que en un Chromium sin
-      // tarjeta de sonido no resuelve. El permiso se pide ANTES de abrir
-      // la sesión, así que la ventana que esta prueba quiere medir no
-      // llegaba a existir.
-      const falso = {
-        getUserMedia: function () {
-          return Promise.resolve({ getTracks: function () { return [{ stop: function () {} }]; } });
-        }
-      };
-      try {
-        Object.defineProperty(navigator, 'mediaDevices', { value: falso, configurable: true });
-      } catch (e) { window.navigator.mediaDevices = falso; }
-      window.ElevenLabsClient = {
-        Conversation: {
-          startSession: function (opciones) {
-            window.__UHP_STUB.abierta++;
-            window.__UHP_STUB.opciones = opciones;
-            return new Promise((res) => setTimeout(() => res({
-              endSession: function () { window.__UHP_STUB.cerrada++; },
-              sendUserMessage: function () {},
-              sendContextualUpdate: function () {},
-              getId: function () { return 'c'; }
-            }), 600));
-          }
-        }
-      };
-    });
+  test('cerrar mientras el modelo piensa descarta la respuesta que llegue tarde', async ({ page }) => {
+    /* Hay una ventana real entre preguntar y que llegue la respuesta, y
+       es justo cuando el visitante puede arrepentirse. Sin el testigo de
+       generación, la respuesta llegaba después, se pintaba en un panel
+       cerrado y —en el canal hablado— se ponía a sonar sola. */
+    await conDoble(page);
     await page.goto(BASE + '/paginas/voz.html');
     await listo(page);
+    await conversar(page);
 
+    await page.evaluate(() => {
+      const original = window.fetch;
+      window.fetch = function (url) {
+        if (String(url).indexOf('/voz/chat') !== -1) {
+          const args = arguments;
+          const yo = this;
+          return new Promise((res) => setTimeout(() => res(original.apply(yo, args)), 800));
+        }
+        return original.apply(this, arguments);
+      };
+      window.__UHP_STUB.guion = [{ texto: 'Una respuesta que llega tarde.', llamadas: [] }];
+    });
+
+    await enviar(page, '¿cuántos municipios hay?');
     await page.locator('[data-uhp-voz-canal="voz"]').click();
-    await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
-    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
-
-    // Cerrar ANTES de que la promesa resuelva.
-    await page.locator('[data-uhp-voz-canal="voz"]').click();
-    await page.waitForTimeout(1200);
-
-    // La sesión que llegó tarde se cierra sola: no queda micrófono vivo.
-    expect(await page.evaluate(() => window.__UHP_STUB.cerrada)).toBeGreaterThan(0);
     await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeHidden();
+
+    await page.waitForTimeout(1500);
+
+    // Ni se pintó, ni se mandó a sintetizar.
+    await expect(page.locator('.uhp-voz__turno')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__UHP_STUB.hablar)).toBe(0);
   });
 
-  test('una frase del agente no borra lo que el visitante está escribiendo', async ({ page }) => {
+  test('una respuesta del modelo no borra lo que el visitante está escribiendo', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz.html');
     await listo(page);
@@ -677,16 +839,34 @@ test.describe('Asistente de voz', () => {
     // La primera versión repintaba el panel entero con cada turno: el
     // <input> se destruía, el texto a medias se perdía y el foco caía al
     // <body>, con lo que la tecla Escape dejaba de llegar.
+    /* El modelo contesta en dos tiempos: lo que dice ANTES de pedir una
+       herramienta se pinta en cuanto llega, y la respuesta final después.
+       Entre medias el visitante sigue escribiendo, y ahí es donde la
+       primera versión le borraba lo escrito. */
+    await page.evaluate(() => {
+      const original = window.fetch;
+      window.fetch = function (url) {
+        if (String(url).indexOf('/voz/chat') !== -1) {
+          const args = arguments;
+          const yo = this;
+          return new Promise((res) => setTimeout(() => res(original.apply(yo, args)), 700));
+        }
+        return original.apply(this, arguments);
+      };
+    });
+    await responde(page, [
+      { texto: 'Un momento.', llamadas: [{ id: 'a1', nombre: 'uhp_leer_estado_tablero', args: {} }] },
+      { texto: 'Son 55 municipios.', llamadas: [] }
+    ]);
+
     const campo = page.locator('.uhp-voz__campo');
+    await enviar(page, 'primera pregunta');
+
+    // Mientras el modelo piensa, se escribe lo siguiente.
     await campo.click();
     await campo.fill('¿cuántos municipios tiene la zona');
 
-    await page.evaluate(() => {
-      window.__UHP_STUB.opciones.onMessage({ source: 'ai', message: 'Un momento.' });
-      window.__UHP_STUB.opciones.onMessage({ source: 'ai', message: 'Son 55 municipios.' });
-    });
-
-    await expect(page.locator('.uhp-voz__turno')).toHaveCount(2);
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText('Son 55 municipios');
     await expect(campo).toHaveValue('¿cuántos municipios tiene la zona');
     expect(await page.evaluate(() => document.activeElement.className)).toContain('uhp-voz__campo');
   });
@@ -705,18 +885,17 @@ test.describe('Asistente de voz', () => {
     // Se cierra y se vuelve a abrir: la confirmación anterior no puede
     // valer, o la salvaguarda se sortea en la conversación siguiente.
     await page.locator('[data-uhp-voz-accion="abrir"]').click();
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeHidden();
     await page.locator('[data-uhp-voz-accion="abrir"]').click();
-    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(2);
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeVisible();
 
+    /* Y el historial arranca de cero: arrastrar la conversación anterior
+       le daría al modelo una confirmación vieja con la que saltarse la
+       pregunta de una sugerencia nueva. */
     const r = await herramienta(page, 'uhp_seleccionar_municipio', { municipio: sugerido });
-    // Ahora cruza exacto y no hay sugerencia pendiente, así que obedece:
-    // lo que NO puede pasar es que recuerde una confirmación vieja para
-    // saltarse la pregunta de una sugerencia nueva.
     expect(r).toContain(sugerido);
-    const estado = await page.evaluate(() => ({
-      sug: window.__UHP_STUB.opciones !== null
-    }));
-    expect(estado.sug).toBe(true);
+    const mensajes = await page.evaluate(() => window.__UHP_STUB.cuerpos[window.__UHP_STUB.cuerpos.length - 1].mensajes);
+    expect(JSON.stringify(mensajes)).not.toContain('Albano');
   });
 
   test('la transcripción se puede recorrer con el teclado', async ({ page }) => {
@@ -825,10 +1004,10 @@ test.describe('Asistente de voz', () => {
 
     // Estado 3: la conversación, con un turno de cada parte.
     await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
-    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
-    await page.evaluate(() => {
-      window.__UHP_STUB.opciones.onMessage({ source: 'ai', message: 'Hay 55 municipios.' });
-    });
+    await expect(page.locator('.uhp-voz__turno')).not.toHaveCount(0);
+    await preguntar(page, '¿cuántos municipios hay?', [
+      { texto: 'Hay 55 municipios.', llamadas: [] }
+    ]);
     comprobar(await medir([
       '.uhp-voz__quien', '.uhp-voz__turno', '.uhp-voz__estado-txt', '.uhp-voz__cab h3'
     ]));
@@ -863,32 +1042,30 @@ test.describe('Asistente de voz', () => {
     await listo(page);
     await conversarEscribiendo(page);
 
+    await preguntar(page, '¿cuántos municipios hay?', [
+      { texto: 'Son 55 municipios priorizados.', llamadas: [] }
+    ]);
+
     const st = await page.evaluate(() => ({
       microfono: window.__UHP_STUB.microfono,
-      tipo: window.__UHP_STUB.tipo,
-      textOnly: window.__UHP_STUB.opciones.textOnly,
-      overrides: window.__UHP_STUB.opciones.overrides,
-      transporte: window.__UHP_STUB.opciones.connectionType
+      dictados: window.__UHP_STUB.dictados,
+      hablar: window.__UHP_STUB.hablar,
+      canal: window.__UHP_STUB.cuerpos[0].canal
     }));
 
     // La diferencia entre «no hay audio» y «no se pide permiso para el
     // audio»: lo segundo es lo que convierte esto en una alternativa de
     // verdad para quien no puede o no quiere hablar.
     expect(st.microfono).toBe(0);
-    expect(st.tipo).toBe('text');
+    expect(st.dictados).toBe(0);
 
-    // Las DOS mitades. Sin la sustitución, el proveedor sintetizaría un
-    // audio que el navegador tira a la basura y que se factura igual.
-    expect(st.textOnly).toBe(true);
-    expect(st.overrides.conversation.textOnly).toBe(true);
+    /* Y no se manda a sintetizar NADA, aunque el sitio tenga la voz
+       configurada: ElevenLabs cobra por carácter leído, y un audio que
+       nadie va a oír se factura igual que uno que sí. */
+    expect(st.hablar).toBe(0);
 
-    // Y nada de voz: ni identificador ni velocidad, aunque el sitio los
-    // tenga configurados, porque en este canal no hay voz que ajustar.
-    expect(st.overrides.tts).toBeUndefined();
-
-    // WebSocket: WebRTC arrastraría LiveKit para no llevar un solo byte
-    // de audio.
-    expect(st.transporte).toBe('websocket');
+    // El servidor sabe por qué canal va, que es lo que cambia el prompt.
+    expect(st.canal).toBe('texto');
   });
 
   test('el canal escrito dice «escriba», no «escuchando»', async ({ page }) => {
@@ -921,7 +1098,7 @@ test.describe('Asistente de voz', () => {
     // grande, la autorización del artículo 9 dejaría de estar informada.
     await page.locator('[data-uhp-voz-canal="voz"]').click();
     await expect(page.getByRole('button', { name: 'Acepto y quiero hablar' })).toBeVisible();
-    expect(await page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
+    await expect(page.locator('.uhp-voz__turno')).toHaveCount(0);
   });
 
   test('aceptar el aviso de voz sí cubre el canal escrito', async ({ page }) => {
@@ -936,7 +1113,8 @@ test.describe('Asistente de voz', () => {
     // «puede escribir sus preguntas en lugar de hablarlas». Volver a
     // pedirlo sería fricción por algo más estrecho de lo ya autorizado.
     await page.locator('[data-uhp-voz-canal="texto"]').click();
-    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(2);
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeVisible();
+    await expect(page.locator('.uhp-voz__turno')).not.toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Acepto y quiero escribir' })).toHaveCount(0);
   });
 
@@ -961,78 +1139,189 @@ test.describe('Asistente de voz', () => {
     await expect(txt).toHaveAttribute('aria-expanded', 'false');
   });
 
-  test('el canal hablado manda las sustituciones de voz configuradas', async ({ page }) => {
+  test('la respuesta hablada se manda a sintetizar, la escrita no', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz-dos.html');
     await listo(page);
     await conversar(page);
 
-    const o = await page.evaluate(() => window.__UHP_STUB.opciones);
-    expect(o.overrides.tts.voiceId).toBe('VozDePruebaDeLaSuite00');
-    expect(o.overrides.tts.speed).toBe(0.9);
-    expect(o.textOnly).toBeUndefined();
-    expect(o.useWakeLock).toBe(true);
+    await preguntar(page, '¿cuántos municipios hay?', [
+      { texto: 'Son 55 municipios priorizados.', llamadas: [] }
+    ]);
+
+    /* Una sola vez, y con el texto que de verdad se pintó. ElevenLabs
+       cobra por carácter: mandar dos veces lo mismo se paga dos veces. */
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.hablar)).toBe(1);
+    expect(await page.evaluate(() => window.__UHP_STUB.textos)).toEqual(['Son 55 municipios priorizados.']);
+
+    // Y la clave de ElevenLabs no la ve el navegador en ningún momento.
+    const cuerpo = await page.content();
+    expect(cuerpo).not.toContain('sk-el-que-no-debe-salir-nunca');
+    expect(cuerpo).not.toContain('sk-ant-que-no-debe-salir-nunca');
   });
 
-  test('el micrófono se pide una vez y la pista se suelta en seguida', async ({ page }) => {
+  test('lo que el modelo dice antes de una herramienta no se lee en alto', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    /* «Déjeme mirar» se pinta, porque callarlo deja la pantalla muda
+       mientras el tablero se mueve solo. Pero no se sintetiza: se pagaría
+       un audio de relleno en cada vuelta de herramientas, y en una
+       pregunta normal hay tres o cuatro. */
+    await preguntar(page, 'compara Ipiales con Túquerres', [
+      { texto: 'Déjeme mirar.', llamadas: [{ id: 'a1', nombre: 'uhp_consultar_municipio', args: { municipio: 'Ipiales' } }] },
+      { texto: 'Ipiales está en 37,2 %.', llamadas: [] }
+    ]);
+
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.hablar)).toBe(1);
+    expect(await page.evaluate(() => window.__UHP_STUB.textos)).toEqual(['Ipiales está en 37,2 %.']);
+  });
+
+  test('que no suene no rompe la conversación', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    /* La respuesta ya está escrita en el panel. Pintarle un error a quien
+       tiene delante lo que preguntó sería decirle que algo salió mal
+       cuando lo que pidió está ahí. */
+    await page.evaluate(() => { window.__UHP_STUB.fallo = { ruta: 'hablar', codigo: 500 }; });
+    await preguntar(page, '¿cuántos municipios hay?', [
+      { texto: 'Son 55 municipios priorizados.', llamadas: [] }
+    ]);
+
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText('Son 55 municipios');
+    await expect(page.locator('.uhp-voz__estado-txt')).not.toContainText(/error/i);
+    await expect(page.locator('.uhp-voz__campo')).toBeVisible();
+  });
+
+  test('el dictado no arranca solo: lo arranca el visitante', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz.html');
     await listo(page);
     await conversar(page);
 
-    const st = await page.evaluate(() => ({
-      pedido: window.__UHP_STUB.microfono,
-      vivas: window.__UHP_STUB.pistasVivas
-    }));
-    expect(st.pedido).toBe(1);
-    // Se para en cuanto llega la respuesta: dejarla abierta mantendría el
-    // indicador de grabación encendido mientras todavía se descarga el SDK.
-    expect(st.vivas).toBe(0);
+    /* Un micrófono siempre abierto en la página de una entidad pública
+       es algo que habría que justificar. Aquí es pulsar para hablar, y
+       hasta que se pulsa no se ha abierto nada. */
+    expect(await page.evaluate(() => window.__UHP_STUB.dictados)).toBe(0);
+
+    /* `exact` porque getByRole casa el nombre por SUBCADENA: sin él,
+       «Escribir en vez de hablar» cuenta como «Hablar» y la prueba
+       aprueba un botón que no existe. */
+    const mic = page.getByRole('button', { name: 'Hablar', exact: true });
+    await expect(mic).toHaveAttribute('aria-pressed', 'false');
+    await mic.click();
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.dictados)).toBe(1);
+    await expect(page.getByRole('button', { name: 'Dejar de hablar', exact: true })).toHaveAttribute('aria-pressed', 'true');
+
+    // Y lo dictado entra como una pregunta más.
+    await page.evaluate(() => {
+      const r = window.__UHP_STUB.viva;
+      r.onresult({ results: [[{ transcript: '¿cuántos municipios hay?' }]] });
+      r.onend({});
+    });
+    await expect(page.locator('.uhp-voz__turno--usted')).toContainText('¿cuántos municipios hay?');
   });
 
-  test('denegar el micrófono no gasta una conversación y ofrece escribir', async ({ page }) => {
-    await conDoble(page, { microfono: false });
+  test('el asistente se calla antes de abrir el micrófono', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz.html');
+    await listo(page);
+    await conversar(page);
+
+    /* Si no, su propia voz entra por el micrófono, se transcribe como si
+       la hubiera dicho el ciudadano, y el asistente se pone a conversar
+       consigo mismo a costa de la entidad. */
+    await preguntar(page, '¿cuántos municipios hay?', [
+      { texto: 'Son 55 municipios priorizados.', llamadas: [] }
+    ]);
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.hablar)).toBe(1);
+
+    await page.getByRole('button', { name: 'Hablar', exact: true }).click();
+    const sonando = await page.evaluate(() => {
+      const a = document.querySelectorAll('audio');
+      for (let i = 0; i < a.length; i++) { if (!a[i].paused) { return true; } }
+      return false;
+    });
+    expect(sonando).toBe(false);
+  });
+
+  test('un navegador que no sabe dictar lo dice y deja escribir', async ({ page }) => {
+    await conDoble(page, { dictado: false });
     await page.goto(BASE + '/paginas/voz-dos.html');
     await listo(page);
+    await conversar(page);
 
-    await page.locator('[data-uhp-voz-canal="voz"]').click();
-    await page.getByRole('button', { name: 'Acepto y quiero hablar' }).click();
+    /* Firefox, Opera, Brave y Vivaldi no reconocen voz. No es un caso
+       raro: es una parte del público. Prometerles un botón de micrófono
+       que no funciona es peor que no ofrecerlo. */
+    await expect(page.getByRole('button', { name: 'Hablar', exact: true })).toHaveCount(0);
+    await expect(page.locator('.uhp-voz__campo')).toBeVisible();
 
-    await expect(page.locator('.uhp-voz__estado-txt')).toContainText('micrófono');
-
-    /* LO QUE IMPORTA: ninguna sesión. El permiso se pide ANTES de pedirle
-       credenciales al servidor, de modo que una negativa no se lleva una
-       ranura del cupo diario —que es facturable— ni una URL firmada. */
-    expect(await page.evaluate(() => window.__UHP_STUB.abierta)).toBe(0);
-
-    // Y queda un camino, no solo un mensaje.
-    const salida = page.getByRole('button', { name: 'Escribir en vez de hablar' });
-    await expect(salida).toBeVisible();
-    await salida.click();
-
-    /* Y NO vuelve a pedir autorización: quien aceptó el aviso de la voz ya
-       leyó un texto que incluye el canal escrito con esas palabras —«puede
-       escribir sus preguntas en lugar de hablarlas»—, y volver a pedirla
-       sería fricción por algo más estrecho de lo ya autorizado. */
-    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.abierta)).toBe(1);
-    expect(await page.evaluate(() => window.__UHP_STUB.tipo)).toBe('text');
-    await expect(page.getByRole('button', { name: 'Acepto y quiero escribir' })).toHaveCount(0);
+    await preguntar(page, '¿cuántos municipios hay?', [
+      { texto: 'Son 55 municipios priorizados.', llamadas: [] }
+    ]);
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText('Son 55 municipios');
   });
 
-  test('las variables dinámicas viajan siempre y dicen por qué canal', async ({ page }) => {
+  test('denegar el micrófono no gasta una pregunta y deja por dónde seguir', async ({ page }) => {
+    await conDoble(page, { dictadoFalla: 'not-allowed' });
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    const antes = await page.evaluate(() => window.__UHP_STUB.chat);
+    await page.getByRole('button', { name: 'Hablar', exact: true }).click();
+    await expect(page.locator('.uhp-voz__estado-txt')).toContainText('micrófono');
+
+    /* LO QUE IMPORTA: no se gasta una pregunta. Una negativa del
+       navegador no puede llevarse una ranura del cupo diario, que es
+       facturable. */
+    expect(await page.evaluate(() => window.__UHP_STUB.chat)).toBe(antes);
+
+    // Y queda un camino, no solo un mensaje: la conversación sigue viva y
+    // el campo de escritura tiene que estar delante.
+    const campo = page.locator('.uhp-voz__campo');
+    await expect(campo).toBeVisible();
+    await preguntar(page, '¿cuántos municipios hay?', [
+      { texto: 'Son 55 municipios priorizados.', llamadas: [] }
+    ]);
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText('Son 55 municipios');
+  });
+
+  test('un navegador que falla al transcribir no deja un botón roto', async ({ page }) => {
+    await conDoble(page, { dictadoFalla: 'service-not-allowed' });
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    /* En Brave, Vivaldi y Opera el objeto existe y falla DESPUÉS, en
+       tiempo de ejecución, porque el motor de transcripción es un
+       servicio de Google que esos navegadores no tienen. Reintentar ahí
+       es pedirle al visitante que pulse un botón roto. */
+    await page.getByRole('button', { name: 'Hablar', exact: true }).click();
+    await expect(page.locator('.uhp-voz__estado-txt')).toContainText('no reconoce la voz');
+    await expect(page.getByRole('button', { name: 'Hablar', exact: true })).toHaveCount(0);
+    await expect(page.locator('.uhp-voz__campo')).toBeVisible();
+  });
+
+  test('el canal viaja en cada pregunta, porque cambia las instrucciones', async ({ page }) => {
     await conDoble(page);
     await page.goto(BASE + '/paginas/voz-texto.html');
     await listo(page);
     await conversarEscribiendo(page);
 
-    const dv = await page.evaluate(() => window.__UHP_STUB.opciones.dynamicVariables);
-    // El prompt del agente las interpola entre llaves. Si falta una sola,
-    // el proveedor rechaza la sesión: por eso van todas, siempre.
-    for (const k of ['canal', 'indicador', 'zona', 'subregion', 'municipio',
-      'municipios_visibles', 'casos_visibles', 'promedio_visible']) {
-      expect(dv[k], 'falta la variable ' + k).toBeTruthy();
-    }
-    expect(dv.canal).toBe('texto');
+    /* Antes esto eran ocho variables interpoladas en el prompt del
+       agente, y si faltaba una sola el proveedor rechazaba la sesión
+       entera. Ahora el prompt es estático y lo único que el navegador
+       tiene que decir es por dónde va la conversación: de eso depende que
+       el modelo lea una lista de once subregiones o la resuma. */
+    await preguntar(page, '¿cuántos municipios hay?');
+    expect(await page.evaluate(() => window.__UHP_STUB.cuerpos[0].canal)).toBe('texto');
   });
 
   /* ---------------------------------------------------------------- */
@@ -1175,38 +1464,92 @@ test.describe('Asistente de voz', () => {
     expect(mal).toContain('Estado nutricional');
   });
 
-  test('en modo privado la credencial la pone el servidor y no se sustituye nada sin verificar', async ({ page }) => {
+  test('ninguna clave aparece en la página, por ninguna vía', async ({ page }) => {
+    for (const pagina of ['voz', 'voz-dos', 'voz-texto', 'voz-sin-aviso']) {
+      await page.goto(BASE + '/paginas/' + pagina + '.html');
+      const html = await page.content();
+      expect(html, pagina).not.toContain('sk-ant-que-no-debe-salir-nunca');
+      expect(html, pagina).not.toContain('sk-el-que-no-debe-salir-nunca');
+      expect(html.toLowerCase(), pagina).not.toContain('xi-api-key');
+      expect(html.toLowerCase(), pagina).not.toContain('x-api-key');
+      // Ni qué proveedor hay detrás: no le hace falta al navegador y es
+      // una pista gratis para quien quiera molestar.
+      expect(html, pagina).not.toContain('api.anthropic.com');
+      expect(html, pagina).not.toContain('api.openai.com');
+      expect(html, pagina).not.toContain('generativelanguage');
+    }
+  });
+
+  test('sin clave de ElevenLabs no se pinta un botón de micrófono', async ({ page }) => {
     await conDoble(page);
-    await page.route('**/voz/sesion', (r) => r.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ url: 'wss://api.elevenlabs.io/firmada-de-prueba' })
-    }));
-    await page.goto(BASE + '/paginas/voz-privado.html');
+    await page.goto(BASE + '/paginas/voz-muda.html');
+    await listo(page);
+
+    /* La voz es opcional, pero a medias no: con la clave del modelo y sin
+       la de ElevenLabs el asistente responde entero por escrito. Pintar
+       un lanzador de voz prometería algo que el servidor no puede hacer,
+       y el fallo sería mudo —nunca mejor dicho— en producción. */
+    await expect(page.locator('[data-uhp-voz-canal="voz"]')).toHaveCount(0);
+    await expect(page.locator('[data-uhp-voz-canal="texto"]')).toHaveCount(1);
+
+    await conversarEscribiendo(page);
+    await preguntar(page, '¿cuántos municipios hay?', [
+      { texto: 'Son 55 municipios priorizados.', llamadas: [] }
+    ]);
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText('Son 55 municipios');
+    expect(await page.evaluate(() => window.__UHP_STUB.hablar)).toBe(0);
+  });
+
+  test('cuando el servidor dice que no, se dice por qué', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
     await listo(page);
     await conversarEscribiendo(page);
 
-    const o = await page.evaluate(() => window.__UHP_STUB.opciones);
+    /* Las puertas del servidor —cupo diario, límite por IP, pregunta
+       demasiado larga— tienen que llegar al visitante como algo que
+       entiende, no como «algo salió mal». */
+    const reanudar = page.getByRole('button', { name: 'Volver a preguntar' });
+    for (const [codigo, aguja] of [[503, /hoy/i], [429, /espere|demasiadas/i], [413, /larga/i]]) {
+      if (await reanudar.count()) { await reanudar.click(); }
+      await page.evaluate((c) => { window.__UHP_STUB.fallo = { ruta: 'chat', codigo: c }; }, codigo);
+      await enviar(page, 'una pregunta');
+      await expect(page.locator('.uhp-voz__estado-txt')).toContainText(aguja);
 
-    // El navegador NO conoce el identificador del agente: abre con la URL
-    // firmada que le dio el servidor. Publicarlo solo serviría para que
-    // alguien intentara usar el agente por su cuenta.
-    expect(o.signedUrl).toBe('wss://api.elevenlabs.io/firmada-de-prueba');
-    expect(o.agentId).toBeUndefined();
+      /* Y nunca se queda sin salida: un mensaje que dice «inténtelo de
+         nuevo» con nada que pulsar es peor que no decir nada. */
+      await expect(reanudar).toBeVisible();
+    }
 
-    /* Y sin verificación guardada, NINGUNA sustitución. El canal escrito
-       funciona igual —el navegador no abre el micrófono ni reproduce
-       nada—; lo que no se hace es arriesgar la conversación de cada
-       visitante por un ajuste que nadie confirmó. */
-    expect(o.textOnly).toBe(true);
-    expect(o.overrides).toBeUndefined();
+    // Y volver a preguntar funciona de verdad, no solo aparece el botón.
+    await reanudar.click();
+    await page.evaluate(() => { window.__UHP_STUB.fallo = null; });
+    await preguntar(page, '¿cuántos municipios hay?', [
+      { texto: 'Son 55 municipios priorizados.', llamadas: [] }
+    ]);
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText('Son 55 municipios');
   });
 
-  test('la clave de API no aparece en la página de un agente privado', async ({ page }) => {
-    await page.goto(BASE + '/paginas/voz-privado.html');
-    const html = await page.content();
-    expect(html).not.toContain('sk_clave_que_no_debe_salir_nunca');
-    expect(html.toLowerCase()).not.toContain('xi-api-key');
+  test('un modelo que se enreda no da vueltas indefinidamente', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversarEscribiendo(page);
+
+    /* Cada vuelta cuesta: el historial entero viaja otra vez. Un modelo
+       atascado gastaría la conversación dando vueltas mientras el
+       visitante ve el tablero moverse sin recibir respuesta. El tope lo
+       pone el plugin y no la obediencia del modelo. */
+    const guion = [];
+    for (let i = 0; i < 20; i++) {
+      guion.push({ texto: '', llamadas: [{ id: 'v' + i, nombre: 'uhp_leer_estado_tablero', args: {} }] });
+    }
+    await responde(page, guion);
+    await enviar(page, 'da vueltas');
+
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText(/me enred/i, { timeout: 15000 });
+    // El tope de la página de pruebas es 8.
+    expect(await page.evaluate(() => window.__UHP_STUB.chat)).toBeLessThanOrEqual(9);
   });
 
   test('un participante publicado no se sustituye por uno prorrateado', async ({ page }) => {
@@ -1236,7 +1579,7 @@ test.describe('Asistente de voz', () => {
     await expect(kpi).toContainText('240 publicados');
     await expect(kpi.locator('.val')).toHaveText('429');
 
-    /* Y el agente puede decir la cifra de un municipio, que antes no
+    /* Y el asistente puede decir la cifra de un municipio, que antes no
        viajaba al navegador: a «¿a cuántas personas examinaron en
        Policarpa?» solo podía contestar que no lo sabía. */
     const ficha = await herramienta(page, 'uhp_consultar_municipio', { municipio: 'Policarpa' });

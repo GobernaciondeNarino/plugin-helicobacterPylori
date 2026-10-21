@@ -397,6 +397,7 @@
     soltarTrampa(v);
     v.gen++;
     v.hist = [];
+    v.ultimoEstado = '';
 
     montarConversacion(v);
     fase(v, 'escucha');
@@ -453,6 +454,23 @@
   function preguntar(v, texto) {
     if (!texto) { return Promise.resolve(); }
     var mia = v.gen;
+
+    /* Qué hay en pantalla, antes de la pregunta y solo cuando cambió.
+       Dos razones, y ninguna es de estilo:
+
+       La primera es que sin esto, cada conversación empieza con una
+       vuelta entera —el prompt del sistema y las diez herramientas viajan
+       otra vez— para que el modelo averigüe lo que el navegador ya sabe.
+
+       La segunda importa más: el visitante puede mover el tablero a mano
+       mientras conversa. Si el modelo no se entera, sigue hablando de una
+       pantalla que ya no existe y le lee cifras de otro municipio a quien
+       no está mirando. */
+    var ahora = estadoDePantalla(v);
+    if (ahora && ahora !== v.ultimoEstado) {
+      v.ultimoEstado = ahora;
+      v.hist.push({ rol: 'usuario', texto: 'En pantalla ahora mismo: ' + ahora });
+    }
 
     v.hist.push({ rol: 'usuario', texto: texto });
     turno(v, 'usted', texto);
@@ -626,6 +644,7 @@
        servicio de Google que esos navegadores no tienen. Reintentar ahí
        es pedirle al visitante que pulse un botón roto. */
     if (!Motor || v.micMuerto) {
+      v.errorMicro = true;
       v.error = T.sin_reconocimiento;
       fase(v, 'error');
       actualizarPie(v);
@@ -644,6 +663,7 @@
     try {
       r = new Motor();
     } catch (e) {
+      v.errorMicro = true;
       v.error = T.sin_reconocimiento;
       fase(v, 'error');
       actualizarPie(v);
@@ -669,6 +689,13 @@
       // «Sin habla» es que el visitante no dijo nada: ni es un fallo ni
       // merece un cartel rojo.
       if ('no-speech' === cual || 'aborted' === cual) { return; }
+
+      /* Que el fallo fue del MICRÓFONO y no de la conversación. De eso
+         depende que el pie siga ofreciendo por dónde preguntar: sin esta
+         marca, quien deniega el permiso se queda con un cartel y nada
+         que pulsar, que es exactamente lo que la Resolución 1519 de 2020
+         llama no tener alternativa. */
+      v.errorMicro = true;
 
       if ('not-allowed' === cual) {
         // Lo denegó el visitante. Puede cambiar de idea, así que el
@@ -1042,6 +1069,21 @@
 
   /* Acceso al tablero, sin gastar nada: lo usan también las tres
      herramientas que solo leen. */
+  /* Lo mismo que devuelve uhp_leer_estado_tablero, y a propósito: dos
+     descripciones distintas de la misma pantalla se contradicen el día
+     que una de las dos se queda atrás. Si el tablero aún no cargó
+     devuelve cadena vacía, y entonces no se manda nada: decirle al modelo
+     «no sé» no le sirve de más que no decirle nada. */
+  function estadoDePantalla(v) {
+    var m = mandoDe(v);
+    if (!m || !m.disponible()) { return ''; }
+    try {
+      return resumenHablado(m.estado());
+    } catch (e) {
+      return '';
+    }
+  }
+
   function conMando(v, fn) {
     var m = mandoDe(v);
     if (!m || !m.disponible()) { return 'El tablero todavía no terminó de cargar.'; }
@@ -1361,7 +1403,13 @@
       pie.appendChild(mic);
     }
 
-    if (CFG.texto && (v.fase === 'escucha' || v.fase === 'habla' || v.fase === 'pensando')) {
+    /* El campo de escritura. También cuando el que falló fue el
+       micrófono: ahí la conversación sigue viva y entera, y es justo
+       cuando quien no puede dictar necesita el otro camino delante. Lo
+       que no se pinta es durante un error de la conversación misma, que
+       es cuando no hay a quién preguntar. */
+    if (CFG.texto && (v.fase === 'escucha' || v.fase === 'habla' || v.fase === 'pensando'
+      || (v.fase === 'error' && v.errorMicro))) {
       if (!v.p.forma) { crearForma(v); }
       pie.appendChild(v.p.forma);
     }
