@@ -106,6 +106,14 @@
   color: var(--uhp-geo-suave);
   font-variant-numeric: tabular-nums;
 }
+/* Aviso de vista sin un solo valor. Ocupa el lugar de la rampa, que en
+   ese caso no puede dibujarse sin afirmar algo que nadie ha medido. */
+.uhp-geo__vacio {
+  margin-top: 6px;
+  font-size: .74rem;
+  line-height: 1.35;
+  color: var(--uhp-geo-tinta);
+}
 .uhp-geo__sindato {
   display: flex;
   align-items: center;

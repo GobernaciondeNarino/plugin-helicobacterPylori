@@ -308,6 +308,16 @@ final class UHP_Rest {
 		$hp    = self::indice_municipal( 'prev_municipal', 'serie_completa', 'prevalencia_h_pylori_porcentaje' ) + $hp;
 		$casos = self::indice_municipal( 'cancer', 'distribucion_por_municipio', 'casos' );
 
+		/* Participantes examinados y positivos, DONDE EL INFORME LOS
+		   PUBLICA. Los publica en doce de los cincuenta y cinco. Hasta
+		   ahora no viajaban, y la tarjeta de participantes mostraba para
+		   todos un prorrateo de 5.000 entre 55: para Pupiales decía 91
+		   cuando el informe publica 80. Un dato publicado no se sustituye
+		   por uno estimado; cuando no hay publicado, el estimado va con su
+		   rótulo, que es lo que ya hacía. */
+		$part = self::indice_municipal( 'prev_municipal', 'serie_completa', 'participantes_examinados' );
+		$pos  = self::indice_municipal( 'prev_municipal', 'serie_completa', 'positivos_h_pylori' );
+
 		$rasgos = array();
 		foreach ( UHP_Topojson::features( 'municipio' ) as $f ) {
 			$p  = isset( $f['properties'] ) ? $f['properties'] : array();
@@ -334,6 +344,11 @@ final class UHP_Rest {
 					// que falte: el tamizaje lo cubrió y no encontró
 					// ninguno. Por eso 0 y no null.
 					'casos' => isset( $casos[ $id ] ) ? (int) $casos[ $id ] : 0,
+					// null y no 0: aquí el cero sí sería una invención. Que
+					// el informe no publique cuántos examinó en un municipio
+					// no significa que no examinara a nadie.
+					'part'  => isset( $part[ $id ] ) ? (int) $part[ $id ] : null,
+					'pos'   => isset( $pos[ $id ] ) ? (int) $pos[ $id ] : null,
 					'lat'   => isset( $p['lat'] ) ? (float) $p['lat'] : null,
 					'lon'   => isset( $p['lon'] ) ? (float) $p['lon'] : null,
 				),
@@ -350,10 +365,94 @@ final class UHP_Rest {
 			'meta'     => array(
 				'fuente'      => 'Cartografía municipal DANE · datos del proyecto URKUNINA 5000',
 				'subregional' => self::prevalencia_subregional(),
+				// Las que el departamento tiene y el informe no publica.
+				// Viajan para poder NOMBRARLAS, no para dibujarlas.
+				'sin_cifra'   => self::subregiones_sin_cifra(),
+				'perfil'      => self::perfil_participantes(),
 				'zonas'       => UHP_Subregiones::fichas_zona(),
 			),
 			'features' => $rasgos,
 		);
+	}
+
+	/**
+	 * Perfil de los 5.000 participantes, tal como lo publica el informe.
+	 *
+	 * Viaja en el tablero por una razón concreta: el bloque está a la vista
+	 * en la pantalla —cuatro filas de barras— y hasta ahora sus once cifras
+	 * estaban escritas a mano en el shortcode, fuera del estado y sin que
+	 * nada pudiera leerlas. Un ciudadano que pregunta «¿cuántas mujeres
+	 * participaron?» está preguntando por algo que tiene delante.
+	 *
+	 * DOS CUIDADOS QUE VIAJAN CON EL DATO, no en un comentario:
+	 *
+	 *  · `ambito` dice «departamental». El perfil está publicado para el
+	 *    conjunto de los 5.000 participantes y NO municipio a municipio.
+	 *    Con el tablero filtrado por una subregión, estas cifras siguen
+	 *    siendo las mismas: quien las presente como el perfil de la
+	 *    selección estará inventando un dato.
+	 *
+	 *  · `n_con_dato` dice 4.994 en género, no 5.000. Seis participantes no
+	 *    tienen el campo. Repartir los porcentajes sobre 5.000 sería
+	 *    convertir seis ausencias en seis personas.
+	 *
+	 * @return array
+	 */
+	private static function perfil_participantes() {
+		$bloques = array(
+			'genero'          => __( 'Género', 'urkunina-5000' ),
+			'pertenencia_etnica' => __( 'Pertenencia étnica', 'urkunina-5000' ),
+			'nivel_educativo' => __( 'Nivel educativo', 'urkunina-5000' ),
+			'regimen_salud'   => __( 'Régimen de salud', 'urkunina-5000' ),
+			'estado_nutricional' => __( 'Estado nutricional', 'urkunina-5000' ),
+		);
+
+		$salida = array(
+			'ambito'       => 'departamental',
+			'participantes' => 5000,
+			'edad'         => array(),
+			'bloques'      => array(),
+		);
+
+		$rango = UHP_Datos::valor( 'sociodemografia', 'rango_etario', array() );
+		if ( is_array( $rango ) && isset( $rango['minimo'], $rango['maximo'] ) ) {
+			$salida['edad'] = array(
+				'minimo' => (int) $rango['minimo'],
+				'maximo' => (int) $rango['maximo'],
+			);
+		}
+
+		foreach ( $bloques as $clave => $rotulo ) {
+			$b = UHP_Datos::valor( 'sociodemografia', $clave, array() );
+			if ( ! is_array( $b ) || empty( $b['distribucion'] ) ) {
+				continue;
+			}
+			$filas = array();
+			foreach ( (array) $b['distribucion'] as $fila ) {
+				if ( empty( $fila['categoria'] ) || ! isset( $fila['porcentaje'] ) ) {
+					continue;
+				}
+				$filas[] = array(
+					'categoria'  => (string) $fila['categoria'],
+					'porcentaje' => (float) $fila['porcentaje'],
+					// Cuando el informe da el número de personas, viaja: una
+					// cifra absoluta no se reconstruye de un porcentaje sin
+					// saber el denominador, y el denominador no es 5.000.
+					'personas'   => isset( $fila['personas'] ) ? (int) $fila['personas'] : null,
+				);
+			}
+			if ( ! $filas ) {
+				continue;
+			}
+			$salida['bloques'][] = array(
+				'clave'      => $clave,
+				'rotulo'     => $rotulo,
+				'n_con_dato' => isset( $b['n_con_dato'] ) ? (int) $b['n_con_dato'] : null,
+				'filas'      => $filas,
+			);
+		}
+
+		return $salida;
 	}
 
 	/**
@@ -408,6 +507,43 @@ final class UHP_Rest {
 			);
 		}
 		return $salida;
+	}
+
+	/**
+	 * Subregiones del departamento SIN cifra publicada.
+	 *
+	 * Nariño tiene trece subregiones y el informe publica once. Las dos que
+	 * faltan —en la costa— no están «vacías»: no tienen cifra publicada, y
+	 * no es lo mismo. El tablero no puede filtrarlas porque el proyecto no
+	 * intervino ningún municipio suyo, de modo que no aparecen en el
+	 * gráfico de barras ni en la lista; por eso viajan aparte y con nombre
+	 * propio.
+	 *
+	 * Sin esto, cualquiera —una persona leyendo el gráfico o el asistente
+	 * leyéndoselo en voz alta— contaría once y diría «las subregiones de
+	 * Nariño», y dos territorios desaparecerían del departamento sin que
+	 * nada lo dijese.
+	 *
+	 * @return array<int,string> Nombres oficiales, ordenados.
+	 */
+	private static function subregiones_sin_cifra() {
+		$con = array();
+		foreach ( array_keys( self::prevalencia_subregional() ) as $nombre ) {
+			$con[ UHP_Subregiones::normalizar( $nombre ) ] = true;
+		}
+
+		$falta = array();
+		foreach ( UHP_Subregiones::declaradas() as $s ) {
+			if ( empty( $s['nombre'] ) ) {
+				continue;
+			}
+			$clave = UHP_Subregiones::normalizar( $s['nombre'] );
+			if ( ! isset( $con[ $clave ] ) ) {
+				$falta[] = (string) $s['nombre'];
+			}
+		}
+		sort( $falta );
+		return $falta;
 	}
 
 	/**

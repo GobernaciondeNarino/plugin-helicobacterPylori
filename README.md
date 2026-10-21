@@ -22,6 +22,7 @@ de WordPress:
 | Componente | Shortcode |
 |---|---|
 | Tablero de resultados: mapa del departamento, filtros y lectura del territorio | `[urkunina_dashboard]` |
+| Asistente sobre el tablero, por voz o por escrito, con filtros que obedecen | `[urkunina_dashboard voz="si\|no" voz_visible="si\|no" voz_entrada="ambos\|voz\|texto"]` |
 | Recreación 3D de *Helicobacter pylori* con línea de tiempo | `[urkunina_3d desplazar="si\|no"]` |
 | Gráfico de cualquiera de las 29 vistas del catálogo, con el mapa entre sus tipos | `[urkunina_grafico view="…" type="…"]` |
 | Mapa coroplético de los 64 municipios sobre OpenStreetMap | `[urkunina_mapa]` |
@@ -219,9 +220,71 @@ Las dos vistas abren en el mapa y admiten barras, treemap y caja de bigotes
 desde su propia barra de herramientas. El tablero pasó a colorear 55 municipios
 con cifra propia en lugar de quince.
 
+Al elegir en un `[urkunina_selector]` una vista que tenga territorio, el gráfico
+**abre en el mapa** aunque su tipo por defecto sean las barras. Quien prefiera
+otro tipo lo cambia en la barra de herramientas y se queda ahí hasta el
+siguiente cambio de vista.
+
 **Los datos son agregados.** No contienen microdatos de los 5.000 participantes,
 resultados de laboratorio individuales ni la identidad de los pacientes con
 cáncer detectado: esa información no está en los documentos fuente.
+
+---
+
+## Preguntar por voz o por escrito
+
+El tablero puede responder preguntas y mover sus propios filtros mientras lo
+hace: «muéstrame la zona roja», «¿cuánto tiene Túquerres?», «cambia a H.
+pylori», «¿qué subregión está peor?». El motor de conversación lo pone
+ElevenLabs; todo lo que el ciudadano ve lo pone el plugin, con los mismos
+colores y los mismos controles que el resto del tablero.
+
+**Se puede entrar hablando o escribiendo, y el canal escrito no es el hablado
+con el micrófono apagado:** no se pide el permiso del micrófono, no se captura
+ninguna muestra de voz, el aviso de habeas data es otro —sin dato biométrico que
+autorizar—, el proveedor no sintetiza audio, y la política de seguridad de
+contenido que necesita el sitio se encoge. Aceptar el aviso escrito **no**
+autoriza el micrófono.
+
+**Nace apagado.** No basta con encenderlo: hasta que no están el identificador
+del agente, el enlace a la política de tratamiento de datos, dos canales para
+ejercer los derechos del titular, lo que el proveedor declare por escrito sobre
+retención y la firma de la evaluación de accesibilidad, el tablero sale byte
+por byte como si esta función no existiera.
+
+**Publicar y ser visible son dos ejes distintos.** La entidad puede dejarlo
+configurado y visible solo para quien pueda editar contenido, para ensayarlo en
+el sitio de verdad antes de ponerlo delante de un ciudadano; o cargarlo sin
+botón, para abrirlo desde un control propio de la plantilla.
+
+Antes de empezar, el visitante lee el aviso completo de habeas data de su canal
+y lo acepta. Puede retirar la autorización en cualquier momento con un botón
+—retira las dos—, y los cuatro filtros siguen manejándose con el teclado y con
+el ratón: el asistente no es la única vía para nada.
+
+El agente no inventa: cada cifra sale de una herramienta que lee el tablero, y
+cuando una cifra es de la subregión y no del municipio, lo dice. Un municipio
+que el proyecto no intervino se responde con esas palabras —«allí no hubo
+tamizaje»—, no como si faltara el dato. Y un nombre que no cruce exacto nunca
+selecciona otro parecido: pregunta, y lo confirma una pulsación.
+
+También lee el **gráfico de barras** y el **perfil de los 5.000
+participantes**. En el gráfico nombra Pacífico Sur y Sanquianga: son dos de las
+trece subregiones de Nariño, el informe no publica su cifra y por eso no tienen
+barra. Enumerar once y llamarlas «las subregiones de Nariño» habría borrado dos
+territorios del departamento. Y en el perfil da el denominador: en género son
+4.994 de los 5.000 los que tienen el campo, no los 5.000.
+
+Buscando eso apareció otra cosa: la tarjeta «Participantes» mostraba siempre un
+prorrateo de 5.000 entre 55, y el informe publica la cifra real en doce
+municipios. Con Pupiales seleccionado decía 91 donde el informe publica 80. Un
+rótulo honesto no arregla un número equivocado cuando el correcto existe: ahora
+se suma lo publicado, se prorratea solo el resto, y el pie dice qué parte es
+cada cosa.
+
+Puesta en marcha, definiciones de las herramientas y CSP en
+[`docs/voz/puesta-en-marcha.md`](docs/voz/puesta-en-marcha.md). El análisis de
+protección de datos, en [`docs/voz/privacidad.md`](docs/voz/privacidad.md).
 
 ---
 
@@ -229,8 +292,8 @@ cáncer detectado: esa información no está en los documentos fuente.
 
 ```bash
 npm install          # instala Playwright
-npm run test:datos   # 482 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 65 pruebas de navegador
+npm run test:datos   # 506 comprobaciones de la capa de datos, sin WordPress
+npm test             # lo anterior más 96 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los

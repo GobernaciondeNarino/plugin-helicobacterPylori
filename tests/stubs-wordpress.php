@@ -17,7 +17,12 @@ define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 define( 'UHP_VERSION', '1.0.0' );
 define( 'UHP_FILE', dirname( __DIR__ ) . '/urkunina-5000.php' );
 define( 'UHP_DIR', dirname( __DIR__ ) . '/' );
-define( 'UHP_URL', 'https://example.test/wp-content/plugins/urkunina-5000/' );
+/* Rutas RELATIVAS a propósito: las páginas de prueba las sirve el
+   servidor local de tests/servidor.js desde su propia raíz, y el plugin
+   imprime esta misma URL en window.UHP. Con un dominio inventado aquí, el
+   navegador pediría los recursos y la API a example.test y la suite
+   probaría una página que no carga nada. */
+define( 'UHP_URL', '/' );
 define( 'UHP_BASENAME', 'urkunina-5000/urkunina-5000.php' );
 
 define( 'MINUTE_IN_SECONDS', 60 );
@@ -150,8 +155,16 @@ function __( $texto, $dominio = null ) {
 	return $texto;
 }
 
+function wp_parse_url( $url, $componente = -1 ) {
+	return parse_url( (string) $url, $componente );
+}
+
+function wp_using_ext_object_cache() {
+	return false;
+}
+
 function rest_url( $ruta = '' ) {
-	return 'https://example.test/wp-json/' . ltrim( (string) $ruta, '/' );
+	return '/wp-json/' . ltrim( (string) $ruta, '/' );
 }
 
 /** @var array<string,callable[]> Filtros registrados por las pruebas. */
@@ -196,6 +209,19 @@ function add_shortcode() {}
 function add_filter( $etiqueta, $fn, $prioridad = 10, $args = 1 ) {
 	$GLOBALS['uhp_test_filtros'][ $etiqueta ][] = $fn;
 	return true;
+}
+
+function remove_filter( $etiqueta, $fn, $prioridad = 10 ) {
+	if ( ! isset( $GLOBALS['uhp_test_filtros'][ $etiqueta ] ) ) {
+		return false;
+	}
+	foreach ( $GLOBALS['uhp_test_filtros'][ $etiqueta ] as $i => $registrado ) {
+		if ( $registrado === $fn ) {
+			unset( $GLOBALS['uhp_test_filtros'][ $etiqueta ][ $i ] );
+			return true;
+		}
+	}
+	return false;
 }
 
 function wp_mkdir_p( $ruta ) {
@@ -249,6 +275,7 @@ function uhp_cargar_clases_de_datos() {
 	require_once $base . 'data/class-uhp-views.php';
 	require_once $base . 'data/class-uhp-territorios.php';
 	require_once $base . 'class-uhp-rest.php';
+	require_once $base . 'class-uhp-voz.php';
 }
 
 /* -------------------------------------------------------------------------
@@ -330,7 +357,44 @@ function wp_style_is( $handle, $estado = 'enqueued' ) {
 	return isset( $GLOBALS['uhp_test_encolados'][ 'style:' . $handle ] );
 }
 
-function wp_add_inline_script() {}
+/**
+ * Guarda el script en línea asociado a un handle.
+ *
+ * Era un no-op, y por eso el generador de páginas no podía emitirlo: las
+ * páginas de prueba llevaban a mano un `window.UHP` escrito aparte y todo
+ * lo que el plugin añade por esta vía —la configuración del objeto 3D, la
+ * del asistente de voz— quedaba fuera de la suite. Un módulo que se apaga
+ * en su primera línea por falta de configuración habría pasado las
+ * pruebas sin ejecutar nada.
+ *
+ * @param string $handle   Handle al que se engancha.
+ * @param string $data     Código.
+ * @param string $posicion 'before' o 'after'.
+ */
+function wp_add_inline_script( $handle, $data = '', $posicion = 'after' ) {
+	$p = ( 'before' === $posicion ) ? 'before' : 'after';
+	if ( ! isset( $GLOBALS['uhp_test_inline'] ) ) {
+		$GLOBALS['uhp_test_inline'] = array( 'before' => array(), 'after' => array() );
+	}
+	if ( ! isset( $GLOBALS['uhp_test_inline'][ $p ][ $handle ] ) ) {
+		$GLOBALS['uhp_test_inline'][ $p ][ $handle ] = array();
+	}
+	$GLOBALS['uhp_test_inline'][ $p ][ $handle ][] = (string) $data;
+}
+
+/**
+ * Código en línea de un handle, en una posición.
+ *
+ * @param string $handle   Handle.
+ * @param string $posicion 'before' o 'after'.
+ * @return string
+ */
+function uhp_test_inline( $handle, $posicion ) {
+	$reg = isset( $GLOBALS['uhp_test_inline'][ $posicion ][ $handle ] )
+		? $GLOBALS['uhp_test_inline'][ $posicion ][ $handle ]
+		: array();
+	return implode( "\n", $reg );
+}
 function wp_add_inline_style() {}
 
 /**
@@ -375,6 +439,39 @@ function uhp_test_resolver( $tipo ) {
 function uhp_test_limpiar_encolados() {
 	$GLOBALS['uhp_test_encolados'] = array();
 	$GLOBALS['uhp_test_faltantes'] = array();
+	/* Los bloques en línea vuelven a su LÍNEA BASE, que no es «vacío».
+
+	   En WordPress, `UHP_Assets::registrar()` corre en cada petición y es
+	   quien engancha `window.UHP` al núcleo. El generador la llama una
+	   sola vez, antes de pintar nada, de modo que ese bloque pertenece a
+	   todas las páginas y no a la primera. Vaciar el registro a secas se lo
+	   llevaba: las páginas salían completas, con su script y su marcado, y
+	   sin la configuración del núcleo —que es de donde sale la base de la
+	   API—, así que el tablero pedía «/tablero» en vez de
+	   «/wp-json/urkunina/v1/tablero» y se quedaba sin datos.
+
+	   Lo que sí hay que limpiar es lo que añade CADA página, como la
+	   configuración del asistente: sin eso, la de la primera se reemitía
+	   en todas las siguientes. */
+	$GLOBALS['uhp_test_inline'] = isset( $GLOBALS['uhp_test_inline_base'] )
+		? $GLOBALS['uhp_test_inline_base']
+		: array(
+			'before' => array(),
+			'after'  => array(),
+		);
+}
+
+/**
+ * Fija la línea base de bloques en línea: lo que engancha el registro de
+ * assets, que en WordPress ocurre en cada petición.
+ */
+function uhp_test_fijar_inline_base() {
+	$GLOBALS['uhp_test_inline_base'] = isset( $GLOBALS['uhp_test_inline'] )
+		? $GLOBALS['uhp_test_inline']
+		: array(
+			'before' => array(),
+			'after'  => array(),
+		);
 }
 
 function esc_url( $url ) {
@@ -427,6 +524,89 @@ function disabled( $deshabilitado, $actual = true, $mostrar = true ) {
 		echo $salida; // phpcs:ignore WordPress.Security.EscapeOutput
 	}
 	return $salida;
+}
+
+/* ------------------------------------------------------------------ */
+/* API HTTP                                                            */
+/* ------------------------------------------------------------------ */
+
+/* La suite NO sale a internet: la respuesta la pone la prueba en
+   $GLOBALS['uhp_test_http'], una cola que se consume en orden. Verificar
+   el agente contra ElevenLabs de verdad haría que la suite dependiera de
+   una cuenta, de una clave y de la red, y además gastaría cuota ajena. */
+
+class WP_Error {
+
+	/** @var string */
+	public $codigo;
+	/** @var string */
+	public $mensaje;
+	/** @var array */
+	public $datos;
+
+	public function __construct( $codigo = '', $mensaje = '', $datos = array() ) {
+		$this->codigo  = (string) $codigo;
+		$this->mensaje = (string) $mensaje;
+		$this->datos   = $datos;
+	}
+
+	public function get_error_code() {
+		return $this->codigo;
+	}
+
+	public function get_error_message() {
+		return $this->mensaje;
+	}
+
+	public function get_error_data() {
+		return $this->datos;
+	}
+}
+
+function untrailingslashit( $cadena ) {
+	return rtrim( (string) $cadena, '/\\' );
+}
+
+function trailingslashit( $cadena ) {
+	return untrailingslashit( $cadena ) . '/';
+}
+
+function is_wp_error( $cosa ) {
+	return $cosa instanceof WP_Error;
+}
+
+function uhp_test_http( $respuestas ) {
+	$GLOBALS['uhp_test_http'] = $respuestas;
+	$GLOBALS['uhp_test_http_peticiones'] = array();
+}
+
+function uhp_test_http_peticiones() {
+	return isset( $GLOBALS['uhp_test_http_peticiones'] ) ? $GLOBALS['uhp_test_http_peticiones'] : array();
+}
+
+function wp_remote_get( $url, $args = array() ) {
+	$GLOBALS['uhp_test_http_peticiones'][] = array(
+		'url'  => $url,
+		'args' => $args,
+	);
+	if ( empty( $GLOBALS['uhp_test_http'] ) ) {
+		return new WP_Error( 'sin_doble', 'La prueba no preparó ninguna respuesta HTTP.' );
+	}
+	return array_shift( $GLOBALS['uhp_test_http'] );
+}
+
+function wp_remote_retrieve_response_code( $r ) {
+	if ( is_wp_error( $r ) || ! is_array( $r ) ) {
+		return 0;
+	}
+	return isset( $r['response']['code'] ) ? (int) $r['response']['code'] : 0;
+}
+
+function wp_remote_retrieve_body( $r ) {
+	if ( is_wp_error( $r ) || ! is_array( $r ) ) {
+		return '';
+	}
+	return isset( $r['body'] ) ? (string) $r['body'] : '';
 }
 
 /**

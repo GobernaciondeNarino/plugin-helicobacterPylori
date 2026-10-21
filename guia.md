@@ -484,6 +484,16 @@ Al cambiar de vista, el gráfico **no arrastra el tipo**: «dona» no existe en 
 ranking y «mapa» no existe en una vista sin geometría, de modo que se deja que
 el servidor elija el tipo por defecto de la vista nueva.
 
+**Con una excepción: la vista con territorio abre en el mapa.** Al llegar desde
+el selector, cualquier vista que declare `geo` se dibuja como mapa aunque su
+tipo por defecto sean las barras. Una vista municipal dice mucho más repartida
+sobre Nariño que en una lista de cincuenta y cinco barras, y el resto de tipos
+sigue a un clic en la barra de herramientas. La preferencia se **gasta al
+aplicarla** (`preferenciaDeTipo()` en `uhp-grafico.js`): quien cambia a barras
+se queda en barras hasta que vuelva a cambiar de vista, en vez de verse
+devuelto al mapa en el siguiente redibujo. Una vista sin territorio no se ve
+afectada: vuelve a su propio tipo, no a un mapa vacío.
+
 Se usa `hidden` y no una clase porque es el mecanismo que los lectores de
 pantalla ya entienden: los paneles ocultos quedan fuera del árbol de
 accesibilidad sin depender de que el CSS del plugin haya llegado a cargar. El
@@ -578,6 +588,26 @@ sin dato caería en el mínimo de la escala y se leería como una cifra real.
 Importa más de lo que parece en este proyecto: los informes solo publican los
 diez municipios con mayor prevalencia, y de las trece subregiones documentan
 once. Pintar el resto como si valieran el mínimo sería inventar datos.
+
+### 4.6.1 Un mapa sin valores lo dice
+
+Una vista puede llegar sin un solo valor. No es hipotético: ocurrió en el sitio
+real cuando un despliegue copió `includes/` y se saltó `data/`. La vista existía
+—el código la declaraba— pero el archivo de datos instalado no tenía la serie
+que necesitaba, así que el mapa se dibujaba entero en gris con una leyenda
+rotulada **«0,0 %» a los dos lados**. Eso no se lee como «los datos de este
+sitio están atrasados» sino como «en ningún municipio hay dato publicado», que
+es una afirmación que nadie ha medido.
+
+Ahora, cuando no hay ni una fila, el mapa se dibuja igual —el territorio sigue
+diciendo algo— pero la leyenda sustituye la rampa por «Esta vista no trae ningún
+valor publicado», y el componente deja un aviso en la consola con el nombre de
+la vista, para quien administre el sitio.
+
+El diagnóstico del panel lo señala antes de que nadie abra la página:
+**Diagnóstico → Entorno → Vistas con datos** recorre el catálogo y lista las
+vistas que no producen ninguna fila. Con los archivos al día, las 29 producen
+datos.
 
 ### 4.7 Añadir una vista
 
@@ -818,6 +848,261 @@ falla la suite en vez de llegar a producción.
 
 ---
 
+### 4.9 El asistente del tablero
+
+El tablero puede atender preguntas y mover sus propios filtros al responderlas.
+El reconocimiento, el modelo y la voz los pone ElevenLabs; el plugin pone la
+compuerta de consentimiento, el panel, la transcripción y las nueve herramientas
+con las que el agente lee y toca el tablero.
+
+#### Dos canales, y la diferencia no es la piel
+
+Se puede entrar **hablando** o **escribiendo**, y el segundo no es el primero
+con el micrófono apagado:
+
+- `startSession({ textOnly: true })` devuelve un `TextConversation`, que no toca
+  `navigator.mediaDevices` ni crea un `AudioContext`. No es que el audio no se
+  use: es que **no se captura**, y una prueba comprueba que `getUserMedia` no se
+  llama ni una vez. Esa es la diferencia entre «no hay audio» y «no se pide
+  permiso para el audio», y es lo que convierte el canal escrito en la
+  alternativa equivalente que pide la Resolución 1519 de 2020 en lugar de un
+  plan B escondido.
+- `textOnly` es solo del cliente. Lo que impide que el proveedor **sintetice**
+  —y facture— un audio que el navegador tiraría a la basura es
+  `overrides.conversation.textOnly`, que viaja en el evento de inicio. Hacen
+  falta las dos mitades; con una sola, el ahorro es imaginario.
+- El aviso de habeas data es **otro**, y la autorización se guarda **aparte**.
+  La voz de una persona identificable puede ser un dato biométrico; el texto que
+  teclea no lo es. Pedirle a quien va a escribir que autorice el tratamiento de
+  su voz sería recoger una autorización por algo que no va a pasar, y un aviso
+  con un bloque de más informa peor. Aceptar el escrito **no** abre el
+  micrófono; aceptar el de voz sí cubre el escrito, porque ese aviso dice con
+  esas palabras que «puede escribir sus preguntas en lugar de hablarlas».
+- La receta de CSP se encoge: sin worklets de audio no hay nada que cargar desde
+  un `blob:`.
+- El permiso del micrófono se pide **antes** de pedirle credenciales al
+  servidor. Al revés, cada «no» al micrófono se llevaba una ranura del cupo
+  diario —que es facturable— y una URL firmada, porque el SDK pide el permiso
+  por su cuenta antes de conectar y la sesión no llegaba a existir.
+
+#### Publicar y ser visible son dos ejes
+
+Con un solo interruptor la entidad no puede ensayar el asistente en el sitio de
+verdad sin ponerlo delante de un ciudadano. Así que hay dos: `activo` y
+`visibilidad` (`todos` / `editores` / `oculto`). Con `editores`, el visitante
+anónimo recibe el tablero sin asistente, sin su script y sin su hoja de estilos
+—la página sale como si no estuviera configurado— y el shortcode define
+`DONOTCACHEPAGE`, porque es la única salida del plugin que depende de quién pide
+la página. Con `oculto` el panel se carga y el botón no se pinta, para abrirlo
+desde un control propio de la plantilla; y entonces tampoco se pinta el rótulo
+corto, que si no dejaría la página anunciando un envío al exterior junto a un
+hueco sin nada que pulsar.
+
+Los atributos del shortcode (`voz`, `voz_visible`, `voz_entrada`) solo pueden
+**estrechar** lo que permite el sitio. La asimetría es deliberada: el contenido
+de un post lo edita cualquiera con permiso de edición, y por dónde sale la voz
+de un ciudadano no es una decisión de redacción. La clave de API, por lo mismo,
+no es un atributo y no va a serlo.
+
+#### Una sola puerta hacia el tablero
+
+Las reglas de coherencia entre los tres filtros vivían dentro de los
+manejadores de clic de `uhp-dashboard.js`, repetidas. Ahora están en cinco
+funciones con nombre —`aplicarIndicador`, `aplicarZona`, `aplicarSubregion`,
+`aplicarMunicipio`, `aplicarLimpiar`— que invocan por igual el ratón y el
+asistente. **Hablar y pulsar no pueden divergir porque recorren el mismo
+código.** Sobre ellas se levanta `window.UHPTablero.mando(raiz)`, la fachada que
+es el único canal del asistente, y que no expone ni una operación que el
+teclado no alcance ya: una capacidad que solo existiera detrás del micrófono
+sería justo lo que la Resolución 1519 prohíbe.
+
+`aplicarMunicipio` recibe `alternar`: el clic suelta el municipio al pulsarlo
+dos veces, la voz no. «Muéstrame Túquerres» dicho dos veces no significa
+«quítalo».
+
+Cada cambio pasa por `notificar(st, origen)`, que anuncia **una línea breve**:
+qué cambió y cuántos municipios quedan a la vista. Con `origen === 'agente'`
+antepone «El asistente…», porque quien no ve la pantalla necesita distinguir lo
+que hizo él de lo que le hicieron.
+
+La ficha del municipio llevaba `aria-live` y se quitó: es un bloque de
+**contenido**, no un estado, y con la región viva un lector de pantalla leía sus
+veinte líneas enteras con cada clic. Molesto con un ratón; con el asistente
+moviendo filtros, un secuestro continuo. La línea breve da la misma información
+útil sin el ruido.
+
+#### Las diez herramientas
+
+Cinco mueven el tablero y cinco solo leen. La diferencia no es cosmética: las
+que leen se declaran en ElevenLabs con «esperar respuesta» —el agente necesita
+el dato para seguir la frase— y las que mueven, sin ella, para que la pantalla
+cambie *mientras* habla y no después.
+
+Las cinco de lectura existen para que el agente no invente:
+`uhp_leer_estado_tablero` son sus ojos, `uhp_listar_municipios` le impide
+enumerar municipios de memoria, `uhp_consultar_municipio` responde un dato
+**sin** mover la pantalla —que es lo que nadie espera de una pregunta suelta— y
+`uhp_comparar_subregiones` le lee el **gráfico de barras** y
+`uhp_consultar_perfil`, el **perfil de los 5.000 participantes**.
+
+#### Leer una gráfica sin mentir
+
+`uhp_comparar_subregiones` fue la herramienta más difícil de escribir, y no por
+el código. Las barras llevan cifras **subregionales publicadas**: no son el
+promedio de los municipios que el proyecto intervino, porque la subregión
+incluye municipios donde no estuvo. Y el «promedio» que da
+`uhp_leer_estado_tablero` es una tercera cosa: el promedio de la selección
+actual. Tres números que un asistente apurado presentaría como uno.
+
+Peor: el gráfico solo dibuja las subregiones **con** cifra. Nariño tiene trece y
+el informe publica once. Un asistente que leyera nada más lo que se ve diría
+«las subregiones de Nariño» habiendo borrado dos territorios de la costa del
+departamento —Pacífico Sur y Sanquianga—, que no están vacíos: no tienen cifra
+publicada, y no es lo mismo.
+
+Para poder nombrarlas hubo que llevarlas hasta el navegador, porque el servidor
+solo enviaba las once. `UHP_Rest::subregiones_sin_cifra()` las calcula
+contrastando la división declarada por la entidad con la prevalencia publicada,
+y viajan en `meta.sin_cifra` **aparte** de `meta.subregional`: no entran en
+`st.subs` porque no se pueden filtrar —no hay municipio intervenido que
+filtrar— y no se dibujan porque no hay barra que dibujar. Viajan solo para poder
+decir su nombre. De paso, el mensaje de «no encuentro esa subregión» dejó de
+llamar «las documentadas» a once de trece.
+
+La herramienta distingue, por eso, **dos ausencias**: una subregión filtrable
+sin cifra de este indicador, y una subregión del departamento que el informe no
+publica. Confundirlas sería el error que todo esto quería evitar.
+
+Y dos cosas más que la primera versión no decía. El **puesto se calcula por
+valor**, no por índice: Occidente y La Cordillera están las dos en 37,7 % de
+lesión precursora, y numerarlas «3.» y «4.» inventaba una diferencia que el dato
+no tiene. Y cada línea lleva **cuántos municipios de esa subregión intervino el
+proyecto**: Telembí encabeza el gráfico de *H. pylori* con 82,0 %, y allí el
+proyecto intervino uno de sus tres municipios. Sin ese denominador, «Telembí,
+82 %» invita a entender que el proyecto midió la subregión.
+
+El formato cambia con el canal. Por voz van los extremos y un par más, sin
+ordinales: una enumeración hablada de once elementos no se retiene. Por escrito
+van las once, y **el rótulo viaja pegado a cada cifra** —«37,7 % (cifra de la
+subregión)»— porque lo que el visitante copia de una conversación escrita sale
+sin el resto del párrafo, y una cifra suelta sin su territorio se convierte en un
+dato falso en cuanto alguien la pega en otra parte.
+
+#### El perfil de los 5.000, y dos categorías que faltaban
+
+`uhp_consultar_perfil` lee el bloque del perfil: género, etnia, educación,
+régimen de salud, estado nutricional y el rango de edades. Hacía falta porque
+esas once cifras estaban escritas a mano en el PHP del shortcode, fuera del
+estado, y el agente no podía leerlas: a «¿cuántas mujeres participaron?» solo
+podía contestar que no lo sabía teniendo el dato en pantalla.
+
+Llevarlas al estado descubrió un fallo que estaba a la vista y nadie había
+mirado: el bloque **se dejaba fuera dos categorías publicadas** —«Otro o no
+reportado» en etnia, 0,3 %, y «Delgadez» en estado nutricional, 0,4 %, dieciocho
+personas—. Tres barras que sumaban 99,6 y nada que dijera que faltaba una cuarta.
+Dieciocho personas no son un redondeo. Ahora se pintan.
+
+La herramienta lleva además el **denominador**: en género son 4.994 de los 5.000
+los que tienen el campo, y en estado nutricional 4.830. Repartir los porcentajes
+sobre 5.000 convertiría unas ausencias en personas. Y lleva el **ámbito**:
+«departamental», porque el perfil está publicado para el conjunto del estudio y
+con el tablero filtrado por una subregión esas cifras no cambian.
+
+#### Participantes: 80 publicados contra 91 prorrateados
+
+El mismo hilo llevó a una tarjeta que llevaba meses diciendo un número
+equivocado. «Participantes est.» mostraba siempre un prorrateo de 5.000 entre
+55, con su rótulo honesto —«est.», «prorrateo sobre 5.000»—. Pero el informe
+publica cuántas personas examinó en **doce** de los cincuenta y cinco
+municipios, y esas cifras no viajaban al navegador. Con Pupiales seleccionado,
+la tarjeta decía **91** donde el informe publica **80**.
+
+Un rótulo honesto no arregla un número equivocado cuando el correcto existe y
+está en el repositorio. Ahora `part` y `pos` viajan en las propiedades de cada
+municipio —`null` donde no se publican, que no es lo mismo que cero— y la
+tarjeta tiene tres estados: la suma de lo publicado cuando todos los
+seleccionados lo tienen, el prorrateo de siempre cuando ninguno lo tiene, y la
+suma más el prorrateo del resto cuando hay mezcla, con el pie nombrando las dos
+partes. `uhp_consultar_municipio` lo dice también, y dice de dónde sale.
+
+Donde no se publica, el asistente **no dice nada**: dar el prorrateo del
+conjunto como la cifra de un municipio sería inventarla.
+
+#### Nunca se acierta un municipio por parecido
+
+Entre los 55 municipios intervenidos hay exactamente tres pares a dos cambios
+de distancia: **Pupiales e Ipiales**, **Albán y Aldana**, **Iles e Imués**. El
+reconocimiento de voz entregará tarde o temprano uno por otro, y equivocarse
+significa leer en voz alta la cifra de otro pueblo: Pupiales tiene 21,3 % de
+lesión precursora e Ipiales 37,2 %.
+
+`resolver()` solo cruza por coincidencia **exacta** del nombre normalizado, de
+su alias entre paréntesis —«Génova» por «Colón (Génova)»— o del código DANE. Lo
+que no cruza se devuelve como sugerencia y **la confirma una pulsación en la
+pantalla**, no una frase del modelo: si la confirmación dependiera de que el
+agente obedezca, se autoconfirmaría en el turno siguiente, porque el nombre que
+él mismo sugirió ya sería una coincidencia exacta. Una prueba lo comprueba.
+
+Cuando el nombre sí cruza pero tiene un vecino a dos cambios, la respuesta lo
+avisa para que el agente pregunte antes de leer cifra alguna.
+
+#### Lo que no se deja al modelo
+
+- **Nada de lo que dice el agente entra como HTML.** Todo se pinta con
+  `textContent`. Una prueba le hace devolver `<img onerror=…>` y verifica que se
+  lee como texto.
+- **Presupuesto de cambios**: un cambio cada 700 ms y veinte por minuto. Las
+  cinco herramientas mutadoras no esperan respuesta, de modo que un modelo
+  atascado puede encadenar decenas; cada una repinta la lista de 55 municipios y
+  reenfoca el mapa.
+- **La clave de API no existe en el navegador.** Vive en su propia opción —mejor
+  en `wp-config.php`, y sembrada sin `autoload`— y `config_front()` se arma por
+  lista blanca, clave por clave, nunca por resta: así el ajuste que alguien
+  añada mañana no puede publicarla por descuido. Dos comprobaciones de la suite
+  lo verifican. Con agente privado tampoco viaja el identificador del agente: el
+  navegador no lo necesita, porque abre la sesión con la URL firmada.
+- **El panel se construye una vez y se actualiza.** Repintarlo entero con cada
+  frase del agente destruía el campo donde el visitante estaba escribiendo y le
+  dejaba el foco en el `<body>`, con lo que la tecla Escape dejaba de llegar.
+- **Cerrar mientras conecta cierra de verdad.** Un testigo de generación
+  descarta todo lo que vuelve de una sesión que el visitante ya abandonó: sin
+  él, la sesión se abría después, sin panel, con el micrófono encendido.
+
+#### Lo que la ruta de sesión puede y no puede
+
+`POST /voz/sesion` entrega una credencial: una URL firmada comprada con la clave
+de la entidad, que abre una conversación facturable desde cualquier máquina. Y
+quien la pide es un visitante anónimo, de modo que **no hay a quién autenticar**.
+La comprobación de origen **falla cerrada** —antes dejaba pasar a quien no
+mandaba cabeceras, que es justo el `curl` que había que frenar—, hay cinco
+peticiones cada diez minutos por IP y un cupo diario que se **reserva antes** de
+llamar al proveedor y se devuelve si la llamada falla. Ninguna de las cuatro
+hace imposible el abuso: lo encarecen. La última línea de defensa es el límite
+de gasto de la cuenta del proveedor, y así está escrito en
+`docs/voz/privacidad.md` en vez de dejarlo implícito.
+
+#### Por qué el SDK y no el widget
+
+El SDK suprime por ausencia lo que el widget oficial solo neutraliza por
+configuración. Además deja el control del marcado: la compuerta, los estados y
+la transcripción son nuestros, con los tokens `--uhp-db-*` y bajo la misma
+prueba de contraste que el resto del tablero.
+
+Pesa 1,07 MB, así que **no se descarga hasta que el visitante pulsa**. Y se usa
+con `connectionType: 'websocket'`, no WebRTC: el audio va entonces solo a
+`api.elevenlabs.io` en lugar de atravesar además la infraestructura de LiveKit,
+y la CSP de la entidad se escribe con dos orígenes en vez de seis.
+
+#### El panel flota, y no por estética
+
+`.uhp-db__col--izq` declara exactamente tantas filas de rejilla como hijos
+tiene; una cuarta tarjeta desplazaría la lista de municipios a una fila que no
+existe. Y, sobre todo, `avisar()` vacía `.uhp-db__main` con `innerHTML` cuando
+la carga de datos falla: un panel colgado de ahí desaparecería con el micrófono
+abierto. El bloque es hijo directo de `.uhp-db` y se posiciona encima.
+
+---
+
 ## 5. El módulo de datos
 
 Es el único subsistema que escribe en disco, así que concentra las garantías.
@@ -981,7 +1266,7 @@ npm run test:datos   # capa de datos, sin WordPress
 npm test             # lo anterior más las pruebas de navegador
 ```
 
-### 8.1 Capa de datos — 482 comprobaciones
+### 8.1 Capa de datos — 506 comprobaciones
 
 `tests/test-datos.php` ejecuta las clases del plugin fuera de WordPress, con
 sustitutos mínimos de sus funciones (`tests/stubs-wordpress.php`). Comprueba
@@ -1017,7 +1302,7 @@ silencioso:
   Ofrecerlo en una vista sin territorio produciría un mapa vacío; no ofrecerlo
   en una que sí lo tiene esconde la mitad de la lectura.
 
-### 8.2 Navegador — 65 pruebas
+### 8.2 Navegador — 96 pruebas
 
 `tests/navegador.spec.js` abre en Chromium **el marcado real que emiten los
 shortcodes**: `tests/generar-paginas.php` lo produce llamando a
@@ -1035,8 +1320,11 @@ los 64 municipios o las 13 subregiones según el nivel de la vista, que colorea
 solo los que traen cifra, que ninguna geometría se invierte —la prueba del
 sentido de giro—, que las subregiones llegan disueltas, que la capa base se
 enciende y se apaga desde el shortcode con su atribución, y que cada topología
-se descarga una sola vez por página, y que la vista de los 55 municipios
-colorea 55 y deja nueve sin dato; que el mapa pinta los 64 municipios sobre OpenStreetMap con su
+se descarga una sola vez por página, que la vista de los 55 municipios
+colorea 55 y deja nueve sin dato, y que **una vista sin un solo valor lo dice**
+en vez de dibujar una rampa de 0 a 0 —la prueba intercepta la respuesta y le
+vacía los valores, que es lo que ocurrió en el sitio real con los datos
+desfasados—; que el mapa pinta los 64 municipios sobre OpenStreetMap con su
 leyenda y su atribución, que cambiar de indicador no vuelve a descargar la
 geometría y que los polígonos son accesibles con teclado; que el tablero ocupa
 el 100 % de ancho y 100vh de alto sin desbordar, que su mapa dibuja los 64
@@ -1074,9 +1362,51 @@ anuncia en una región `aria-live` y que **las dos formas de panel** —el `<div
 con clase y el `<p>` de la descripción dentro del propio selector— salen de
 verdad del árbol de accesibilidad al ocultarse; que un canal de solo selector y
 gráfico funciona **con el selector delante**, que es el orden que hace que su
-script se imprima primero; que el borde del control llega a 3:1 sobre su fondo,
-como exige WCAG 2.1 §1.4.11; y que un selector sin grupo avisa en vez de romper
-la página.
+script se imprima primero; que al cambiar de vista **la que tiene territorio
+abre en el mapa** y la que no lo tiene vuelve a su propio tipo, no a un mapa
+vacío; que cambiar de tipo a mano no devuelve al mapa en el siguiente dibujo;
+que el borde del control llega a 3:1 sobre su fondo, como exige WCAG 2.1
+§1.4.11; y que un selector sin grupo avisa en vez de romper la página.
+
+Del asistente de voz se comprueba que el tablero sin configurar sale
+exactamente como antes; que el aviso corto viaja en el HTML y se lee **con el
+JavaScript desactivado**; que pulsar abre el aviso completo —con los puntos que
+la Ley 1581 obliga a informar— y que **no se abre sesión alguna hasta aceptar**;
+que la sesión registra las diez herramientas y arranca sabiendo qué hay en
+pantalla; que las herramientas mueven el tablero de verdad y el cambio se
+anuncia atribuyéndolo al asistente; que un nombre que no cruza exacto **no
+selecciona** y que el modelo **no puede autoconfirmar su propia sugerencia**;
+que un municipio fuera del estudio se dice con esas palabras; que una ráfaga de
+doce llamadas se frena; que lo que dice el agente se pinta como texto y un
+`<img onerror=…>` no se ejecuta; que se puede escribir en vez de hablar; que
+retirar la autorización cierra la sesión y borra la aceptación; que un clic del
+visitante le llega al agente como contexto; que **el asistente no pide nada a un
+servidor externo**; y que sus pares tinta/fondo cumplen la norma de contraste en
+los tres estados —lanzador, aviso y conversación—, con los selectores que no
+encuentran nodo contados como fallo y no saltados en silencio.
+
+Del modo privado —el recomendado, y el que no tenía página de pruebas— se
+comprueba que el navegador **no conoce el identificador del agente** y abre con
+la URL firmada que le entrega el servidor; que **la clave de API no aparece en el
+HTML**; y que sin verificación guardada no viaja ninguna sustitución.
+
+De la verificación del agente se comprueba cada rama con un doble del HTTP:
+clave que no sirve, agente inexistente —nombrando la confusión más probable,
+haber pegado el identificador de la voz en el campo del agente—, agente con las
+sustituciones apagadas, agente con ellas encendidas, y agente configurado como
+solo texto en su propia pestaña, donde el canal hablado no va a funcionar.
+
+Del canal escrito se comprueba lo que lo hace distinto: que en una página con
+solo ese canal no hay botón de micrófono, ni viaja en el HTML el aviso de la
+voz; que **`getUserMedia` no se llama ni una vez**; que el evento de inicio
+lleva las dos mitades de `text_only` y **ninguna** sustitución de voz; que el
+rótulo dice «escriba» y no «escuchando», porque quien no ve la pantalla depende
+de esa frase; que aceptar el aviso escrito **no** autoriza el micrófono y que al
+revés sí; que los dos lanzadores declaran el mismo estado del panel; que una
+negativa del micrófono **no gasta una conversación** y deja un camino al canal
+escrito en vez de solo un mensaje; que las ocho variables dinámicas viajan
+siempre y dicen por qué canal; y que la lectura del gráfico de barras nombra
+Pacífico Sur y Sanquianga, que no salen en él.
 
 El entorno de pruebas espeja Three.js, D3plus y Leaflet en local
 (`tests/vendor`, no versionado) para no depender de la red, incluida la ruta
@@ -1089,10 +1419,25 @@ peticiones a los servidores de capa base —OpenStreetMap y CARTO— se intercep
 y se responden con una tesela de un píxel: lo que se comprueba es que el
 componente **pide** la capa base y la coloca, no cómo se ve una tesela.
 
+El SDK de ElevenLabs se sustituye por un doble instalado con
+`addInitScript` antes de que corra nada: el cargador lo encuentra ya puesto y
+no baja el megabyte del CDN. Una prueba vigila que no salga ni una petición
+fuera del servidor local.
+
 Dos pruebas se saltaban esa regla y salían de verdad a `tile.openstreetmap.org`.
 Pasaban mientras el entorno lo permitiera; con un proxy que intercepta el TLS,
 Chromium rechaza el certificado y esos fallos de red acababan contados como
 errores del plugin. El helper `sinTeselas()` las cubre ahora también.
+
+### 8.2.2 Las páginas de prueba llevan los scripts en línea reales
+
+`tests/generar-paginas.php` escribía a mano `window.UHP` y `window.UHP3D`, y el
+sustituto de `wp_add_inline_script()` era un no-op. Todo lo que el plugin manda
+al navegador por esa vía quedaba fuera de la suite: un módulo que se apaga en su
+primera línea por falta de configuración habría pasado las pruebas **sin
+ejecutar una sola**. Ahora el sustituto guarda lo que se le añade y el generador
+lo imprime donde WordPress lo pondría, antes o después de su etiqueta. El par
+escrito a mano desapareció, y con él la posibilidad de que divergiera del real.
 
 ### 8.3 Las páginas de prueba no listan sus recursos
 

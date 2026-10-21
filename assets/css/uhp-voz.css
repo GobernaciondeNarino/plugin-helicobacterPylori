@@ -1,0 +1,345 @@
+/* =====================================================================
+   Asistente de voz del tablero.
+
+   Hereda los tokens --uhp-db-* de .uhp-db: el asistente es una pieza más
+   del tablero y no una ventana de otro producto encima. Por eso no
+   declara ni un color propio y por eso la prueba de contraste de la
+   suite lo mide con los mismos pares que el resto.
+
+   Flota sobre el tablero en lugar de ocupar una celda de su rejilla:
+   .uhp-db__col--izq declara exactamente tantas filas como hijos tiene, y
+   una cuarta tarjeta desplazaría la lista de municipios a una fila que
+   no existe. Flotando, además, sobrevive a que avisar() vacíe <main>.
+   ===================================================================== */
+
+.uhp-voz {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  /* Por encima del mapa y de sus controles de zoom (z-index 500) y por
+     debajo de nada: es lo último que se dibuja. */
+  z-index: 600;
+  width: min(360px, calc(100% - 28px));
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+/* Sin lanzador —visibilidad «oculto»— el bloque sigue en la página para
+   que una plantilla pueda abrirlo desde su propio control. Pero entonces
+   no puede quedarse encima del mapa comiéndose los clics: una caja
+   invisible de 360 px con z-index 600 que intercepta punteros deja los
+   municipios de esa esquina sin responder, y es un fallo que nadie sabría
+   describir. El panel recupera los punteros cuando se abre. */
+.uhp-voz--sin-lanzador { pointer-events: none; }
+.uhp-voz--sin-lanzador .uhp-voz__panel { pointer-events: auto; }
+
+/* ---------- Lanzador ---------- */
+.uhp-voz__barra {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  text-align: right;
+  max-width: 100%;
+}
+
+/* Los dos lanzadores en una fila que se parte cuando no cabe. Sin esta
+   caja la rejilla de la barra les daba una fila a cada uno y el panel
+   empezaba cuarenta píxeles más abajo. Ninguno de los dos es secundario:
+   el canal escrito no es un plan B que haya que buscar, es la alternativa
+   equivalente que pide la Resolución 1519 de 2020. */
+.uhp-voz__botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.uhp-voz__abrir {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--uhp-db-borde-control);
+  background: var(--uhp-db-panel);
+  color: var(--uhp-db-ink);
+  font-size: .82rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--uhp-db-sombra);
+}
+.uhp-voz__abrir:hover { background: var(--uhp-db-panel-2); }
+.uhp-voz__abrir:focus-visible {
+  outline: 2px solid var(--uhp-db-acc);
+  outline-offset: 2px;
+}
+/* Mientras el script no lo cablea, el botón existe pero no promete nada. */
+.uhp-voz__abrir[disabled] { opacity: .55; cursor: default; }
+.uhp-voz__abrir[aria-expanded="true"] {
+  background: var(--uhp-db-sel-fondo);
+  border-color: var(--uhp-db-acc);
+}
+.uhp-voz__icono { display: inline-flex; color: var(--uhp-db-acc); }
+.uhp-voz__icono svg { fill: currentColor; }
+
+/* El aviso corto va SIEMPRE visible y servido en el HTML: es lo primero
+   que debe saber quien se plantea pulsar, no algo que aparezca después. */
+.uhp-voz__aviso-corto {
+  margin: 0;
+  max-width: 320px;
+  font-size: .7rem;
+  line-height: 1.35;
+  color: var(--uhp-db-ink-2);
+  background: var(--uhp-db-velo);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+/* ---------- Panel ---------- */
+.uhp-voz__panel {
+  width: 100%;
+  max-height: min(60vh, 460px);
+  overflow-y: auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 12px;
+  background: var(--uhp-db-panel);
+  border: 1px solid var(--uhp-db-linea);
+  border-radius: 12px;
+  box-shadow: var(--uhp-db-sombra);
+}
+.uhp-voz__panel[hidden] { display: none; }
+
+.uhp-voz__cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--uhp-db-linea);
+  padding-bottom: 8px;
+}
+.uhp-voz__cab h3 {
+  margin: 0;
+  font-size: .84rem;
+  font-weight: 600;
+  color: var(--uhp-db-ink);
+}
+
+/* Punto de estado. El color NO es la única señal: al lado va siempre el
+   texto, porque el color solo incumple WCAG 2.1 §1.4.1. */
+.uhp-voz__pulso {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--uhp-db-ink-3);
+}
+.uhp-voz--escucha .uhp-voz__pulso { background: var(--uhp-db-acc); }
+.uhp-voz--habla .uhp-voz__pulso { background: var(--uhp-db-azul); }
+.uhp-voz--error .uhp-voz__pulso { background: var(--uhp-db-roja); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .uhp-voz--escucha .uhp-voz__pulso { animation: uhp-voz-latido 1.6s ease-in-out infinite; }
+}
+@keyframes uhp-voz-latido {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}
+
+.uhp-voz__estado-txt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: .74rem;
+  color: var(--uhp-db-ink-2);
+}
+
+/* ---------- Conversación ---------- */
+.uhp-voz__hilo {
+  /* Con el panel limitado por max-height y una ventana muy baja —320x256
+     es el tamaño efectivo al 400 % de zoom—, la fila 1fr del hilo se
+     quedaba en cero y la conversación desaparecía. Con un mínimo
+     garantizado, lo que se desplaza es el panel. */
+  min-height: 5.5em;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--uhp-db-scroll) transparent;
+}
+.uhp-voz__hilo::-webkit-scrollbar { width: 6px; }
+.uhp-voz__hilo::-webkit-scrollbar-thumb {
+  background: var(--uhp-db-scroll);
+  border-radius: 3px;
+}
+
+.uhp-voz__turno {
+  display: grid;
+  gap: 2px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--uhp-db-panel-2);
+  font-size: .78rem;
+  line-height: 1.45;
+  color: var(--uhp-db-ink);
+}
+.uhp-voz__turno--usted { background: var(--uhp-db-sel-fondo); }
+.uhp-voz__quien {
+  font-size: .66rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--uhp-db-ink-3);
+}
+
+.uhp-voz__vacio {
+  font-size: .76rem;
+  line-height: 1.45;
+  color: var(--uhp-db-ink-2);
+  margin: 0;
+}
+
+/* ---------- Aviso de habeas data ---------- */
+.uhp-voz__aviso {
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.uhp-voz__bloque { display: grid; gap: 2px; }
+.uhp-voz__bloque h4 {
+  margin: 0;
+  font-size: .74rem;
+  font-weight: 600;
+  color: var(--uhp-db-acc);
+}
+.uhp-voz__bloque p {
+  margin: 0;
+  font-size: .75rem;
+  line-height: 1.5;
+  color: var(--uhp-db-ink-2);
+}
+
+/* ---------- Pie de acciones ---------- */
+.uhp-voz__pie {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  border-top: 1px solid var(--uhp-db-linea);
+  padding-top: 9px;
+}
+
+.uhp-voz__btn {
+  padding: 7px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--uhp-db-borde-control);
+  background: var(--uhp-db-panel-2);
+  color: var(--uhp-db-ink);
+  font-size: .76rem;
+  cursor: pointer;
+}
+.uhp-voz__btn:hover { background: var(--uhp-db-sel-fondo); }
+.uhp-voz__btn:focus-visible {
+  outline: 2px solid var(--uhp-db-acc);
+  outline-offset: 2px;
+}
+.uhp-voz__btn--principal {
+  background: var(--uhp-db-acc);
+  border-color: var(--uhp-db-acc);
+  /* Tinta oscura sobre el verde de acento: el claro no llega a 4,5:1. */
+  color: #06231a;
+  font-weight: 600;
+}
+.uhp-voz__btn--principal:hover { background: var(--uhp-db-acc-claro); }
+.uhp-voz__btn--fino {
+  border-color: transparent;
+  background: transparent;
+  color: var(--uhp-db-ink-2);
+  text-decoration: underline;
+}
+.uhp-voz__btn--fino:hover { color: var(--uhp-db-ink); }
+.uhp-voz__btn[disabled] { opacity: .5; cursor: default; }
+
+/* ---------- Escribir en vez de hablar ---------- */
+.uhp-voz__forma { display: flex; gap: 6px; flex: 1 1 12em; min-width: 0; }
+.uhp-voz__campo {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--uhp-db-borde-control);
+  background: var(--uhp-db-bg);
+  color: var(--uhp-db-ink);
+  font: inherit;
+  font-size: .78rem;
+}
+.uhp-voz__campo:focus-visible {
+  outline: 2px solid var(--uhp-db-acc);
+  outline-offset: 1px;
+}
+
+/* ---------- Confirmación de municipio ---------- */
+/* Cuando el reconocimiento de voz entrega un nombre que no cruza exacto,
+   el asistente NO selecciona: pregunta, y la confirmación la da una
+   pulsación. Albán y Aldana están a dos cambios de distancia y los dos
+   son municipios intervenidos. */
+.uhp-voz__confirmar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--uhp-db-amar);
+  background: var(--uhp-db-panel-2);
+  font-size: .76rem;
+  color: var(--uhp-db-ink);
+}
+
+/* ---------- Solo para lectores de pantalla ---------- */
+.uhp-voz__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Objetivos táctiles. En pantalla táctil, 31 px de alto es menos de lo
+   que exige WCAG 2.1 §2.5.5 (nivel AAA) y lo que recomienda §2.5.8; los
+   botones de confirmar municipio son además los que más caro salen si se
+   pulsa el de al lado. */
+@media (pointer: coarse) {
+  .uhp-voz__btn,
+  .uhp-voz__abrir {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
+}
+
+/* ---------- Pantallas estrechas ---------- */
+@media (max-width: 760px) {
+  .uhp-voz {
+    left: 14px;
+    right: 14px;
+    width: auto;
+    justify-items: stretch;
+  }
+  .uhp-voz__barra { justify-items: stretch; text-align: left; }
+  .uhp-voz__botones { justify-content: stretch; }
+  /* A lo ancho del panel y uno debajo de otro: dos píldoras de 44 px de
+     alto no caben a la vez en 320 px sin partir los rótulos. */
+  .uhp-voz__botones > .uhp-voz__abrir { flex: 1 1 100%; }
+  .uhp-voz__abrir { justify-content: center; }
+  .uhp-voz__aviso-corto { max-width: none; }
+  .uhp-voz__panel { max-height: min(70vh, 420px); }
+}

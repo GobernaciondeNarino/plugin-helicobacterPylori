@@ -63,6 +63,9 @@
       teselas: fig.getAttribute('data-teselas') === '1',
       serie: fig.getAttribute('data-serie') || '',
       etiquetas: fig.getAttribute('data-etiquetas') === '1',
+      // Se enciende solo al cambiar de vista desde el selector; ver el
+      // manejador de `uhp:canal` y `preferenciaDeTipo()`.
+      preferirMapa: false,
       payload: null,
       viz: null,
       geo: null
@@ -84,9 +87,15 @@
 
         // El tipo NO se arrastra entre vistas: «dona» no existe en un
         // ranking y «mapa» no existe en una vista sin geometría. Se deja
-        // que el servidor elija el tipo por defecto de la vista nueva.
+        // que el servidor elija el tipo por defecto de la vista nueva…
         st.type = '';
         fig.setAttribute('data-type', '');
+
+        // …salvo que la vista nueva tenga territorio, y entonces abre en el
+        // mapa. Una vista municipal dice mucho más repartida sobre Nariño
+        // que en una lista de cincuenta y cinco barras, y el resto de tipos
+        // sigue a un clic en la barra de herramientas.
+        st.preferirMapa = true;
 
         if (st.geo) {
           window.UHPGeomapa.destruir(st.geo);
@@ -114,7 +123,8 @@
     C.rest('/render', { view: st.view, type: st.type })
       .then(function (p) {
         st.payload = p;
-        st.type = (p.chart && p.chart.key) || st.type;
+        st.type = preferenciaDeTipo(st, p);
+        fig.setAttribute('data-type', st.type);
 
         var nombre = (p.view && p.view.name) || 'Gráfico';
         if (titulo) { titulo.textContent = nombre; }
@@ -143,6 +153,29 @@
           cargar(fig, lienzo, titulo, st);
         });
       });
+  }
+
+  /**
+   * Tipo con el que se dibuja la respuesta recién llegada.
+   *
+   * Normalmente manda el servidor, que aplica el tipo del shortcode o el
+   * de la vista. La excepción es el cambio de vista desde un selector: ahí
+   * la vista con territorio abre en el mapa. La preferencia se consume de
+   * una vez, para que quien cambie de tipo a mano en la barra no se vea
+   * devuelto al mapa en el siguiente redibujo.
+   *
+   * @param {object} st Estado de la figura.
+   * @param {object} p  Respuesta de /render.
+   * @return {string}
+   */
+  function preferenciaDeTipo(st, p) {
+    var tipo = (p.chart && p.chart.key) || st.type;
+    var prefiere = st.preferirMapa;
+    st.preferirMapa = false;
+
+    if (!prefiere || !p.geo) { return tipo; }
+    var compatibles = p.compatible || [];
+    return compatibles.indexOf('mapa') >= 0 ? 'mapa' : tipo;
   }
 
   /* ---------------- Dibujo ---------------- */

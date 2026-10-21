@@ -21,6 +21,33 @@ final class UHP_Shortcodes {
 	/** @var int Contador para identificadores únicos. */
 	private static $contador = 0;
 
+	/* Dos bloques en línea se imprimen UNA vez por petición aunque su
+	   shortcode aparezca varias veces en la página: las URLs de Three.js y
+	   la configuración del asistente. Lo recuerdan aquí. */
+
+	/** @var bool */
+	private static $urls_impresas = false;
+
+	/** @var bool */
+	private static $voz_impresa = false;
+
+	/**
+	 * Olvida lo que esta clase recuerda «por petición».
+	 *
+	 * En WordPress no hace falta llamarlo: cada petición es un proceso
+	 * nuevo y las dos banderas nacen en false. Sí hace falta en un proceso
+	 * que pinta varias páginas seguidas —el generador de páginas de la
+	 * suite, un exportador estático, un comando de WP-CLI—, donde la
+	 * segunda página heredaría silenciosamente la configuración impresa
+	 * para la primera. Es un fallo que se ve mal: la página sale completa,
+	 * con su script y su panel, y lo único equivocado es el contenido de
+	 * un objeto de configuración.
+	 */
+	public static function reiniciar_peticion() {
+		self::$urls_impresas = false;
+		self::$voz_impresa   = false;
+	}
+
 	public function __construct() {
 		add_action( 'init', array( $this, 'registrar' ) );
 		// Prioridad 20: después de que UHP_Assets registre las hojas (5) y
@@ -91,6 +118,18 @@ final class UHP_Shortcodes {
 
 			if ( 'urkunina_dashboard' === $tag ) {
 				$hay_tablero = true;
+				// La hoja del asistente va con la del tablero: si saliera
+				// en el pie, el botón del micrófono se pintaría en crudo
+				// sobre el mapa durante el primer repintado.
+				// La misma condición que usa sc_dashboard, y las tres
+				// partes. Con solo las dos primeras, un sitio con la
+				// visibilidad en «editores» le servía la hoja del
+				// asistente al visitante anónimo: la promesa de que su
+				// página sale byte por byte como si el asistente no
+				// existiera se rompía por una hoja de estilos.
+				if ( UHP_Voz::configurada() && UHP_Voz::permitido_para_usuario() ) {
+					wp_enqueue_style( UHP_Assets::P . 'voz' );
+				}
 			} else {
 				$hay_resto = true;
 			}
@@ -121,7 +160,18 @@ final class UHP_Shortcodes {
 	 *
 	 * @return string
 	 */
-	private static function contenido_de_la_entrada() {
+	/**
+	 * Contenido de la entrada que se está pintando, o cadena vacía.
+	 *
+	 * Público porque lo necesita UHP_Voz antes de que se envíen las
+	 * cabeceras: con la visibilidad del asistente en «editores», la
+	 * respuesta depende de quién pide la página y hay que decírselo a la
+	 * caché. Y eso solo vale la pena —y solo es proporcionado— si esta
+	 * página lleva de verdad el tablero.
+	 *
+	 * @return string
+	 */
+	public static function contenido_de_la_entrada() {
 		if ( ! is_singular() ) {
 			return '';
 		}
@@ -201,14 +251,13 @@ final class UHP_Shortcodes {
 		// admite un especificador dinámico en su `import`, de modo que las
 		// recibe por window.UHP3D. Solo se imprime una vez aunque el
 		// shortcode aparezca varias veces en la misma página.
-		static $urls_impresas = false;
-		if ( ! $urls_impresas ) {
+		if ( ! self::$urls_impresas ) {
 			wp_add_inline_script(
 				UHP_Assets::P . 'core',
 				'window.UHP3D=' . UHP_Assets::json_para_script( array( 'urls' => UHP_Assets::three_urls() ) ) . ';',
 				'after'
 			);
-			$urls_impresas = true;
+			self::$urls_impresas = true;
 		}
 
 		$id      = $this->id( 'uhp3d' );
@@ -348,6 +397,14 @@ final class UHP_Shortcodes {
 				'lema'      => __( 'Prevalencia de lesiones precursoras de malignidad y erradicación de H. pylori como prevención primaria del cáncer gástrico — Nariño, 2018–2023', 'urkunina-5000' ),
 				'alto'      => '100vh',
 				'indicador' => isset( $cfg['indicador'] ) ? $cfg['indicador'] : 'lpm',
+				// El asistente, cuando está configurado. Se puede apagar
+				// en una página concreta sin apagarlo en el sitio.
+				'voz'       => 'si',
+				// Y se puede estrechar: dejarlo cargado pero sin botón
+				// («no»), o abrir solo uno de los dos canales. Ampliar no:
+				// lo que el sitio no permite, una página no lo concede.
+				'voz_visible' => 'si',
+				'voz_entrada' => '',
 			),
 			$atts,
 			'urkunina_dashboard'
@@ -357,6 +414,46 @@ final class UHP_Shortcodes {
 		wp_enqueue_style( UHP_Assets::P . 'dashboard' );
 		UHP_Assets::encolar_libreria( 'd3' );
 		wp_enqueue_script( UHP_Assets::P . 'dashboard' );
+
+		/* Tres condiciones, y la tercera depende de QUIÉN pide la página:
+		   con la visibilidad en «editores» el visitante anónimo recibe el
+		   tablero sin asistente, sin su script y sin su hoja de estilos,
+		   igual que si no estuviera configurado. */
+		$con_voz = $this->afirmativo( $atts['voz'] )
+			&& UHP_Voz::configurada()
+			&& UHP_Voz::permitido_para_usuario();
+
+		/* Y si la salida depende del usuario, esta página no se puede
+		   guardar en una caché compartida. La constante es el acuerdo que
+		   respetan las capas de caché de WordPress; se define aunque este
+		   visitante concreto sea anónimo, porque lo que no se puede
+		   guardar es la respuesta, no el visitante. */
+		if ( UHP_Voz::salida_por_usuario() && $this->afirmativo( $atts['voz'] ) && UHP_Voz::configurada() ) {
+			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+				define( 'DONOTCACHEPAGE', true );
+			}
+		}
+
+		if ( $con_voz ) {
+			wp_enqueue_style( UHP_Assets::P . 'voz' );
+			wp_enqueue_script( UHP_Assets::P . 'voz' );
+			// La configuración y los rótulos viajan en un script en línea
+			// y NO en atributos del marcado: así el aviso completo, que es
+			// largo, no se duplica en cada tablero de la página.
+			if ( ! self::$voz_impresa ) {
+				wp_add_inline_script(
+					UHP_Assets::P . 'voz',
+					'window.UHPVoz=' . UHP_Assets::json_para_script(
+						array(
+							'cfg'    => UHP_Voz::config_front(),
+							'textos' => UHP_Voz::textos(),
+						)
+					) . ';',
+					'before'
+				);
+				self::$voz_impresa = true;
+			}
+		}
 
 		$id = $this->id( 'uhpdb' );
 
@@ -458,7 +555,16 @@ final class UHP_Shortcodes {
 				<div class="uhp-db__col uhp-db__col--der">
 					<div class="uhp-db__card">
 						<h2 data-uhp-zona="detalle-titulo"><?php esc_html_e( 'Casos de cáncer gástrico detectados', 'urkunina-5000' ); ?></h2>
-						<div class="uhp-db__detalle" data-uhp-zona="detalle" aria-live="polite"></div>
+						<?php
+						/* SIN aria-live. Es un bloque de contenido, no un
+						   estado: con la región viva, cada clic hacía que
+						   un lector de pantalla leyera sus veinte líneas
+						   enteras, y con el asistente de voz moviendo
+						   filtros eso es un secuestro continuo. Lo que se
+						   anuncia es la línea breve de
+						   [data-uhp-zona="estado"], que para eso está. */
+						?>
+						<div class="uhp-db__detalle" data-uhp-zona="detalle"></div>
 					</div>
 
 					<div class="uhp-db__card">
@@ -482,7 +588,14 @@ final class UHP_Shortcodes {
 						   el perfil está publicado para el conjunto de los 5.000
 						   participantes, no municipio a municipio. Por eso van en
 						   el HTML y no las toca el JavaScript: si se redibujaran
-						   con la selección parecerían responder a ella. */
+						   con la selección parecerían responder a ella.
+
+						   Y van TODAS las categorías que publica el archivo. La
+						   primera versión de este bloque se dejó fuera «Otro / no
+						   reportado» en etnia (0,3 %) y «Delgadez» en estado
+						   nutricional (0,4 %, dieciocho personas): tres barras que
+						   sumaban 99,6 y nada que dijera que faltaba una cuarta.
+						   Dieciocho personas no son un redondeo. */
 						$perfil = array(
 							array(
 								'lab'    => __( 'Género', 'urkunina-5000' ),
@@ -504,11 +617,13 @@ final class UHP_Shortcodes {
 									array( 87.6, 'var(--uhp-db-ink-3)', __( 'Mestiza', 'urkunina-5000' ) ),
 									array( 9.9, 'var(--uhp-db-acc)', __( 'Indígena', 'urkunina-5000' ) ),
 									array( 2.2, 'var(--uhp-db-roja)', __( 'Afro', 'urkunina-5000' ) ),
+									array( 0.3, 'var(--uhp-db-borde-control)', __( 'Otro o no reportado', 'urkunina-5000' ) ),
 								),
 							),
 							array(
 								'lab'    => __( 'Estado nutricional', 'urkunina-5000' ),
 								'partes' => array(
+									array( 0.4, 'var(--uhp-db-azul)', __( 'Delgadez', 'urkunina-5000' ) ),
 									array( 29.6, 'var(--uhp-db-verde)', __( 'Normal', 'urkunina-5000' ) ),
 									array( 48.2, 'var(--uhp-db-amar)', __( 'Sobrepeso', 'urkunina-5000' ) ),
 									array( 21.8, 'var(--uhp-db-roja)', __( 'Obesidad', 'urkunina-5000' ) ),
@@ -543,6 +658,22 @@ final class UHP_Shortcodes {
 					</div>
 				</div>
 			</main>
+
+			<?php
+			/* El bloque del asistente es hijo DIRECTO de .uhp-db, no de
+			   .uhp-db__main: cuando la carga de datos falla, avisar()
+			   vacía el contenido de main con innerHTML y se llevaría por
+			   delante un panel con el micrófono abierto. */
+			if ( $con_voz ) {
+				echo UHP_Voz::control_html( // phpcs:ignore WordPress.Security.EscapingOutput.OutputNotEscaped -- Marcado propio ya escapado en control_html().
+					$id,
+					array(
+						'visible' => $this->afirmativo( $atts['voz_visible'] ),
+						'entrada' => $atts['voz_entrada'],
+					)
+				);
+			}
+			?>
 
 			<p class="uhp-db__sr" data-uhp-zona="estado" role="status" aria-live="polite"></p>
 		</div>

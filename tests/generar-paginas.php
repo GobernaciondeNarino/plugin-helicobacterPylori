@@ -17,6 +17,7 @@ uhp_cargar_shortcodes();
 use GobernacionNarino\Urkunina\UHP_Shortcodes;
 use GobernacionNarino\Urkunina\UHP_Estilos;
 use GobernacionNarino\Urkunina\UHP_Assets;
+use GobernacionNarino\Urkunina\UHP_Voz;
 
 $destino = isset( $argv[1] ) ? rtrim( $argv[1], '/' ) : __DIR__ . '/paginas';
 if ( ! is_dir( $destino ) ) {
@@ -55,6 +56,11 @@ add_filter(
 
 $assets = new UHP_Assets();
 $assets->registrar();          // registra el grafo real de dependencias
+/* Lo que acaba de engancharse —entre otras cosas `window.UHP`, de donde
+   sale la base de la API— pertenece a TODAS las páginas: en WordPress el
+   registro corre en cada petición. Se fija como línea base para que la
+   limpieza de cada página no se lo lleve. */
+uhp_test_fijar_inline_base();
 $GLOBALS['uhp_sc'] = new UHP_Shortcodes();
 $GLOBALS['uhp_test_faltantes'] = array();
 
@@ -141,18 +147,28 @@ function pagina( $titulo, $cuerpo, $temprano = null ) {
 		}
 		// El mismo criterio que UHP_Assets::marcar_modulos() en producción.
 		$modulo   = ( UHP_Assets::P . '3d' === $handle );
+		// Lo que el plugin añade con wp_add_inline_script va donde lo
+		// pondría WordPress: antes o después de su etiqueta. Es lo que
+		// lleva al navegador window.UHP, window.UHP3D y window.UHPVoz.
+		$antes   = uhp_test_inline( $handle, 'before' );
+		$despues = uhp_test_inline( $handle, 'after' );
+
+		if ( '' !== $antes ) {
+			$scripts .= '<script data-inline="' . $handle . '-before">' . $antes . '</script>' . "\n";
+		}
 		$scripts .= '<script ' . ( $modulo ? 'type="module" ' : '' ) .
 			'src="' . $url . '" data-handle="' . $handle . '"></script>' . "\n";
+		if ( '' !== $despues ) {
+			$scripts .= '<script data-inline="' . $handle . '-after">' . $despues . '</script>' . "\n";
+		}
 	}
 
-	$config = json_encode(
-		array(
-			'rest'      => '/wp-json/urkunina/v1',
-			'pluginUrl' => '/',
-			'locale'    => 'es-CO',
-		)
-	);
-	$three = json_encode( array( 'urls' => UHP_Assets::three_urls() ) );
+	// window.UHP, window.UHP3D y window.UHPVoz ya NO se escriben aquí: los
+	// emite el propio plugin con wp_add_inline_script y el bucle de arriba
+	// los imprime donde WordPress los pondría. Mientras estuvieron
+	// escritos a mano, todo lo que viaja por esa vía quedaba fuera de la
+	// suite: un módulo que se apaga en su primera línea por falta de
+	// configuración habría pasado las pruebas sin ejecutar una sola.
 
 	return '<!DOCTYPE html>
 <html lang="es">
@@ -167,7 +183,6 @@ function pagina( $titulo, $cuerpo, $temprano = null ) {
 body{margin:0;font-family:system-ui,sans-serif;background:#fff;}
 .pagina{max-width:1400px;margin:0 auto;padding:0 16px;}
 </style>
-<script>window.UHP=' . $config . ';window.UHP3D=' . $three . ';</script>
 </head>
 <body>
 ' . $cuerpo . '
@@ -185,6 +200,12 @@ body{margin:0;font-family:system-ui,sans-serif;background:#fff;}
  */
 function construir( $nombre, $titulo, $pintar, $shortcodes = '' ) {
 	uhp_test_limpiar_encolados();
+	// Cada página de la suite finge una PETICIÓN nueva, y este proceso
+	// pinta diecisiete seguidas. Sin esto, los dos bloques que el plugin
+	// imprime «una vez por petición» —las URLs de Three.js y la
+	// configuración del asistente— se quedaban con el valor de la primera
+	// página y las demás heredaban una configuración que no era la suya.
+	UHP_Shortcodes::reiniciar_peticion();
 
 	/* Primero la pasada TEMPRANA, la que en WordPress corre en
 	   `wp_enqueue_scripts` antes de que wp_head imprima. Lo que se encole
@@ -259,6 +280,128 @@ $paginas['objeto-3d-desplazamiento'] = construir(
 	},
 	'[urkunina_3d]'
 );
+
+/* El tablero CON el asistente de voz encendido.
+
+   Se configura aquí y no en la opción por defecto porque el asistente
+   nace apagado: encenderlo exige, además del interruptor, los cuatro
+   campos del aviso de habeas data y la firma de la evaluación de
+   accesibilidad. Esta página comprueba justamente eso, que el bloque solo
+   aparece cuando la configuración está completa.
+
+   Modo público a propósito: así la sesión no pasa por el servidor y la
+   prueba puede ejercitar el módulo entero con un doble del SDK, sin
+   inventar una respuesta firmada. */
+update_option(
+	'uhp_voz',
+	array(
+		'activo'          => 1,
+		'agente'          => 'agent_pruebadelasuite0000',
+		'modo'            => 'publico',
+		'transporte'      => 'websocket',
+		'cuota_dia'       => 200,
+		// Esta página ejercita el canal HABLADO y nada más: un solo
+		// lanzador, para que las pruebas que ya existían sigan apuntando a
+		// un único botón. Los dos canales y el escrito a secas tienen cada
+		// uno su propia página más abajo.
+		'entrada'         => 'voz',
+		'texto'           => 1,
+		'recordar'        => 1,
+		'aviso_version'   => 1,
+		'politica'        => 'https://ejemplo.narino.gov.co/politica',
+		'correo'          => 'datos@narino.gov.co',
+		'canal'           => 'Calle 19 No. 23-78, Pasto',
+		'retencion'       => 'El proveedor declara conservar las grabaciones 30 días.',
+		'aviso_extra'     => '',
+		'evaluacion_a11y' => 1,
+	)
+);
+
+$paginas['voz'] = construir(
+	'voz',
+	'Tablero con asistente de voz',
+	function ( $sc ) {
+		return $sc->sc_dashboard( array() );
+	},
+	'[urkunina_dashboard]'
+);
+
+/* La misma configuración, con los DOS canales y con sustituciones de voz
+   puestas: dos lanzadores, dos avisos distintos en el HTML y un evento de
+   inicio que lleva overrides.tts. */
+update_option(
+	'uhp_voz',
+	array_merge(
+		get_option( 'uhp_voz' ),
+		array(
+			'entrada'       => 'ambos',
+			'voz_id'        => 'VozDePruebaDeLaSuite00',
+			'voz_velocidad' => 0.9,
+		)
+	)
+);
+
+$paginas['voz-dos'] = construir(
+	'voz-dos',
+	'Tablero con los dos canales',
+	function ( $sc ) {
+		return $sc->sc_dashboard( array() );
+	},
+	'[urkunina_dashboard]'
+);
+
+/* Y solo escrito. Aquí no tiene que haber ni botón de micrófono, ni
+   aviso de voz en el HTML, ni llamada a getUserMedia. */
+update_option(
+	'uhp_voz',
+	array_merge(
+		get_option( 'uhp_voz' ),
+		array( 'entrada' => 'texto' )
+	)
+);
+
+$paginas['voz-texto'] = construir(
+	'voz-texto',
+	'Tablero con asistente escrito',
+	function ( $sc ) {
+		return $sc->sc_dashboard( array() );
+	},
+	'[urkunina_dashboard]'
+);
+
+/* Y el modo PRIVADO, que es el recomendado y hasta ahora no tenía página:
+   el navegador no conoce el identificador del agente y abre la sesión con
+   la URL firmada que le entrega el servidor. Sin verificación guardada, no
+   viaja ninguna sustitución. */
+update_option(
+	'uhp_voz',
+	array_merge(
+		get_option( 'uhp_voz' ),
+		array(
+			'modo'    => 'privado',
+			'entrada' => 'ambos',
+		)
+	)
+);
+/* Un agente privado sin clave no se publica: publicar el botón sería
+   ofrecer algo que falla al pulsarlo. Y de paso, esta página es la que
+   comprueba que la clave NO aparece en el HTML. */
+update_option( 'uhp_voz_clave', 'sk_clave_que_no_debe_salir_nunca' );
+
+$paginas['voz-privado'] = construir(
+	'voz-privado',
+	'Tablero con asistente privado',
+	function ( $sc ) {
+		return $sc->sc_dashboard( array() );
+	},
+	'[urkunina_dashboard]'
+);
+
+delete_option( 'uhp_voz_clave' );
+
+// El resto de páginas vuelven a verlo apagado: el tablero de siempre no
+// puede cambiar porque exista esta función.
+update_option( 'uhp_voz', UHP_Voz::por_defecto() );
 
 $paginas['tablero'] = construir(
 	'tablero',
