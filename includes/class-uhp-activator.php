@@ -69,6 +69,7 @@ final class UHP_Activator {
 		// cada petición del sitio, que es lo contrario de lo que dice su
 		// documentación. add_option no pisa una fila que ya exista.
 		add_option( UHP_Voz::OPCION_CLAVE, '', '', false );
+		add_option( UHP_Voz::OPCION_LLM, '', '', false );
 	}
 
 	/**

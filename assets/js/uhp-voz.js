@@ -63,9 +63,6 @@
   var MUT_MINIMO_MS = 1500;
   var MUT_POR_MINUTO = 8;
 
-  /* Una descarga que se queda colgada no dispara onerror nunca. */
-  var SDK_ESPERA_MS = 15000;
-
   if (!C || !DATOS || !CFG) { return; }
 
   /* Registro de instancias. Hace falta por la visibilidad «oculto», donde
@@ -160,8 +157,19 @@
       // Una pista que solo se usa si la sesión se cae al arrancar y hay
       // sustituciones configuradas: es la causa más probable y la más
       // difícil de adivinar desde el panel de administración.
-      conSustituciones: false,
       errorMicro: false,
+      // La conversación, en el formato neutro que entiende el servidor.
+      // Vive aquí y no en el servidor: cada petición la lleva entera,
+      // que es lo que hace que el servidor no tenga que recordar nada
+      // de nadie.
+      hist: [],
+      audio: null,
+      audioUrl: null,
+      escucha: null,
+      oyendo: false,
+      // Lo enciende el primer fallo del servicio de reconocimiento, y no
+      // se apaga en toda la visita.
+      micMuerto: false,
       // Testigo de generación: todo lo que vuelve de una promesa de una
       // sesión abandonada se descarta comparándolo con esto.
       gen: 0,
@@ -316,7 +324,9 @@
        un panel escrito y le aparecía un diálogo de permiso. */
     if ('voz' === canal || 'texto' === canal) { v.canal = canal; }
     abrirPanel(v);
-    if (consentido(v.canal)) { arrancarSesion(v); return; }
+    /* La compuerta de autorización es ahora un ajuste del sitio, no un
+       requisito. Si la entidad la apagó, se entra directo. */
+    if (!CFG.aviso || consentido(v.canal)) { arrancarSesion(v); return; }
     pintarCompuerta(v);
   }
 
@@ -378,276 +388,328 @@
   /* Sesión                                                             */
   /* ------------------------------------------------------------------ */
 
+  /* Ya no hay «sesión» que abrir contra nadie: no hay SDK que descargar,
+     ni credencial que pedir, ni socket que mantener. Empezar a conversar
+     es montar el panel. La primera llamada al proveedor ocurre con la
+     primera pregunta, y ni un segundo antes: así, abrir el panel y
+     cerrarlo sin preguntar nada no cuesta un céntimo. */
   function arrancarSesion(v) {
     soltarTrampa(v);
     v.gen++;
-    var mia = v.gen;
+    v.hist = [];
 
     montarConversacion(v);
-    fase(v, 'conectando');
+    fase(v, 'escucha');
+    actualizarPie(v);
 
-    /* El permiso del micrófono se pide ANTES de pedirle credenciales al
-       servidor, no después. Al revés se gastaba una ranura del cupo
-       diario —que es facturable— y una URL firmada cada vez que alguien
-       decía «no» al micrófono: el SDK pide el permiso por su cuenta antes
-       de abrir la conexión, de modo que la sesión no llegaba a existir y
-       la ranura se perdía igual, sin que nadie hablara con nadie.
-
-       Las dos esperas van a la vez porque son independientes: descargar
-       un megabyte de SDK no tiene por qué retrasar un diálogo del
-       navegador. */
-    /* Cada fallo en su propia casilla, en vez de devolverlo por la
-       promesa. Devolviéndolo había que distinguir después «un error» de
-       «un valor» con `instanceof Error`, y lo que rechaza getUserMedia es
-       un DOMException: que su cadena de prototipos pase por Error es
-       cierto en los motores de hoy, pero es un detalle del que no tiene
-       por qué depender que una denegación de micrófono no se trague en
-       silencio —si se tragara, el código seguiría a pedir credenciales,
-       que es justo lo que este orden evita—. Con casillas, además, la
-       prioridad entre los dos fallos es fija y no un orden de llegada. */
-    var fallos = [null, null];
-    Promise.all([
-      permisoMicrofono(v).catch(function (e) { fallos[0] = e || new Error('sin-micro'); }),
-      cargarSdk().catch(function (e) { fallos[1] = e || new Error('sin-sdk'); })
-    ])
-      .then(function () {
-        // El del micrófono va primero a propósito: de los dos es el único
-        // que el visitante puede resolver.
-        for (var i = 0; i < fallos.length; i++) {
-          if (fallos[i]) { throw fallos[i]; }
-        }
-        return credenciales(v);
-      })
-      .then(function (cred) { return abrir(v, cred, mia); })
-      .catch(function (err) {
-        // Un error de una sesión que el visitante ya abandonó no puede
-        // pintar nada: el panel estaría mostrando el fallo de algo que
-        // nadie está esperando.
-        if (mia !== v.gen) { return; }
-        fallar(v, err);
-      });
+    /* El saludo lo dice el panel, no el modelo. Pedirle al proveedor que
+       salude cuesta un turno entero —el prompt del sistema y las diez
+       herramientas viajan igual— para decir «hola». */
+    turno(v, 'asistente', T.saludo);
+    if (v.p && v.p.campo) { v.p.campo.focus(); }
   }
 
-  /* En el canal escrito no se pide NADA: el SDK abre un TextConversation,
-     que no toca navigator.mediaDevices ni crea un AudioContext.
+  /* ------------------------------------------------------------------ */
+  /* El motor de la conversación                                        */
+  /* ------------------------------------------------------------------ */
 
-     En el de voz se pide aquí, con la autorización ya informada por la
-     compuerta. Pedirlo dos veces —aquí y dentro del SDK— no produce dos
-     diálogos: concedido una vez, el navegador no vuelve a preguntar en el
-     mismo origen. Las pistas se paran en cuanto llega la respuesta, para
-     no dejar el indicador de grabación encendido mientras todavía se
-     descarga el resto. */
-  function permisoMicrofono(v) {
-    if (v.canal === 'texto') { return Promise.resolve(); }
+  /* Todo lo que sale de este navegador va a ESTE sitio. Las claves —la
+     del modelo de lenguaje y la de la voz— están en el servidor y no
+     bajan nunca. El servidor es un proxy sin memoria: recibe la
+     conversación, le pregunta al proveedor y devuelve lo que diga.
 
-    var md = navigator.mediaDevices;
-    if (!md || !md.getUserMedia) {
-      // Se le pone el nombre que usa el navegador para que la
-      // clasificación de fallar() no tenga que adivinar por el mensaje.
-      var e = new Error('sin-micro-no');
-      e.name = 'NotFoundError';
-      return Promise.reject(e);
-    }
+     El BUCLE DE HERRAMIENTAS vive aquí y no allí, y no es un capricho:
+     las herramientas son las que mueven el mapa y los filtros, y eso solo
+     se puede hacer en la página que los tiene delante. El servidor no
+     tiene tablero que mover. */
 
-    return md.getUserMedia({ audio: true }).then(function (flujo) {
-      var vias = flujo.getTracks ? flujo.getTracks() : [];
-      for (var i = 0; i < vias.length; i++) {
-        try { vias[i].stop(); } catch (err) { /* ya estaba parada */ }
-      }
-    });
-  }
-
-  var sdkPrometido = null;
-  function cargarSdk() {
-    if (window.ElevenLabsClient) { return Promise.resolve(); }
-    if (sdkPrometido) { return sdkPrometido; }
-
-    sdkPrometido = new Promise(function (resolver, rechazar) {
-      var listo = false;
-      var fallo = function () {
-        if (listo) { return; }
-        listo = true;
-        // Se suelta la promesa: si quedara en caché rechazada, el
-        // asistente estaría muerto para el resto de la página y un
-        // reintento no volvería a pedir el archivo.
-        sdkPrometido = null;
-        rechazar(new Error('sin-sdk'));
-      };
-      var reloj = window.setTimeout(fallo, SDK_ESPERA_MS);
-
-      var s = document.createElement('script');
-      s.src = CFG.sdk.sdk;
-      s.async = true;
-      s.crossOrigin = 'anonymous';
-      s.onload = function () {
-        window.clearTimeout(reloj);
-        if (listo) { return; }
-        if (window.ElevenLabsClient) { listo = true; resolver(); }
-        else { fallo(); }
-      };
-      s.onerror = function () { window.clearTimeout(reloj); fallo(); };
-      document.head.appendChild(s);
-    });
-    return sdkPrometido;
-  }
-
-  function credenciales(v) {
-    if (CFG.modo !== 'privado') {
-      // Una sesión de solo texto va siempre por WebSocket: es lo que
-      // decide el propio SDK, y WebRTC arrastraría LiveKit para no
-      // transportar ni un byte de audio.
-      var transporte = v.canal === 'texto' ? 'websocket' : CFG.transporte;
-      return Promise.resolve({ agentId: CFG.agente, connectionType: transporte });
-    }
+  function pedir(ruta, cuerpo) {
     // La base la pone el núcleo, y se lee con la misma tolerancia que él:
-    // `window.UHP.rest` a secas lanzaba un TypeError en cualquier página
-    // donde el bloque del núcleo no hubiera llegado, y lo que el visitante
-    // habría visto es «no se pudo abrir la conversación».
+    // `window.UHP.rest` a secas lanza un TypeError en una página donde el
+    // bloque del núcleo no haya llegado.
     var base = (window.UHP && window.UHP.rest) || '';
-    return fetch(base + CFG.ruta, {
+    return fetch(base + ruta, {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo)
     }).then(function (r) {
-      if (!r.ok) { throw new Error(r.status === 503 ? 'sin-cuota' : 'sin-sesion'); }
+      if (!r.ok) {
+        var e = new Error(
+          r.status === 503 ? 'sin-cuota'
+            : (r.status === 429 ? 'muchas'
+              : (r.status === 413 ? 'larga' : 'sin-sesion'))
+        );
+        e.codigo = r.status;
+        throw e;
+      }
       return r.json();
-    }).then(function (d) {
-      if (!d || !d.url) { throw new Error('sin-sesion'); }
-      return { signedUrl: d.url, connectionType: 'websocket' };
     });
   }
 
-  function abrir(v, cred, mia) {
-    var mando = mandoDe(v);
-    var escrito = v.canal === 'texto';
-    var opciones = {
-      clientTools: herramientas(v),
-      onConnect: function () { if (mia === v.gen) { fase(v, 'escucha'); } },
-      onDisconnect: function () {
+  /* Un turno entero: entra la pregunta del visitante y sale la respuesta.
+     En medio puede haber varias vueltas, porque el modelo pide
+     herramientas, hay que ejecutarlas y devolvérselas para que siga. */
+  function preguntar(v, texto) {
+    if (!texto) { return Promise.resolve(); }
+    var mia = v.gen;
+
+    v.hist.push({ rol: 'usuario', texto: texto });
+    turno(v, 'usted', texto);
+    fase(v, 'pensando');
+
+    var util = herramientas(v);
+    var vueltas = 0;
+    var tope = Math.max(1, CFG.turnos || 8);
+
+    function vuelta() {
+      if (mia !== v.gen) { return Promise.resolve(); }
+
+      return pedir(CFG.rutaChat, { mensajes: v.hist, canal: v.canal }).then(function (d) {
         if (mia !== v.gen) { return; }
-        soltar(v, true);
-        fase(v, 'cerrada');
-        actualizarPie(v);
-      },
-      onError: function (e) {
-        if (mia !== v.gen) { return; }
-        fallar(v, e instanceof Error ? e : new Error('sin-sesion'));
-      },
-      onModeChange: function (m) {
-        if (mia !== v.gen || v.fase === 'cerrada' || v.fase === 'error') { return; }
-        fase(v, m && m.mode === 'speaking' ? 'habla' : 'escucha');
-      },
-      onMessage: function (m) {
-        if (mia !== v.gen || !m || !m.message) { return; }
-        turno(v, m.source === 'user' ? 'usted' : 'asistente', String(m.message));
-      }
-    };
-    // Siempre, aunque el tablero no haya cargado: si falta una sola de
-    // las claves que el prompt interpola, el proveedor rechaza la sesión.
-    opciones.dynamicVariables = variables(v, (mando && mando.disponible()) ? mando.estado() : null);
 
-    if (escrito) {
-      /* LAS DOS MITADES, y hacen falta las dos.
+        var dicho = (d && typeof d.texto === 'string') ? d.texto : '';
+        var llamadas = (d && d.llamadas && d.llamadas.length) ? d.llamadas : [];
 
-         `textOnly` es solo del cliente: impide que el SDK abra el
-         micrófono y que reproduzca audio. Lo que hace que el servidor no
-         SINTETICE ese audio es la sustitución, que es lo único que viaja
-         en el evento de inicio. Con una sola de las dos, el proveedor
-         seguiría generando voz —y cobrándola— para que el navegador la
-         tirase a la basura. */
-      opciones.textOnly = true;
-      /* La sustitución solo si el servidor confirmó que el agente la
-         admite. Enviarla sin confirmar no degrada nada: tumba la
-         conversación entera con «Override is not allowed for this AI
-         agent», y entonces el canal accesible —el único que le sirve a
-         quien no puede hablar— sería el único que puede no abrir. Sin
-         ella el canal escrito funciona igual; lo que pasa es que el
-         proveedor sintetiza un audio que nadie oye y lo factura, y eso lo
-         advierte el panel de administración. */
-      if (CFG.textoServidor) {
-        opciones.overrides = { conversation: { textOnly: true } };
-      }
-    } else {
-      /* Explícito y no heredado: el SDK pide un bloqueo de pantalla por
-         omisión, y aquí se deja puesto a conciencia. Durante una
-         conversación hablada el visitante no toca el teléfono, y una
-         pantalla que se apaga a media respuesta corta la conversación. */
-      opciones.useWakeLock = true;
+        v.hist.push({ rol: 'asistente', texto: dicho, llamadas: llamadas });
 
-      /* Sustituciones de voz, SOLO si hay algo que sustituir. Un evento
-         de sustitución vacío contra un agente que no las admite es una
-         sesión rechazada sin que nadie haya pedido nada. */
-      var tts = {};
-      if (CFG.voz && CFG.voz.id) { tts.voiceId = CFG.voz.id; }
-      if (CFG.voz && CFG.voz.velocidad) { tts.speed = CFG.voz.velocidad; }
-      if (tts.voiceId || tts.speed) { opciones.overrides = { tts: tts }; }
+        if (!llamadas.length) {
+          if (dicho) {
+            turno(v, 'asistente', dicho);
+            hablar(v, dicho);
+          } else {
+            fase(v, 'escucha');
+          }
+          return;
+        }
+
+        /* Lo que dijo ANTES de pedir herramientas también se pinta. Suele
+           ser «déjeme mirar»: callarlo deja la pantalla muda mientras el
+           tablero se mueve solo, que es justo cuando el visitante necesita
+           saber que alguien está haciendo algo. */
+        if (dicho) { turno(v, 'asistente', dicho); }
+
+        vueltas++;
+        if (vueltas >= tope) {
+          /* Un tope, y se para de verdad en vez de pedirle al modelo que
+             se pare. Cada vuelta cuesta: el historial entero viaja otra
+             vez. Un modelo que se enreda gastaría la conversación dando
+             vueltas y el visitante vería el tablero moverse sin respuesta. */
+          turno(v, 'asistente', T.vueltas);
+          fase(v, 'escucha');
+          return;
+        }
+
+        v.hist.push({ rol: 'herramienta', resultados: ejecutar(v, util, llamadas) });
+        return vuelta();
+      });
     }
-    // Se recuerda para que, si la sesión se cae al arrancar, el mensaje
-    // pueda nombrar la causa más probable: un agente que no tiene
-    // habilitadas esas sustituciones. Es la que nadie adivina.
-    v.conSustituciones = !!opciones.overrides;
 
-    for (var k in cred) { if (Object.prototype.hasOwnProperty.call(cred, k)) { opciones[k] = cred[k]; } }
-
-    return window.ElevenLabsClient.Conversation.startSession(opciones).then(function (conv) {
-      // El visitante pudo cerrar el panel mientras conectaba. Sin esta
-      // comparación, la sesión quedaba abierta —y el micrófono encendido,
-      // con su punto rojo en la pestaña— sin panel a la vista.
-      if (mia !== v.gen) {
-        try { conv.endSession(); } catch (e) { /* ya estaba cerrada */ }
-        return;
-      }
-      v.conv = conv;
-      fase(v, 'escucha');
-      actualizarPie(v);
-      escucharTablero(v);
+    return vuelta().catch(function (err) {
+      if (mia !== v.gen) { return; }
+      fallar(v, err);
     });
   }
 
-  /* Las variables dinámicas de ElevenLabs sustituyen los marcadores
-     {{nombre}} del prompt del agente. Dos consecuencias que conviene no
-     olvidar:
-
-       · Hay que mandarlas SIEMPRE. Un prompt que escribe {{canal}} y una
-         sesión que no manda «canal» es una sesión que el proveedor
-         rechaza. Por eso aquí no hay ninguna rama que devuelva menos
-         claves: cuando el tablero todavía no ha cargado sus datos, las
-         claves van con un valor que lo dice.
-
-       · Son el estado INICIAL y nada más. No se actualizan solas durante
-         la conversación; lo que mantiene al agente al día es
-         sendContextualUpdate y volver a llamar a las herramientas. El
-         prompt del agente lo dice con esas palabras. */
-  function variables(v, e) {
-    var hay = !!e;
-    return {
-      // El agente necesita saber si le escuchan o le leen: cómo se dice
-      // una cifra no es lo mismo en los dos canales, y lo que se lee se
-      // puede copiar sin el resto de la conversación.
-      canal: v.canal === 'texto' ? 'texto' : 'voz',
-      indicador: hay ? e.indicadorEtiqueta : 'todavía sin cargar',
-      zona: hay ? (e.zonaEtiqueta || 'todas') : 'todavía sin cargar',
-      subregion: hay ? (e.subregion || 'todas') : 'todavía sin cargar',
-      municipio: hay ? (e.municipio || 'ninguno') : 'todavía sin cargar',
-      municipios_visibles: hay ? String(e.visibles) : 'todavía sin cargar',
-      casos_visibles: hay ? String(e.casos) : 'todavía sin cargar',
-      promedio_visible: hay ? (e.promedio === null ? 'sin dato' : String(e.promedio)) : 'todavía sin cargar'
-    };
-  }
-
-  function escucharTablero(v) {
-    var mando = mandoDe(v);
-    if (!mando) { return; }
-    v.desuscribir = mando.alCambiar(function (estado, origen) {
-      if (origen === 'agente' || !v.conv) { return; }
-      window.clearTimeout(v.temporizadorCtx);
-      v.temporizadorCtx = window.setTimeout(function () {
-        if (!v.conv) { return; }
+  /* Ejecuta lo que el modelo pidió. Lo que no reconoce se le devuelve
+     dicho, no en silencio: un resultado vacío le invita a repetir la
+     llamada, y así se gastan las vueltas. */
+  function ejecutar(v, util, llamadas) {
+    var salida = [];
+    for (var i = 0; i < llamadas.length; i++) {
+      var l = llamadas[i] || {};
+      var fn = util[l.nombre];
+      var r;
+      if (typeof fn !== 'function') {
+        r = 'No existe una herramienta con ese nombre.';
+      } else {
         try {
-          v.conv.sendContextualUpdate('El visitante cambió el tablero: ' + resumenHablado(estado));
-        } catch (e) { /* la sesión pudo cerrarse entre medias */ }
-      }, 800);
+          r = fn(l.args || {});
+        } catch (e) {
+          r = 'La herramienta falló.';
+          if (window.console && console.warn) {
+            console.warn('[URKUNINA 5000] herramienta ' + l.nombre + ': ' + e);
+          }
+        }
+      }
+      salida.push({
+        id: l.id,
+        nombre: l.nombre,
+        salida: String(r === null || r === undefined ? '' : r)
+      });
+    }
+    return salida;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* La voz: la pone el servidor y aquí solo suena                      */
+  /* ------------------------------------------------------------------ */
+
+  function hablar(v, texto) {
+    if (!CFG.voz || v.canal !== 'voz' || !texto) {
+      fase(v, 'escucha');
+      return;
+    }
+    var mia = v.gen;
+    fase(v, 'habla');
+
+    pedir(CFG.rutaVoz, { texto: texto }).then(function (d) {
+      if (mia !== v.gen) { return; }
+      if (!d || !d.audio) { fase(v, 'escucha'); return; }
+      reproducir(v, d.tipo || 'audio/mpeg', d.audio);
+    }).catch(function () {
+      /* Que no suene no es un fallo de la conversación: la respuesta ya
+         está escrita en el panel. Se sigue, en silencio, en vez de
+         pintarle un error a quien ya tiene delante lo que preguntó. */
+      if (mia === v.gen) { fase(v, 'escucha'); }
     });
+  }
+
+  function reproducir(v, tipo, base64) {
+    pararAudio(v);
+    try {
+      var cadena = window.atob(base64);
+      var bytes = new Uint8Array(cadena.length);
+      for (var i = 0; i < cadena.length; i++) { bytes[i] = cadena.charCodeAt(i); }
+      var url = window.URL.createObjectURL(new Blob([bytes], { type: tipo }));
+
+      var a = new Audio(url);
+      v.audio = a;
+      v.audioUrl = url;
+
+      var fin = function () {
+        pararAudio(v);
+        if (v.fase === 'habla') { fase(v, 'escucha'); }
+      };
+      a.addEventListener('ended', fin);
+      a.addEventListener('error', fin);
+
+      var p = a.play();
+      if (p && p.catch) {
+        /* Un navegador puede negarse a reproducir sin un gesto previo del
+           visitante. No se insiste ni se avisa: el texto ya está ahí. */
+        p.catch(fin);
+      }
+    } catch (e) {
+      fase(v, 'escucha');
+    }
+  }
+
+  function pararAudio(v) {
+    if (v.audio) {
+      try { v.audio.pause(); } catch (e) { /* ya estaba parado */ }
+      v.audio = null;
+    }
+    if (v.audioUrl) {
+      try { window.URL.revokeObjectURL(v.audioUrl); } catch (e) { /* ya se fue */ }
+      v.audioUrl = null;
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* El micrófono: lo pone el navegador                                 */
+  /* ------------------------------------------------------------------ */
+
+  /* Pulsar para hablar, y no escucha continua. Dos razones, y la segunda
+     pesa más: un micrófono siempre abierto en la página de una entidad
+     pública es algo que hay que justificar, y aquí no hace falta. */
+  function motorVoz() {
+    return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  }
+
+  function escuchar(v) {
+    var Motor = motorVoz();
+    /* `v.micMuerto` lo pone el primer fallo del servicio. La detección
+       de característica NO basta: en Brave, Vivaldi y Opera el objeto
+       existe —así que `motorVoz()` devuelve algo— y falla después, en
+       tiempo de ejecución, porque el motor de transcripción es un
+       servicio de Google que esos navegadores no tienen. Reintentar ahí
+       es pedirle al visitante que pulse un botón roto. */
+    if (!Motor || v.micMuerto) {
+      v.error = T.sin_reconocimiento;
+      fase(v, 'error');
+      actualizarPie(v);
+      return;
+    }
+    if (v.oyendo) { pararEscucha(v); return; }
+
+    /* Se calla el asistente antes de abrir el micrófono. Si no, su propia
+       voz entra por el micrófono, se transcribe como si la hubiera dicho
+       el ciudadano, y el asistente se pone a conversar consigo mismo. */
+    pararAudio(v);
+    if (v.fase === 'habla') { fase(v, 'escucha'); }
+
+    var mia = v.gen;
+    var r;
+    try {
+      r = new Motor();
+    } catch (e) {
+      v.error = T.sin_reconocimiento;
+      fase(v, 'error');
+      actualizarPie(v);
+      return;
+    }
+
+    r.lang = 'es-CO';
+    r.continuous = false;
+    r.interimResults = false;
+    r.maxAlternatives = 1;
+
+    r.onresult = function (e) {
+      if (mia !== v.gen) { return; }
+      var t = '';
+      try { t = e.results[0][0].transcript; } catch (err) { t = ''; }
+      t = String(t || '').trim();
+      if (t) { preguntar(v, t); }
+    };
+
+    r.onerror = function (e) {
+      if (mia !== v.gen) { return; }
+      var cual = (e && e.error) || '';
+      // «Sin habla» es que el visitante no dijo nada: ni es un fallo ni
+      // merece un cartel rojo.
+      if ('no-speech' === cual || 'aborted' === cual) { return; }
+
+      if ('not-allowed' === cual) {
+        // Lo denegó el visitante. Puede cambiar de idea, así que el
+        // micrófono sigue ahí.
+        v.error = T.sin_micro;
+      } else {
+        /* Cualquier otra cosa —'network', 'service-not-allowed',
+           'audio-capture'— significa que este navegador no va a poder, y
+           se apaga el micrófono para esta visita en vez de dejar un botón
+           que falla cada vez. El canal escrito sigue entero. */
+        v.micMuerto = true;
+        v.error = T.sin_reconocimiento;
+      }
+      fase(v, 'error');
+      actualizarPie(v);
+    };
+
+    r.onend = function () {
+      v.oyendo = false;
+      v.escucha = null;
+      if (mia === v.gen) { actualizarPie(v); }
+    };
+
+    try {
+      r.start();
+      v.escucha = r;
+      v.oyendo = true;
+      anunciar(v, T.oyendo);
+      actualizarPie(v);
+    } catch (e) {
+      v.oyendo = false;
+      v.escucha = null;
+    }
+  }
+
+  function pararEscucha(v) {
+    if (v.escucha) {
+      try { v.escucha.abort(); } catch (e) { /* ya terminó */ }
+      v.escucha = null;
+    }
+    v.oyendo = false;
   }
 
   /* Suelta TODO lo que una conversación deja abierto. Lo llaman el cierre
@@ -656,10 +718,12 @@
   function soltar(v, conservarEstadoUi) {
     window.clearTimeout(v.temporizadorCtx);
     if (v.desuscribir) { v.desuscribir(); v.desuscribir = null; }
-    if (v.conv) {
-      try { v.conv.endSession(); } catch (e) { /* ya estaba cerrada */ }
-      v.conv = null;
-    }
+
+    // Lo que de verdad queda abierto ahora es el audio sonando y el
+    // micrófono escuchando. No hay sesión que cerrar contra nadie.
+    pararAudio(v);
+    pararEscucha(v);
+
     // Lo sugerido y lo confirmado son de UNA conversación. Si sobreviven,
     // la confirmación por pulsación que protege de elegir el municipio
     // equivocado se sortea en la conversación siguiente.
@@ -667,44 +731,35 @@
     v.confirmado = null;
     v.mutaciones = [];
     quitarConfirmacion(v);
-    if (!conservarEstadoUi) { v.gen++; }
+    if (!conservarEstadoUi) {
+      v.gen++;
+      // La conversación también. Volver a abrir el panel empieza de cero:
+      // conservarla haría que el visitante pagase otra vez, en cada
+      // pregunta, un historial que ya no está mirando.
+      v.hist = [];
+    }
   }
 
   function fallar(v, err) {
     soltar(v, true);
 
-    // La taxonomía del navegador vive en err.name, no en err.message: el
-    // mensaje es libre y cambia entre navegadores y entre versiones.
-    var nombre = (err && err.name) || '';
+    /* La clave la pone quien lanza, no se adivina del mensaje: los
+       mensajes de red cambian entre navegadores y entre versiones, y una
+       clasificación por texto acaba enseñándole al visitante el error
+       equivocado. */
     var clave = (err && err.message) || '';
     var mensaje = T.sin_sesion;
 
-    if (clave === 'sin-sdk') { mensaje = T.sin_sdk; }
-    else if (clave === 'sin-cuota') { mensaje = T.sin_cuota; }
-    else if (!window.isSecureContext) { mensaje = T.sin_seguro; }
-    else if ('NotAllowedError' === nombre || 'SecurityError' === nombre || /permission|not ?allowed/i.test(clave)) { mensaje = T.sin_micro; }
-    else if ('NotFoundError' === nombre || 'OverconstrainedError' === nombre || /not ?found|device/i.test(clave)) { mensaje = T.sin_micro_no; }
-    else if ('NotReadableError' === nombre || 'AbortError' === nombre || /not ?readable|in ?use/i.test(clave)) { mensaje = T.ocupado; }
-
-    /* Una sesión que se cae en cuanto arranca, con sustituciones puestas,
-       casi siempre es un agente que no las tiene habilitadas. Es la causa
-       que nadie adivina —el panel de ElevenLabs las desactiva por
-       omisión— y dejar al administrador delante de un «no se pudo abrir
-       la conversación» le hace buscar donde no está. */
-    if (v.conSustituciones && mensaje === T.sin_sesion && T.pista_sust) {
-      mensaje += ' ' + T.pista_sust;
-    }
-
-    // Se guarda para que el pie pueda ofrecer el otro canal cuando lo que
-    // falló fue el micrófono y no la conversación.
-    v.errorMicro = (mensaje === T.sin_micro || mensaje === T.sin_micro_no
-      || mensaje === T.ocupado || mensaje === T.sin_seguro);
+    if (clave === 'sin-cuota') { mensaje = T.sin_cuota; }
+    else if (clave === 'muchas') { mensaje = T.muchas; }
+    else if (clave === 'larga') { mensaje = T.larga; }
 
     v.error = mensaje;
+    v.errorMicro = false;
     fase(v, 'error');
     actualizarPie(v);
     if (window.console && console.warn) {
-      console.warn('[URKUNINA 5000] asistente de voz: ' + (nombre || clave));
+      console.warn('[URKUNINA 5000] asistente: ' + (clave || 'desconocido'));
     }
   }
 
@@ -1262,7 +1317,8 @@
   function actualizarPie(v) {
     if (!v.p) { return; }
     var pie = v.p.pie;
-    var enSesion = v.fase === 'escucha' || v.fase === 'habla' || v.fase === 'conectando';
+    var enSesion = v.fase === 'escucha' || v.fase === 'habla'
+      || v.fase === 'conectando' || v.fase === 'pensando';
 
     // Se vacía el pie salvo el formulario, que se saca y se vuelve a poner.
     if (v.p.forma && v.p.forma.parentNode === pie) { pie.removeChild(v.p.forma); }
@@ -1291,7 +1347,21 @@
       }));
     }
 
-    if (CFG.texto && (v.fase === 'escucha' || v.fase === 'habla')) {
+    /* El micrófono, cuando esta página ofrece el canal hablado y el
+       navegador sabe reconocer voz. Es pulsar para hablar: un micrófono
+       siempre abierto en la página de una entidad pública es algo que
+       habría que justificar, y aquí no hace falta. */
+    if (v.canal === 'voz' && enSesion && motorVoz() && !v.micMuerto) {
+      var mic = boton(
+        v.oyendo ? T.parar_micro : T.hablar_micro,
+        'uhp-voz__btn uhp-voz__btn--principal' + (v.oyendo ? ' uhp-voz__btn--oyendo' : ''),
+        function () { escuchar(v); }
+      );
+      mic.setAttribute('aria-pressed', v.oyendo ? 'true' : 'false');
+      pie.appendChild(mic);
+    }
+
+    if (CFG.texto && (v.fase === 'escucha' || v.fase === 'habla' || v.fase === 'pensando')) {
       if (!v.p.forma) { crearForma(v); }
       pie.appendChild(v.p.forma);
     }
@@ -1316,10 +1386,12 @@
     forma.addEventListener('submit', function (e) {
       e.preventDefault();
       var texto = campo.value.trim();
-      if (!texto || !v.conv) { return; }
+      // Mientras el asistente está pensando o hablando no se encola otra
+      // pregunta: el servidor recibiría dos conversaciones divergentes y
+      // la segunda llegaría sin lo que acaba de contestar la primera.
+      if (!texto || v.fase === 'pensando' || v.fase === 'habla') { return; }
       campo.value = '';
-      turno(v, 'usted', texto);
-      try { v.conv.sendUserMessage(texto); } catch (err) { /* sesión cerrada */ }
+      preguntar(v, texto);
     });
     v.p.forma = forma;
     v.p.campo = campo;
@@ -1382,9 +1454,13 @@
         // el agente: atribuírsela al asistente sería mentirle a quien no
         // ve la pantalla.
         if (m) { m.setMunicipio(nombre, 'usuario'); }
-        if (v.conv) {
-          try { v.conv.sendContextualUpdate('El visitante confirmó ' + nombre + '.'); } catch (e) { /* cerrada */ }
-        }
+        /* Y se le dice al asistente, como un turno más de la
+           conversación: sin esto seguiría esperando una confirmación que
+           ya ocurrió, y volvería a pedirla. */
+        v.hist.push({
+          rol: 'usuario',
+          texto: 'Confirmo que me refería a ' + nombre + '. Ya está seleccionado en el tablero.'
+        });
       });
       if (!primero) { primero = b; }
       caja.appendChild(b);
@@ -1427,9 +1503,10 @@
     if (v.fase === f) { return; }
     v.fase = f;
 
-    v.raiz.classList.remove('uhp-voz--escucha', 'uhp-voz--habla', 'uhp-voz--error');
+    v.raiz.classList.remove('uhp-voz--escucha', 'uhp-voz--habla', 'uhp-voz--error', 'uhp-voz--pensando');
     if (f === 'escucha') { v.raiz.classList.add('uhp-voz--escucha'); }
     else if (f === 'habla') { v.raiz.classList.add('uhp-voz--habla'); }
+    else if (f === 'pensando') { v.raiz.classList.add('uhp-voz--pensando'); }
     else if (f === 'error') { v.raiz.classList.add('uhp-voz--error'); }
 
     var texto = textoDeFase(v);
@@ -1448,7 +1525,7 @@
        En el escrito no hay audio ninguno: quien no ve la pantalla no tiene
        cómo saber que el asistente está redactando, y el cambio ocurre una
        vez por turno, no veinte. WCAG 2.1 §4.1.3. */
-    var relevante = (f === 'cerrada' || f === 'error' || f === 'conectando');
+    var relevante = (f === 'cerrada' || f === 'error' || f === 'pensando');
     if (v.canal === 'texto' && (f === 'habla' || f === 'escucha')) { relevante = true; }
     if (relevante) { anunciar(v, texto); }
   }
@@ -1457,9 +1534,14 @@
     var escrito = v.canal === 'texto';
     if (v.fase === 'aviso') { return T.aviso_fase; }
     if (v.fase === 'conectando') { return T.conectando; }
-    // «Escuchando» a quien está teclando describe una pantalla que no
-    // tiene delante, y es justo quien no la ve el que depende de esto.
-    if (v.fase === 'escucha') { return escrito ? T.escribiendo : T.escuchando; }
+    if (v.fase === 'pensando') { return T.pensando; }
+    // En reposo, el rótulo dice QUÉ HACER. «Escuchando» a quien está
+    // teclando describe una pantalla que no tiene delante, y es justo
+    // quien no la ve el que depende de esto.
+    if (v.fase === 'escucha') {
+      if (escrito) { return T.escribiendo; }
+      return v.oyendo ? T.oyendo : T.listo_voz;
+    }
     if (v.fase === 'habla') { return escrito ? T.redactando : T.hablando; }
     if (v.fase === 'error') { return v.error || T.sin_sesion; }
     return T.cerrada;

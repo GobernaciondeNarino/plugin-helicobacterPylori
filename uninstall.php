@@ -30,6 +30,10 @@ function uhp_limpiar_sitio() {
 		// llevársela: dejar una credencial de un tercero en la base de
 		// datos de un sitio del que el plugin ya salió es un hallazgo.
 		'uhp_voz_clave',
+		// Y la del modelo de lenguaje, que vive en su propia fila por la
+		// misma razón: fuera del array del que se deriva lo que viaja al
+		// navegador.
+		'uhp_llm_clave',
 		'uhp_datos_hash',
 	);
 	foreach ( $opciones as $opcion ) {
