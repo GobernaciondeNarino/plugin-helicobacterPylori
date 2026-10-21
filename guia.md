@@ -851,39 +851,135 @@ falla la suite en vez de llegar a producción.
 ### 4.9 El asistente del tablero
 
 El tablero puede atender preguntas y mover sus propios filtros al responderlas.
-El reconocimiento, el modelo y la voz los pone ElevenLabs; el plugin pone la
-compuerta de consentimiento, el panel, la transcripción y las nueve herramientas
-con las que el agente lee y toca el tablero.
+
+#### Tres piezas, y cada una donde corresponde
+
+| Pieza | Quién la hace | Dónde |
+|---|---|---|
+| Entender la pregunta y decidir qué herramienta usar | Un **modelo de lenguaje**: Claude, ChatGPT o Gemini, a elegir | Lo llama **el servidor** |
+| Leer la respuesta en alto | **ElevenLabs**, su API de síntesis | Lo llama **el servidor** |
+| Convertir el dictado en texto | **El navegador del visitante** | Fuera de nuestro alcance |
+
+`UHP_LLM` traduce el formato neutro de una conversación a las tres APIs y de
+vuelta. Sin SDK ni Composer, solo `wp_remote_post()`: hay otros plugins en el
+sitio donde esto se instala y un framework compartido es un conflicto esperando
+a ocurrir.
+
+Las tres APIs se parecen lo justo para que confundirlas salga caro. Claude
+quiere `tools[].input_schema` y la clave en `x-api-key`; OpenAI quiere las
+herramientas **planas** —`{type, name, parameters}`, sin el nivel `function`
+que tenía la API de *chat completions*— y la respuesta en `output[]`; Gemini
+quiere `parametersJsonSchema` y **no** `parameters`, porque el segundo es un
+subconjunto restringido que rechaza la mitad de nuestros esquemas, y devuelve
+una `thoughtSignature` que hay que devolverle tal cual o pierde el hilo. Los
+tres exigen que el esquema vaya **cerrado**, y las dos herramientas sin
+argumentos declaran sus propiedades como objeto y no como array de PHP: 
+`json_encode()` escribe `[]` donde los tres esperan `{}`, y la petición entera
+se rechaza con un 400 que no nombra la herramienta culpable. Dos comprobaciones
+de la suite lo sostienen.
+
+#### Ninguna clave en el navegador, y lo que eso compra
+
+El visitante pregunta a `/wp-json/urkunina/v1/voz/chat` y el servidor hace el
+resto. Eso no es higiene abstracta: es lo que hace **ciertas** tres cosas que
+en la arquitectura anterior solo lo parecían. El tope diario, el límite por IP
+y la comprobación de origen se aplican de verdad, porque la conversación pasa
+por aquí; antes el navegador abría la sesión contra el proveedor y este
+servidor no podía contar nada.
+
+`config_front()` se arma por **lista blanca**, clave por clave, nunca por
+resta: así el ajuste que alguien añada mañana no se publica por descuido.
+Tampoco viaja qué proveedor hay detrás —no le hace falta al navegador y es una
+pista gratis para quien quiera molestar—, ni el identificador de la voz: lo que
+viaja es **si** hay voz, que es lo único que cambia lo que el panel pinta.
+
+De la CSP sobrevive una línea, y solo con la voz encendida:
+`media-src 'self' blob:`. El audio llega en base64 dentro de la respuesta, se
+reconstruye en memoria y se reproduce desde una URL `blob:`, que
+`default-src 'self'` **no** cubre. Sin esa línea el panel funciona entero
+—texto, mapa, gráficas— y simplemente no suena: un fallo mudo que no se nota
+hasta que alguien pregunta por qué. `media-src` no permite ejecutar nada, y es
+una directiva mucho más estrecha que las que pedía la arquitectura anterior:
+`blob:` en `script-src` —justo lo que una entidad pública no quiere abrir—, el
+dominio de una CDN, un WebSocket contra el proveedor y cuatro dominios de
+LiveKit con comodín.
 
 #### Dos canales, y la diferencia no es la piel
 
 Se puede entrar **hablando** o **escribiendo**, y el segundo no es el primero
 con el micrófono apagado:
 
-- `startSession({ textOnly: true })` devuelve un `TextConversation`, que no toca
-  `navigator.mediaDevices` ni crea un `AudioContext`. No es que el audio no se
-  use: es que **no se captura**, y una prueba comprueba que `getUserMedia` no se
-  llama ni una vez. Esa es la diferencia entre «no hay audio» y «no se pide
-  permiso para el audio», y es lo que convierte el canal escrito en la
-  alternativa equivalente que pide la Resolución 1519 de 2020 en lugar de un
-  plan B escondido.
-- `textOnly` es solo del cliente. Lo que impide que el proveedor **sintetice**
-  —y facture— un audio que el navegador tiraría a la basura es
-  `overrides.conversation.textOnly`, que viaja en el evento de inicio. Hacen
-  falta las dos mitades; con una sola, el ahorro es imaginario.
-- El aviso de habeas data es **otro**, y la autorización se guarda **aparte**.
-  La voz de una persona identificable puede ser un dato biométrico; el texto que
-  teclea no lo es. Pedirle a quien va a escribir que autorice el tratamiento de
-  su voz sería recoger una autorización por algo que no va a pasar, y un aviso
-  con un bloque de más informa peor. Aceptar el escrito **no** abre el
-  micrófono; aceptar el de voz sí cubre el escrito, porque ese aviso dice con
-  esas palabras que «puede escribir sus preguntas en lugar de hablarlas».
-- La receta de CSP se encoge: sin worklets de audio no hay nada que cargar desde
-  un `blob:`.
-- El permiso del micrófono se pide **antes** de pedirle credenciales al
-  servidor. Al revés, cada «no» al micrófono se llevaba una ranura del cupo
-  diario —que es facturable— y una URL firmada, porque el SDK pide el permiso
-  por su cuenta antes de conectar y la sesión no llegaba a existir.
+- En el canal escrito **no se manda nada a sintetizar**. ElevenLabs cobra por
+  carácter leído, y un audio que nadie va a oír se factura igual que uno que
+  sí. Una prueba comprueba que la ruta `/voz/hablar` no se toca ni una vez.
+- El **prompt es otro**. Una lista de once subregiones no se retiene de oído:
+  por voz van los extremos y un par más, y quien quiera la lista entera la
+  pide. Por escrito van las once, porque se pueden releer. El navegador manda
+  el canal en cada pregunta y el servidor elige el prompt.
+- Tampoco se pide el micrófono, ni una vez. Esa es la diferencia entre «no hay
+  audio» y «no se pide permiso para el audio», y es lo que convierte el canal
+  escrito en la alternativa equivalente que pide la Resolución 1519 de 2020 en
+  lugar de un plan B escondido.
+- Si la voz no está configurada, el canal escrito aparece **aunque** el ajuste
+  diga «solo voz». Quedarse sin ninguno de los dos no es una opción, y un
+  lanzador de micrófono en una página donde el servidor no puede sintetizar
+  nada promete algo que no va a ocurrir.
+
+#### El dictado lo hace el navegador, y hay que decirlo
+
+El reconocimiento de voz no lo pone este plugin: lo pone la API
+`SpeechRecognition` del navegador del visitante. Dos consecuencias, y ninguna
+es un detalle de implementación:
+
+- En Chrome, Edge y Safari **el audio se envía a servidores de Google o de
+  Apple**. Ni este sitio ni ElevenLabs intervienen, y la entidad no controla
+  ese tratamiento ni puede pactarlo: es del navegador que el ciudadano eligió.
+  Está escrito en `docs/voz/privacidad.md` y en el propio panel de
+  administración, en vez de dejarlo implícito.
+- En Firefox, Opera, Brave y Vivaldi **no funciona**. Y en algunos de ellos el
+  objeto existe, así que la detección de característica no basta: falla
+  después, en tiempo de ejecución, con `network` o `service-not-allowed`,
+  porque el motor es un servicio de Google que esos navegadores no tienen. El
+  primer fallo de ese tipo apaga el micrófono para toda la visita —reintentar
+  es pedirle al visitante que pulse un botón roto— y deja el canal escrito
+  entero.
+
+Es **pulsar para hablar**, no escucha continua: un micrófono siempre abierto en
+la página de una entidad pública es algo que habría que justificar, y aquí no
+hace falta. Y antes de abrirlo se para el audio que esté sonando: si no, la
+propia voz del asistente entra por el micrófono, se transcribe como si la
+hubiera dicho el ciudadano, y el asistente se pone a conversar consigo mismo a
+costa de la entidad.
+
+Cuando el micrófono falla, el campo de escritura **sigue delante**. Un cartel
+que dice «puede escribir su pregunta» con nada que pulsar es exactamente lo que
+la Resolución 1519 llama no tener alternativa.
+
+#### El aviso previo es un ajuste, no una puerta
+
+Viene apagado. La razón no es comodidad: con esta arquitectura **no se captura,
+ni se transmite, ni se almacena ninguna muestra de voz**: el navegador convierte
+el dictado en texto y lo que sale de aquí es texto. Pedir una autorización donde
+no hay un tratamiento que autorizar enseña a aceptar avisos sin leerlos, y el
+día que haya uno que sí importe nadie lo leerá tampoco.
+
+Se puede encender, y entonces pide los datos que la ley manda informar y los
+imprime en su aviso. Lo que **no** se puede apagar es lo que el asistente le
+dice siempre al visitante: que no dicte ni escriba datos personales.
+
+#### El estado de la pantalla viaja con la pregunta
+
+Antes eran ocho variables interpoladas en el prompt del agente, y si faltaba una
+sola el proveedor rechazaba la sesión entera. Ahora el prompt es estático y el
+estado va como un turno más de la conversación: si falta, falta un dato y no la
+conversación.
+
+Va **solo cuando cambió**. Repetirlo intacto engorda un historial que viaja
+entero en cada vuelta de herramientas, y en una pregunta normal hay tres o
+cuatro. Y va en cada pregunta, no solo en la primera, porque el visitante puede
+mover el tablero a mano mientras conversa: si el modelo no se entera, sigue
+hablando de una pantalla que ya no existe y le lee a alguien la cifra de otro
+municipio.
 
 #### Publicar y ser visible son dos ejes
 
@@ -934,11 +1030,12 @@ moviendo filtros, un secuestro continuo. La línea breve da la misma informació
 #### Las diez herramientas
 
 Cinco mueven el tablero y cinco solo leen. La diferencia no es cosmética: las
-que leen se declaran en ElevenLabs con «esperar respuesta» —el agente necesita
-el dato para seguir la frase— y las que mueven, sin ella, para que la pantalla
-cambie *mientras* habla y no después.
+que leen devuelven un dato que el modelo necesita para seguir, y la respuesta
+se detiene hasta tenerlo; las que mueven solo cambian la pantalla. El servidor
+manda las diez al modelo en cada pregunta: no hay que declararlas en ninguna
+consola, y por tanto no pueden quedarse desfasadas respecto del código.
 
-Las cinco de lectura existen para que el agente no invente:
+Las cinco de lectura existen para que el modelo no invente:
 `uhp_leer_estado_tablero` son sus ojos, `uhp_listar_municipios` le impide
 enumerar municipios de memoria, `uhp_consultar_municipio` responde un dato
 **sin** mover la pantalla —que es lo que nadie espera de una pregunta suelta— y
@@ -993,7 +1090,7 @@ dato falso en cuanto alguien la pega en otra parte.
 `uhp_consultar_perfil` lee el bloque del perfil: género, etnia, educación,
 régimen de salud, estado nutricional y el rango de edades. Hacía falta porque
 esas once cifras estaban escritas a mano en el PHP del shortcode, fuera del
-estado, y el agente no podía leerlas: a «¿cuántas mujeres participaron?» solo
+estado, y el asistente no podía leerlas: a «¿cuántas mujeres participaron?» solo
 podía contestar que no lo sabía teniendo el dato en pantalla.
 
 Llevarlas al estado descubrió un fallo que estaba a la vista y nadie había
@@ -1040,58 +1137,84 @@ lesión precursora e Ipiales 37,2 %.
 su alias entre paréntesis —«Génova» por «Colón (Génova)»— o del código DANE. Lo
 que no cruza se devuelve como sugerencia y **la confirma una pulsación en la
 pantalla**, no una frase del modelo: si la confirmación dependiera de que el
-agente obedezca, se autoconfirmaría en el turno siguiente, porque el nombre que
+modelo obedezca, se autoconfirmaría en el turno siguiente, porque el nombre que
 él mismo sugirió ya sería una coincidencia exacta. Una prueba lo comprueba.
 
 Cuando el nombre sí cruza pero tiene un vecino a dos cambios, la respuesta lo
-avisa para que el agente pregunte antes de leer cifra alguna.
+avisa para que el asistente pregunte antes de leer cifra alguna.
 
 #### Lo que no se deja al modelo
 
-- **Nada de lo que dice el agente entra como HTML.** Todo se pinta con
+- **Nada de lo que devuelve un proveedor entra como HTML.** Todo se pinta con
   `textContent`. Una prueba le hace devolver `<img onerror=…>` y verifica que se
-  lee como texto.
+  lee como texto. Y lo mismo vale para el panel de administración: el nombre de
+  una voz lo escribe quien la creó en la cuenta de ElevenLabs, y se sanea antes
+  de imprimirlo. Que la cuenta sea de la entidad no hace confiable el texto.
 - **Presupuesto de cambios**: un cambio cada 700 ms y veinte por minuto. Las
   cinco herramientas mutadoras no esperan respuesta, de modo que un modelo
   atascado puede encadenar decenas; cada una repinta la lista de 55 municipios y
   reenfoca el mapa.
-- **La clave de API no existe en el navegador.** Vive en su propia opción —mejor
-  en `wp-config.php`, y sembrada sin `autoload`— y `config_front()` se arma por
-  lista blanca, clave por clave, nunca por resta: así el ajuste que alguien
-  añada mañana no puede publicarla por descuido. Dos comprobaciones de la suite
-  lo verifican. Con agente privado tampoco viaja el identificador del agente: el
-  navegador no lo necesita, porque abre la sesión con la URL firmada.
+- **Tope de herramientas por pregunta.** Cada vuelta cuesta: el historial
+  entero viaja otra vez. Un modelo que se enreda gastaría la conversación dando
+  vueltas mientras el visitante ve el tablero moverse sin recibir respuesta. El
+  tope lo pone el plugin y se para de verdad, en vez de pedirle al modelo que
+  se pare.
 - **El panel se construye una vez y se actualiza.** Repintarlo entero con cada
-  frase del agente destruía el campo donde el visitante estaba escribiendo y le
-  dejaba el foco en el `<body>`, con lo que la tecla Escape dejaba de llegar.
-- **Cerrar mientras conecta cierra de verdad.** Un testigo de generación
-  descarta todo lo que vuelve de una sesión que el visitante ya abandonó: sin
-  él, la sesión se abría después, sin panel, con el micrófono encendido.
+  frase destruía el campo donde el visitante estaba escribiendo y le dejaba el
+  foco en el `<body>`, con lo que la tecla Escape dejaba de llegar. Y eso pasa
+  dos veces por pregunta: lo que el modelo dice **antes** de pedir una
+  herramienta también se pinta, porque callarlo deja la pantalla muda mientras
+  el tablero se mueve solo. Lo que no se hace es leerlo en alto: se pagaría un
+  audio de relleno en cada vuelta.
+- **Cerrar mientras el modelo piensa descarta la respuesta.** Un testigo de
+  generación tira todo lo que vuelve de una pregunta que el visitante ya
+  abandonó: sin él, la respuesta llegaba después, se pintaba en un panel cerrado
+  y —en el canal hablado— se ponía a sonar sola.
 
-#### Lo que la ruta de sesión puede y no puede
+#### Lo que las dos rutas pueden y no pueden
 
-`POST /voz/sesion` entrega una credencial: una URL firmada comprada con la clave
-de la entidad, que abre una conversación facturable desde cualquier máquina. Y
-quien la pide es un visitante anónimo, de modo que **no hay a quién autenticar**.
-La comprobación de origen **falla cerrada** —antes dejaba pasar a quien no
-mandaba cabeceras, que es justo el `curl` que había que frenar—, hay cinco
-peticiones cada diez minutos por IP y un cupo diario que se **reserva antes** de
-llamar al proveedor y se devuelve si la llamada falla. Ninguna de las cuatro
-hace imposible el abuso: lo encarecen. La última línea de defensa es el límite
-de gasto de la cuenta del proveedor, y así está escrito en
-`docs/voz/privacidad.md` en vez de dejarlo implícito.
+`POST /voz/chat` y `POST /voz/hablar` gastan dinero de la entidad y quien las
+llama es un visitante anónimo, de modo que **no hay a quién autenticar**. Lo
+que hay son cinco puertas, y ninguna hace imposible el abuso: lo encarecen.
 
-#### Por qué el SDK y no el widget
+- La comprobación de origen **falla cerrada**: antes dejaba pasar a quien no
+  mandaba cabeceras, que es justo el `curl` que había que frenar.
+- Límite por IP, y cupo diario que se **reserva antes** de llamar al proveedor
+  y se devuelve si la llamada falla.
+- El historial se **corta**: sesenta mensajes, 2.000 caracteres por pregunta y
+  24.000 en total. Sin eso, el coste de una conversación crece con su longitud
+  y quien quisiera gastar el presupuesto de la entidad solo tendría que seguir
+  escribiendo.
+- El historial que llega del navegador se **sanea entero** antes de reenviarlo:
+  los nombres de herramienta contra una lista blanca, los identificadores
+  contra un juego de caracteres, la conversación tiene que empezar por un turno
+  del visitante. Lo que viene del navegador es texto ajeno aunque lo haya
+  escrito nuestro propio JavaScript.
 
-El SDK suprime por ausencia lo que el widget oficial solo neutraliza por
-configuración. Además deja el control del marcado: la compuerta, los estados y
-la transcripción son nuestros, con los tokens `--uhp-db-*` y bajo la misma
-prueba de contraste que el resto del tablero.
+La última línea de defensa no está aquí: es el **límite de gasto de la cuenta
+del proveedor**. El tope de este panel cuenta preguntas en **este** sitio y no
+puede frenar un cargo hecho con la misma clave desde otro. Así está escrito en
+`docs/voz/privacidad.md` y en el panel, en vez de dejarlo implícito.
 
-Pesa 1,07 MB, así que **no se descarga hasta que el visitante pulsa**. Y se usa
-con `connectionType: 'websocket'`, no WebRTC: el audio va entonces solo a
-`api.elevenlabs.io` en lugar de atravesar además la infraestructura de LiveKit,
-y la CSP de la entidad se escribe con dos orígenes en vez de seis.
+#### Verificar, que es lo que «configurar la API» debería haber sido siempre
+
+Pegar dos cadenas a ciegas y esperar a que un ciudadano descubra el fallo no es
+configurar. `UHP_Voz::verificar()` le pregunta a cada proveedor: una línea al
+modelo, sin herramientas, y el listado de voces a ElevenLabs. No es una
+conversación, de modo que se puede usar.
+
+Comprueba tres cosas, y la tercera es la que evita un panel mudo en producción:
+que la clave del modelo vale, que la de ElevenLabs vale, y **que el
+identificador de voz pertenece a esa cuenta**. Uno de otra cuenta, o de una voz
+retirada de la biblioteca, no falla al guardarlo: falla la primera vez que
+alguien pregunta algo. Si no está, el panel lista las que sí hay.
+
+Los códigos se traducen a algo accionable: 401 y 403 son «la clave no es
+válida», 404 es «el modelo o la voz no existen con ese nombre», 402 es saldo,
+429 es límite de peticiones, y un 5xx dice con todas las letras que **no es un
+problema de esta configuración** —eso evita que alguien se pase la tarde
+cambiando claves que estaban bien—. El mensaje de transporte nunca se copia tal
+cual: algunos traen la URL completa, y en Gemini la clave viaja en la URL.
 
 #### El panel flota, y no por estética
 
@@ -1368,45 +1491,69 @@ vacío; que cambiar de tipo a mano no devuelve al mapa en el siguiente dibujo;
 que el borde del control llega a 3:1 sobre su fondo, como exige WCAG 2.1
 §1.4.11; y que un selector sin grupo avisa en vez de romper la página.
 
-Del asistente de voz se comprueba que el tablero sin configurar sale
-exactamente como antes; que el aviso corto viaja en el HTML y se lee **con el
-JavaScript desactivado**; que pulsar abre el aviso completo —con los puntos que
-la Ley 1581 obliga a informar— y que **no se abre sesión alguna hasta aceptar**;
-que la sesión registra las diez herramientas y arranca sabiendo qué hay en
-pantalla; que las herramientas mueven el tablero de verdad y el cambio se
-anuncia atribuyéndolo al asistente; que un nombre que no cruza exacto **no
-selecciona** y que el modelo **no puede autoconfirmar su propia sugerencia**;
-que un municipio fuera del estudio se dice con esas palabras; que una ráfaga de
-doce llamadas se frena; que lo que dice el agente se pinta como texto y un
-`<img onerror=…>` no se ejecuta; que se puede escribir en vez de hablar; que
-retirar la autorización cierra la sesión y borra la aceptación; que un clic del
-visitante le llega al agente como contexto; que **el asistente no pide nada a un
-servidor externo**; y que sus pares tinta/fondo cumplen la norma de contraste en
-los tres estados —lanzador, aviso y conversación—, con los selectores que no
-encuentran nodo contados como fallo y no saltados en silencio.
+Del asistente se comprueba que el tablero sin configurar sale **byte por byte
+como antes**; que el rótulo corto viaja en el HTML **con JavaScript
+desactivado**; que con aviso encendido pulsar abre el aviso completo —con los
+puntos que la Ley 1581 obliga a informar— y **no se gasta una pregunta** hasta
+aceptar; que con el aviso apagado, que es como nace, pulsar abre la
+conversación directamente; que el navegador sabe ejecutar las diez herramientas
+por su nombre; que la primera pregunta ya lleva el estado de la pantalla y que
+**no se repite** si no cambió; que las herramientas mueven el tablero de verdad
+y el cambio se anuncia atribuyéndolo al asistente; que un nombre que no cruza
+exacto **no selecciona** y que el modelo **no puede autoconfirmar su propia
+sugerencia**; que un municipio fuera del estudio se dice con esas palabras; que
+una respuesta con doce llamadas se ejecuta entera pero no repinta el tablero
+doce veces; que lo que devuelve el proveedor se pinta como texto y un
+`<img onerror=…>` no se ejecuta; que una respuesta que llega mientras el
+visitante escribe **no le borra lo escrito**; que cerrar mientras el modelo
+piensa descarta la respuesta tardía y no la pone a sonar; que la confirmación
+de un municipio **no sobrevive** a la conversación; que **el asistente no pide
+nada a un servidor externo**; y que sus pares tinta/fondo cumplen la norma de
+contraste en los tres estados —lanzador, aviso y conversación—, con los
+selectores que no encuentran nodo contados como fallo y no saltados en
+silencio.
 
-Del modo privado —el recomendado, y el que no tenía página de pruebas— se
-comprueba que el navegador **no conoce el identificador del agente** y abre con
-la URL firmada que le entrega el servidor; que **la clave de API no aparece en el
-HTML**; y que sin verificación guardada no viaja ninguna sustitución.
+De las claves se comprueba, en las cuatro páginas con asistente, que **ninguna
+de las dos aparece en el HTML** por ninguna vía, ni el nombre de ninguna
+cabecera de autenticación, ni el dominio de ningún proveedor.
 
-De la verificación del agente se comprueba cada rama con un doble del HTTP:
-clave que no sirve, agente inexistente —nombrando la confusión más probable,
-haber pegado el identificador de la voz en el campo del agente—, agente con las
-sustituciones apagadas, agente con ellas encendidas, y agente configurado como
-solo texto en su propia pestaña, donde el canal hablado no va a funcionar.
+De la verificación se comprueba cada rama con un doble del HTTP: sin clave no
+se sale a la red siquiera; 401 y 403 se traducen a «la clave no es válida»; un
+modelo inexistente se nombra repitiendo lo que se escribió, que es donde está
+la errata; 402 habla de saldo y 429 de límite; un 5xx dice que no es culpa de
+lo configurado aquí; una voz que no está en la cuenta se detecta **aquí y no en
+producción**, listando las que sí hay; el nombre que devuelve el proveedor se
+sanea antes de imprimirlo; y que ElevenLabs falle **no tumba** el informe del
+modelo, porque son dos piezas independientes. La petición se inspecciona: la
+clave va en su cabecera y **nunca en la URL**, y la pregunta de prueba va sin
+herramientas y con un solo mensaje.
+
+De los tres adaptadores se manda una pregunta de verdad por cada uno y se mira
+**lo que salió por el cable**: que cada uno llama a su propio dominio, que la
+clave no va en la URL, que viajan las diez herramientas y que cada esquema va
+cerrado y con su lista de obligatorios, como los tres lo exigen.
 
 Del canal escrito se comprueba lo que lo hace distinto: que en una página con
-solo ese canal no hay botón de micrófono, ni viaja en el HTML el aviso de la
-voz; que **`getUserMedia` no se llama ni una vez**; que el evento de inicio
-lleva las dos mitades de `text_only` y **ninguna** sustitución de voz; que el
-rótulo dice «escriba» y no «escuchando», porque quien no ve la pantalla depende
-de esa frase; que aceptar el aviso escrito **no** autoriza el micrófono y que al
-revés sí; que los dos lanzadores declaran el mismo estado del panel; que una
-negativa del micrófono **no gasta una conversación** y deja un camino al canal
-escrito en vez de solo un mensaje; que las ocho variables dinámicas viajan
-siempre y dicen por qué canal; y que la lectura del gráfico de barras nombra
-Pacífico Sur y Sanquianga, que no salen en él.
+solo ese canal no hay botón de micrófono ni viaja el aviso de la voz; que **no
+se pide el micrófono ni se arranca el dictado ni una vez**; que **no se manda
+nada a sintetizar** aunque la voz esté configurada; que el rótulo dice
+«escriba» y no «escuchando», porque quien no ve la pantalla depende de esa
+frase; que aceptar el aviso escrito **no** autoriza el micrófono y que al revés
+sí; y que los dos lanzadores declaran el mismo estado del panel.
+
+Del micrófono se comprueba que el dictado **no arranca solo**; que el asistente
+se calla antes de abrirlo, o su propia voz entraría por él; que un navegador
+que no sabe dictar lo dice y deja escribir, sin ofrecer un botón que falle; que
+uno que falla al transcribir **apaga el micrófono para la visita** en vez de
+dejar un botón roto; y que denegarlo **no gasta una pregunta** y deja por donde
+seguir, no un cartel y nada que pulsar.
+
+Y de lo que puede salir mal: que las puertas del servidor —cupo, límite por IP,
+conversación demasiado larga— llegan al visitante como algo que entiende y
+siempre con un botón para volver a preguntar; que un modelo enredado se para en
+el tope; que no sonar **no rompe** la conversación, porque la respuesta ya está
+escrita; y que sin clave de ElevenLabs no se pinta un lanzador de voz que no
+podría hablar.
 
 El entorno de pruebas espeja Three.js, D3plus y Leaflet en local
 (`tests/vendor`, no versionado) para no depender de la red, incluida la ruta
@@ -1419,10 +1566,17 @@ peticiones a los servidores de capa base —OpenStreetMap y CARTO— se intercep
 y se responden con una tesela de un píxel: lo que se comprueba es que el
 componente **pide** la capa base y la coloca, no cómo se ve una tesela.
 
-El SDK de ElevenLabs se sustituye por un doble instalado con
-`addInitScript` antes de que corra nada: el cargador lo encuentra ya puesto y
-no baja el megabyte del CDN. Una prueba vigila que no salga ni una petición
-fuera del servidor local.
+Ya no hay SDK que doblar. Lo que se intercepta con `addInitScript`, antes de
+que corra nada de la página, son las **dos rutas del asistente**: cada prueba
+pone el guion que el doble irá contestando. Eso hace que se ejercite el camino
+de verdad —la vuelta de herramientas, el tablero moviéndose, el turno
+pintándose— y que lo único fingido sea lo que diría el modelo, que es
+precisamente lo que no se puede comprobar en una suite. El micrófono y el
+reconocimiento de voz del navegador llevan su propio doble, porque un Chromium
+de pruebas no tiene ninguno de los dos y sin ellos todas las pruebas de voz
+caerían por la rama de «su navegador no sabe dictar», que es justo la que hay
+que poder distinguir de las demás. Una prueba vigila que no salga ni una
+petición fuera del servidor local.
 
 Dos pruebas se saltaban esa regla y salían de verdad a `tile.openstreetmap.org`.
 Pasaban mientras el entorno lo permitiera; con un proxy que intercepta el TLS,

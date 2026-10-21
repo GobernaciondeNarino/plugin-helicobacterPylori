@@ -1,192 +1,165 @@
 # Asistente del tablero — qué sale del navegador y con qué amparo
 
-Documento de análisis para la Secretaría TIC y para quien audite el sitio. No
-es el aviso que lee el ciudadano: ese lo imprime el plugin y está en
-`UHP_Voz::aviso_bloques()`, que tiene **dos versiones**, una por canal.
+Análisis de protección de datos del asistente de URKUNINA 5000, para que quien
+tenga que firmar la decisión de encenderlo sepa exactamente qué se trata, dónde
+y con qué fundamento. Este documento describe lo que hace el plugin; la decisión
+es de la entidad.
+
+**Lo que cambió respecto de la versión anterior.** El asistente ya no abre una
+sesión de voz contra un proveedor externo desde el navegador del visitante.
+Ahora el navegador habla **solo con este sitio** y el servidor habla con el
+proveedor. Eso elimina el tratamiento que más justificación pedía: **ya no se
+captura, ni se transmite, ni se almacena ninguna muestra de voz**. Lo que sale
+de este servidor es texto.
 
 ---
 
 ## 1. Qué se envía, exactamente
 
-Depende del canal, y la diferencia es la que importa de todo este documento.
+### Del navegador del visitante a este sitio
 
-### Canal de voz
+Una petición `POST` a `/wp-json/urkunina/v1/voz/chat` con:
 
-- **El audio de su voz**, en tiempo real, mientras la conversación esté abierta.
-- **Su transcripción**, que produce el proveedor.
-- **Los metadatos de la conexión**: dirección IP, agente de usuario, momento.
+- La **pregunta escrita o dictada**, ya convertida en texto.
+- El **historial** de esa conversación: lo preguntado, lo respondido y los
+  resultados de las herramientas del tablero.
+- Una **línea con lo que hay en pantalla** («Lesión precursora, zona roja, 12
+  municipios a la vista»), cuando cambió desde la pregunta anterior.
+- El **canal** (`voz` o `texto`), que decide si el modelo resume o enumera.
 
-Además, el SDK pide un **bloqueo de pantalla** (`navigator.wakeLock`) mientras
-la conversación esté abierta, y el plugin lo deja puesto a conciencia: durante
-una conversación hablada el visitante no toca el teléfono, y una pantalla que se
-apaga a media respuesta corta la conversación. No sale ningún dato por ahí, pero
-es un efecto sobre el dispositivo del ciudadano y se declara. En el canal
-escrito no ocurre.
+Y, si la voz está encendida, una petición a `/voz/hablar` con **el texto de la
+respuesta** que acaba de pintarse.
 
-### Canal escrito
+Nada más. No viaja ninguna clave, ni qué proveedor hay detrás, ni ningún
+identificador del visitante que el plugin genere.
 
-- **El texto que teclee**, y nada más de él.
-- **Los metadatos de la conexión**: los mismos.
-- **Ninguna muestra de voz.** No se pide el permiso del micrófono, el SDK abre
-  un `TextConversation` que no toca `navigator.mediaDevices` ni crea un
-  `AudioContext`, y una prueba de navegador comprueba que `getUserMedia` no se
-  llama **ni una vez**. No es que el audio no se use: es que no se captura.
+### De este sitio al proveedor del modelo
 
-La consecuencia jurídica no es menor. La voz de una persona identificada puede
-constituir **dato biométrico**, y por tanto dato sensible del artículo 5 de la
-Ley 1581 de 2012. En el canal escrito ese dato no existe, de modo que pedirle al
-ciudadano que autorice su tratamiento sería recoger una autorización por algo
-que no va a ocurrir: un aviso con un bloque de más informa peor, no mejor. Por
-eso hay dos avisos y **dos autorizaciones guardadas aparte**.
+El historial anterior, más las instrucciones del sistema y las definiciones de
+las diez herramientas. **El historial se corta**: sesenta mensajes como máximo,
+2.000 caracteres por pregunta y 24.000 en total; pasado eso, la conversación se
+cierra y se invita a empezar otra.
 
-La implicación, que el plugin respeta: aceptar el aviso **escrito** no abre el
-micrófono. Al revés sí, porque el aviso de la voz dice con esas palabras que
-«puede escribir sus preguntas en lugar de hablarlas»: lo ya autorizado incluye
-lo más estrecho. Retirar la autorización retira las dos.
+### De este sitio a ElevenLabs
 
-### En los dos canales
+El texto de la respuesta y el identificador de la voz. Solo en el canal hablado.
 
-El plugin **no envía los datos del proyecto**: el agente los obtiene llamando a
-herramientas que corren en el propio navegador y leen lo que el tablero ya
-descargó. Las cifras no viajan al proveedor; viajan las preguntas y las
-respuestas.
+---
 
-Lo que sí viaja en los dos, y conviene decirlo sin adornos, es **lo que el
-ciudadano decida contar**. Una persona puede escribir «a mi mamá le encontraron
-una lesión» con la misma facilidad con que lo diría, y entonces hay un dato de
-salud de un tercero en la transcripción de un encargado en el exterior. Cambia
-el canal, no el riesgo. Los dos avisos lo advierten, y las instrucciones del
-agente le prohíben pedir o repetir datos personales.
+## 2. El dictado por micrófono: lo que este plugin NO controla
 
-## 2. A dónde va
+Esta es la parte que la entidad debe conocer antes de encenderlo, porque es la
+única donde hay un tratamiento que no pasa por aquí.
 
-| Transporte | Destinos |
+Cuando el visitante pulsa «Hablar», **el reconocimiento de voz lo hace su
+navegador**, no este plugin y no ElevenLabs. En la práctica:
+
+| Navegador | Qué ocurre |
 |---|---|
-| **WebSocket** (por defecto) | `api.elevenlabs.io` |
-| WebRTC | `api.elevenlabs.io` + infraestructura de **LiveKit** (`*.livekit.cloud`, `*.livekit.run`) |
+| Chrome, Edge | El audio se envía a servidores de **Google** para transcribirlo |
+| Safari | El audio se envía a servidores de **Apple** |
+| Firefox, Opera, Brave, Vivaldi | **No funciona.** Esos visitantes solo tienen el canal escrito |
 
-El valor por defecto es WebSocket por esto: un destino en lugar de varios, y
-una CSP que se puede escribir sin comodines.
+Consecuencias que hay que poner por escrito:
 
-ElevenLabs Inc. tiene sus servidores fuera de Colombia. Es una **transferencia
-internacional** en el sentido del artículo 26 de la Ley 1581 de 2012, a un país
-sin declaración de conformidad de la Superintendencia de Industria y Comercio,
-y por tanto requiere la autorización del titular. Esa autorización es
-exactamente lo que recoge la compuerta.
+1. **La entidad no es responsable de ese tratamiento ni puede pactarlo.** No hay
+   encargo que firmar con Google o Apple por esto: el tratamiento es del
+   navegador que el ciudadano eligió e instaló, y ocurre igual en cualquier
+   página que use dictado, también fuera de este sitio.
+2. **Este servidor nunca ve ese audio.** Recibe la transcripción, ya en texto.
+3. **Es evitable por completo.** Con el ajuste «solo por escrito», el micrófono
+   no se pide nunca y esta sección deja de aplicar.
 
-## 3. Con qué amparo
+Si la entidad considera que no puede informar de esto con claridad suficiente en
+su aviso, la decisión correcta es dejar el asistente en «solo por escrito». El
+asistente funciona entero así; no es una versión capada.
 
-- **Artículo 9 de la Ley 1581 de 2012** — autorización previa, expresa e
-  informada. Se pide ANTES de encender el micrófono, en una compuerta que no se
-  puede saltar, con los nueve bloques del aviso a la vista.
-- **Artículo 8 de la Ley 1581** — derechos del titular. El botón «Retirar
-  autorización» corta la conversación y borra la aceptación en el acto; el
-  aviso da el correo y el canal de radicación.
-- **Artículo 5** — la voz puede constituir **dato sensible**: es un dato
-  biométrico de una persona identificable. El aviso de voz lo dice.
-- **Artículo 6** — prohibición de tratar datos sensibles salvo excepciones. Se
-  aplica a los dos canales, porque lo que el ciudadano cuente por su cuenta
-  puede serlo. Los dos avisos piden expresamente no dictar ni escribir síntomas,
-  resultados de laboratorio ni datos de terceros. El agente, además, lleva en
-  sus instrucciones no pedirlos y no repetirlos.
-- **Artículo 26, en los dos canales.** Que el dato sea texto en vez de audio no
-  lo mantiene en Colombia. El aviso escrito conserva ese bloque íntegro, y una
-  comprobación de `tests/test-datos.php` lo fija: si alguien lo recortara
-  pensando que «con texto no hace falta», la prueba falla.
+---
 
-## 4. Lo que el plugin hace para reducir la huella
+## 3. A dónde va lo que sí pasa por aquí
 
-| Medida | Dónde |
-|---|---|
-| Nace apagado y exige cinco puertas para publicarse | `UHP_Voz::configurada()` |
-| El SDK no se descarga hasta que el visitante pulsa | `cargarSdk()` en `uhp-voz.js` |
-| La clave de API vive fuera del array que alimenta al front, y mejor en `wp-config.php` | `UHP_Voz::OPCION_CLAVE`, `clave_api()` |
-| Lo que viaja al navegador se arma por lista blanca, nunca por resta | `UHP_Voz::config_front()` |
-| La autorización se guarda en `sessionStorage`, no en `localStorage`: vale para la visita | `claveConsentimiento()` |
-| Una autorización **por canal**: aceptar el escrito no abre el micrófono | `consentido()` en `uhp-voz.js` |
-| El aviso del canal que esta página no ofrece **no viaja** en el HTML | `UHP_Voz::control_html()` |
-| En el canal escrito **no se pide el micrófono ni una vez** | `permisoMicrofono()` en `uhp-voz.js` |
-| En el canal escrito la sesión se declara `text_only` también al servidor, que así no sintetiza —ni factura— un audio que nadie va a oír | `abrir()` en `uhp-voz.js` |
-| El permiso del micrófono se pide **antes** de comprar la credencial: una negativa no gasta cupo | `arrancarSesion()` |
-| La ruta de sesión mira también la **visibilidad**: con el asistente en ensayo no reparte credenciales facturables a visitantes anónimos | `ruta_sesion()` |
-| Solo se envía al proveedor la sustitución que una **verificación** haya confirmado | `UHP_Voz::permite()` |
-| Cerrar el panel mientras conecta cierra también la sesión que llegue tarde | testigo de generación en `uhp-voz.js` |
-| La clave se guarda sin `autoload`: no se carga en cada petición del sitio | `UHP_Activator` |
-| Versionado del aviso: al cambiarlo, las autorizaciones viejas dejan de valer | ajuste `aviso_version` |
-| Tope diario de conversaciones en todo el sitio | `cuota_disponible()` |
-| Cinco peticiones de sesión cada diez minutos por IP | `UHP_Security::rate_limit()` |
-| La sesión se cierra al ocultarse la pestaña | `pagehide` en `uhp-voz.js` |
-
-## 4.1 Hasta dónde llega la puerta de la ruta de sesión
-
-Conviene decirlo sin adornos, porque de ello depende cuánto dinero puede
-perderse. `POST /voz/sesion` entrega una **credencial**: una URL firmada,
-comprada con la clave de la entidad, que abre una conversación facturable desde
-cualquier máquina. Quien la pide es un visitante anónimo, de modo que **no hay a
-quién autenticar**. Las cuatro puertas encarecen el abuso y lo acotan; ninguna
-lo hace imposible:
-
-Y la ruta es **la misma para los dos canales**: el servidor firma la credencial
-sin saber —ni poder saber— si el navegador la va a usar para hablar o para
-escribir. Eso tiene dos consecuencias que conviene no confundir: una sesión
-escrita **gasta una ranura del cupo igual** que una hablada, y el ahorro del
-canal escrito está en lo que el proveedor factura por ella, no en el número de
-sesiones que la entidad reparte.
-
-| Puerta | Frena | No frena |
+| Destino | Qué recibe | Dónde |
 |---|---|---|
-| Origen igual al del sitio, **fallando cerrado** | Al script que no manda cabeceras, que es el caso corriente | A quien las falsifica |
-| Cinco peticiones cada diez minutos por IP | El goteo desde una sola dirección | Una red de direcciones |
-| Cupo diario de todo el sitio, **reservado antes de gastar** | Que una tarde se lleve el presupuesto del trimestre | Que ese cupo se agote y el ciudadano se quede sin asistente |
-| Lista de dominios permitidos del agente | El uso desde otra página web | Un cliente de WebSocket escrito a mano, que no manda `Origin` |
+| Este sitio | La pregunta y el historial | Donde esté alojado el sitio |
+| Proveedor del modelo (Anthropic, OpenAI o Google) | La pregunta, el historial, las instrucciones y las herramientas | Fuera de Colombia |
+| ElevenLabs | El texto de la respuesta, solo en el canal hablado | Fuera de Colombia |
 
-Dos consecuencias prácticas:
+Las dos últimas son **transferencias internacionales**: artículo 26 de la Ley
+1581 de 2012. Exigen acuerdo de encargo del tratamiento y el anexo
+correspondiente, y eso el plugin no lo puede comprobar.
 
-1. **El cupo diario no es un adorno.** Póngalo en un número que la entidad pueda
-   perder sin dolor. Cuando se agota, queda constancia en el registro de errores
-   del sitio con una línea que lo dice; si aparece sin explicación, revise los
-   accesos a `/wp-json/urkunina/v1/voz/sesion`.
-2. **La última línea de defensa no está en este plugin**, sino en el **límite de
-   gasto de la cuenta de ElevenLabs**. Configúrelo.
+---
 
-En modo **público** no hay ninguna de las cuatro: la sesión no pasa por este
-servidor, el identificador del agente está en el código fuente de la página, y
-el tope diario y el límite por IP no se aplican. El panel lo dice con estas
-palabras. Es la razón por la que el modo privado es el valor por defecto.
+## 4. Con qué amparo
 
-## 5. Lo que el plugin NO resuelve y la entidad sí debe resolver
+El tratamiento que queda es el de **lo que el ciudadano escribe o dicta**, que
+es un dato personal solo si él decide ponerlo ahí. No hay dato biométrico, no
+hay dato sensible pedido por el plugin, y no se recoge identidad ninguna.
 
-1. **El acuerdo de encargo del tratamiento** y el **anexo de transferencia
-   internacional** con el proveedor.
-2. **La retención**: cuánto conserva el proveedor las grabaciones y las
-   transcripciones, y si la cuenta tiene activada alguna modalidad de retención
-   mínima. Lo que la entidad escriba en ese campo se imprime literalmente en el
-   aviso, de modo que **tiene que ser verdad y tiene que estar comprobado**.
-3. **La prueba de la autorización.** El artículo 9 de la Ley 1581 y el artículo
-   7 del Decreto 1377 de 2013 piden al responsable conservar prueba de la
-   autorización. Una marca en el navegador del propio titular no es prueba: la
-   escribe y la borra él. **Este plugin no registra ninguna prueba en el
-   servidor**, a propósito —hacerlo significaría guardar un rastro por visitante
-   donde hoy no hay ninguno—, y esa es una decisión que la entidad debe tomar
-   con su área jurídica antes de publicar. Si se decide registrarla, el lugar
-   natural es un apunte mínimo y no identificante (sello de tiempo, versión del
-   aviso, hash truncado de IP con sal rotatoria) con purga automática.
-4. **La lista de dominios permitidos del agente**, que es la única frontera
-   real contra el uso del agente desde otro sitio.
-5. **Las sustituciones habilitadas en el agente.** Si se configura una voz, una
-   velocidad o el canal escrito, hay que habilitar `voice_id`, `speed` y
-   `text_only` en la configuración de seguridad del agente. Habilitar una
-   sustitución significa que **cualquier página que pueda abrir una sesión
-   contra ese agente puede fijar ese valor**; es una razón más para que la lista
-   de dominios permitidos esté cerrada, y para no habilitar las que no se usen.
-6. **Si usa «visible solo para quien pueda editar»**, comprobar que la caché del
-   sitio no sirve una sola copia a todo el mundo. El plugin define
-   `DONOTCACHEPAGE`, pero no puede auditar la CDN de nadie.
+- **Ley 1581 de 2012**, artículos 4 (principios), 9 (autorización) y 26
+  (transferencia internacional).
+- **Resolución 1519 de 2020**, en lo que toca a la alternativa equivalente: el
+  asistente **no es la única vía para nada**. Los cuatro filtros del tablero se
+  manejan con el teclado y con el ratón, y el canal escrito existe para quien no
+  puede o no quiere hablar.
 
-## 6. Qué pasa si se apaga
+**El aviso previo es un ajuste del panel, apagado por omisión.** Esa decisión
+tiene una razón: pedir una autorización donde no hay un tratamiento que
+autorizar enseña a aceptar avisos sin leerlos, y el día que haya uno que sí
+importe nadie lo leerá tampoco. Si la entidad prefiere avisar de la
+transferencia internacional antes de la primera pregunta, el aviso se enciende
+en el panel y pide los datos que la ley manda informar.
 
-El tablero vuelve a ser exactamente el de antes: ni botón, ni script, ni
-petición. Los cuatro filtros —indicador, zona, subregión y municipio— se manejan
-con el ratón y con el teclado, como siempre. **El asistente no es la única vía
-para nada**, y eso no es una concesión: es el requisito de la Resolución 1519 de
-2020 y la razón por la que el aviso termina diciéndolo.
+Lo que el asistente **sí** le dice al visitante, siempre y sin ajuste que lo
+apague: que no dicte ni escriba datos personales, suyos ni de nadie. Las
+instrucciones que recibe el modelo se lo repiten.
+
+---
+
+## 5. Lo que el plugin hace para reducir la huella
+
+- **Ninguna clave llega al navegador.** Ni la del modelo ni la de ElevenLabs.
+  Viven en una opción sin autocarga o, mejor, en `wp-config.php`.
+- **El navegador no habla con ningún dominio externo.** No se descarga ningún
+  SDK de terceros, no se abre ningún WebSocket contra el proveedor y no hay
+  dominios de terceros que abrir en la política de seguridad de contenido.
+- **Tope diario de preguntas y límite por IP**, aplicados en el servidor. En la
+  arquitectura anterior la sesión no pasaba por aquí y ninguno de los dos se
+  aplicaba de verdad.
+- **Tope de herramientas por pregunta**, para que un modelo confundido no se
+  quede dando vueltas a costa de la entidad.
+- **El historial no se guarda.** Vive en la memoria del navegador mientras dura
+  la conversación. Cerrar el panel lo borra; no hay base de datos, ni registro,
+  ni transcripción que conservar o que pedir.
+- **Lo que devuelve el proveedor nunca se inserta como HTML.** Se pinta como
+  texto, nodo a nodo. Un modelo que devolviera una etiqueta la vería el
+  visitante escrita, no ejecutada.
+- **El prompt y las herramientas los pone el servidor** en cada pregunta, y no
+  se pueden editar desde el contenido de una página: son las reglas de
+  honestidad con las que este tablero publica cifras, y no deben depender de
+  quién edita un post.
+- **La autorización, si el aviso está encendido**, se guarda en el
+  almacenamiento de **sesión** del navegador del visitante y se va al cerrar la
+  pestaña.
+
+---
+
+## 6. Lo que la entidad sí debe resolver
+
+| Punto | Por qué |
+|---|---|
+| Acuerdo de encargo con el proveedor del modelo | La entidad es responsable; el proveedor, encargado |
+| Anexo de transferencia internacional | Artículo 26 de la Ley 1581 |
+| Lo mismo con ElevenLabs, si enciende la voz | Recibe el texto de las respuestas |
+| Límite de gasto en la consola del proveedor | El tope del panel cuenta preguntas en **este** sitio; no frena un cargo hecho con la misma clave desde otro |
+| Evaluación propia de accesibilidad, firmada | Resolución 1519 de 2020 |
+| Decidir si informa del dictado del navegador | Sección 2. No es tratamiento de la entidad, pero el ciudadano puede querer saberlo |
+
+---
+
+## 7. Qué pasa si se apaga
+
+El tablero sale **byte por byte** como si esta función no existiera: sin botón,
+sin su script, sin su hoja de estilos y sin una sola línea de marcado del
+asistente. Las cifras, el mapa, las gráficas y los cuatro filtros siguen
+funcionando igual, porque el asistente nunca fue la vía para nada.

@@ -274,6 +274,7 @@ function uhp_cargar_clases_de_datos() {
 	require_once $base . 'analysis/class-uhp-analisis.php';
 	require_once $base . 'data/class-uhp-views.php';
 	require_once $base . 'data/class-uhp-territorios.php';
+	require_once $base . 'class-uhp-llm.php';
 	require_once $base . 'class-uhp-rest.php';
 	require_once $base . 'class-uhp-voz.php';
 }
@@ -585,6 +586,21 @@ function uhp_test_http_peticiones() {
 }
 
 function wp_remote_get( $url, $args = array() ) {
+	$GLOBALS['uhp_test_http_peticiones'][] = array(
+		'url'  => $url,
+		'args' => $args,
+	);
+	if ( empty( $GLOBALS['uhp_test_http'] ) ) {
+		return new WP_Error( 'sin_doble', 'La prueba no preparó ninguna respuesta HTTP.' );
+	}
+	return array_shift( $GLOBALS['uhp_test_http'] );
+}
+
+/* Las dos salidas comparten la MISMA cola, y a propósito: una
+   verificación completa hace una petición al modelo de lenguaje (POST) y
+   otra a ElevenLabs (GET), en ese orden, y la prueba que las encole al
+   revés debe fallar. */
+function wp_remote_post( $url, $args = array() ) {
 	$GLOBALS['uhp_test_http_peticiones'][] = array(
 		'url'  => $url,
 		'args' => $args,
