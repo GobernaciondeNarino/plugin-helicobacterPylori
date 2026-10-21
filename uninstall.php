@@ -50,8 +50,11 @@ function uhp_limpiar_sitio() {
 		'uhp_topojson_',
 		'uhp_rl_',
 		'uhp_aviso_',
-		'uhp_voz_cuota_',
-		'uhp_voz_tope_',
+		// Un solo prefijo para todo lo del asistente: el cupo diario, los
+		// contadores por IP y el informe de verificación con su listado de
+		// voces. Enumerarlos uno a uno dejaba fuera el que se añadiera
+		// después, que es justo lo que pasó con el informe.
+		'uhp_voz_',
 	);
 	foreach ( $prefijos as $prefijo ) {
 		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
