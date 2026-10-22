@@ -1395,12 +1395,36 @@ comprobar(
 	'Ni qué proveedor está detrás, que el navegador no necesita saber'
 );
 
-$permitidas = array( 'micro', 'voz', 'aviso', 'recordar', 'avisoVersion', 'turnos', 'rutaChat', 'rutaVoz' );
+$permitidas = array( 'micro', 'voz', 'aviso', 'recordar', 'avisoVersion', 'turnos', 'rutaChat', 'rutaVoz', 'nonce' );
 $sobran     = array_diff( array_keys( $front ), $permitidas );
 comprobar(
 	! $sobran,
 	'config_front() no publica ninguna clave fuera de su lista blanca' . ( $sobran ? ': ' . implode( ', ', $sobran ) : '' )
 );
+
+/* EL NONCE, y solo en «editores». Sin él, WordPress trata una petición
+   con cookie como anónima y las dos rutas contestan 403: el modo que
+   existe justo para ensayar el asistente en el sitio de verdad antes de
+   abrirlo al ciudadano era el único que no funcionaba.
+
+   Y SOLO ahí: un nonce en el HTML lo ata a un usuario y a un momento, de
+   modo que en una página cacheada se serviría el de otra persona y
+   caducado. En «editores» eso no puede pasar porque esa salida ya no es
+   cacheable; en los otros dos modos las rutas son públicas. */
+$vis_antes = UHP_Voz::cfg();
+foreach ( array( 'todos' => false, 'oculto' => false, 'editores' => true ) as $vis => $espera ) {
+	update_option( 'uhp_voz', array_merge( $vis_antes, array( 'visibilidad' => $vis ) ) );
+	$hay = '' !== UHP_Voz::config_front()['nonce'];
+	comprobar(
+		$hay === $espera,
+		sprintf( 'Con visibilidad «%s» el nonce %s viaja', $vis, $espera ? 'SÍ' : 'no' )
+	);
+}
+comprobar(
+	UHP_Voz::salida_por_usuario(),
+	'Y «editores» marca la salida como dependiente del usuario, que es lo que la saca de la caché'
+);
+update_option( 'uhp_voz', $vis_antes );
 
 $html = UHP_Voz::control_html( 'uhpdb-1' );
 foreach ( array( 'sk-ant-clave-del-modelo', 'sk-elevenlabs-de-prueba' ) as $secreto ) {
@@ -2391,6 +2415,57 @@ comprobar(
 update_option( 'uhp_voz', $voz_antes );
 delete_transient( UHP_Voz::VERIF );
 delete_transient( UHP_Voz::VERIF . '_voces' );
+
+/* ---------------------------------------------------------------- */
+echo "\n15. La versión del plugin\n";
+
+/* ESTO NO ES BUROCRACIA. `UHP_VERSION` es el `?ver=` de los quince
+   recursos que encola UHP_Assets y la condición que decide si corre la
+   migración de UHP_Activator. Congelada, un sitio que ya sirvió la
+   versión anterior sigue entregando el JavaScript viejo desde la caché
+   del navegador —y el asistente no es que suene mal: no contesta, porque
+   el archivo viejo pide rutas que ya no se registran—.
+
+   Vive en DOS sitios del archivo principal y es la única pareja que
+   puede desincronizarse sin que nada lo note. */
+$principal = (string) file_get_contents( UHP_DIR . 'urkunina-5000.php' );
+
+preg_match( '/^\s*\*\s*Version:\s*(\S+)/m', $principal, $m_cab );
+preg_match( "/define\(\s*'UHP_VERSION',\s*'([^']+)'\s*\)/", $principal, $m_cte );
+
+comprobar(
+	! empty( $m_cab[1] ) && ! empty( $m_cte[1] ),
+	'El archivo principal declara la versión en la cabecera y en la constante'
+);
+comprobar(
+	! empty( $m_cab[1] ) && ! empty( $m_cte[1] ) && $m_cab[1] === $m_cte[1],
+	sprintf(
+		'Y las dos coinciden (cabecera: %s · constante: %s)',
+		isset( $m_cab[1] ) ? $m_cab[1] : '?',
+		isset( $m_cte[1] ) ? $m_cte[1] : '?'
+	)
+);
+comprobar(
+	! empty( $m_cab[1] ) && preg_match( '/^\d+\.\d+\.\d+$/', $m_cab[1] ),
+	'Con tres números, como pide el versionado semántico'
+);
+
+// Y el CHANGELOG la nombra: una versión sin entrada es una versión que
+// nadie sabe qué trae.
+$historial = is_readable( UHP_DIR . 'CHANGELOG.md' ) ? (string) file_get_contents( UHP_DIR . 'CHANGELOG.md' ) : '';
+comprobar( '' !== $historial, 'Existe un CHANGELOG.md donde anotar cada cambio' );
+comprobar(
+	! empty( $m_cab[1] ) && false !== strpos( $historial, '[' . $m_cab[1] . ']' ),
+	'Y tiene entrada para la versión actual'
+);
+
+/* El stub de la suite lleva una versión OBVIAMENTE falsa, para que nadie
+   la sincronice por reflejo creyendo que es otra copia de la de verdad:
+   aquí no se encola nada y el número no significa nada. */
+comprobar(
+	'0.0.0-test' === UHP_VERSION,
+	'La versión de los stubs es falsa a propósito y no se sincroniza con la real'
+);
 
 /* ---------------------------------------------------------------- */
 echo "\n";

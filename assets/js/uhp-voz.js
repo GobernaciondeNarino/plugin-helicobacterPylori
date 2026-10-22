@@ -473,10 +473,18 @@
     // `window.UHP.rest` a secas lanza un TypeError en una página donde el
     // bloque del núcleo no haya llegado.
     var base = (window.UHP && window.UHP.rest) || '';
+
+    /* El nonce solo viaja cuando el servidor lo mandó, y solo lo manda
+       con la visibilidad en «editores». Sin él, WordPress trata la
+       petición con cookie como anónima y las dos rutas contestan 403:
+       el modo de ensayo era el único que no funcionaba. */
+    var cab = { 'Content-Type': 'application/json' };
+    if (CFG.nonce) { cab['X-WP-Nonce'] = CFG.nonce; }
+
     return fetch(base + ruta, {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      headers: cab,
       body: JSON.stringify(cuerpo)
     }).then(function (r) {
       if (r.ok) { return r.json(); }
@@ -515,6 +523,23 @@
      herramientas, hay que ejecutarlas y devolvérselas para que siga. */
   function preguntar(v, texto) {
     if (!texto) { return Promise.resolve(); }
+
+    /* LA GUARDIA VIVE AQUÍ, no en el formulario. Estaba solo en el
+       submit, de modo que el dictado entraba igual mientras el asistente
+       pensaba: dos cadenas de vueltas concurrentes sobre el MISMO
+       historial, con el mismo testigo de generación, y ninguna
+       descartaba a la otra. El historial quedaba intercalado —la
+       pregunta B empujada entre la pregunta A y su respuesta— y las dos
+       acababan pidiendo audio, con lo que la primera, parada a media
+       carga, enmudecía a la segunda.
+
+       Puesta aquí, deja de importar si la pregunta vino del teclado, del
+       micrófono o de una confirmación. */
+    if (v.fase === 'pensando' || v.fase === 'habla') {
+      avisar('conversación', 'pregunta descartada: el asistente todavía está respondiendo');
+      return Promise.resolve();
+    }
+
     var mia = v.gen;
 
     /* Qué hay en pantalla, antes de la pregunta y solo cuando cambió.
@@ -575,8 +600,12 @@
              se pare. Cada vuelta cuesta: el historial entero viaja otra
              vez. Un modelo que se enreda gastaría la conversación dando
              vueltas y el visitante vería el tablero moverse sin respuesta. */
+          /* Y se dice en alto, como cualquier otra respuesta. Quedaba
+             muda: el panel entregaba una frase y el canal de audio no la
+             acompañaba, de modo que quien depende del oído no se
+             enteraba de que había habido respuesta. */
           turno(v, 'asistente', T.vueltas);
-          fase(v, 'escucha');
+          hablar(v, T.vueltas);
           return;
         }
 
@@ -658,53 +687,122 @@
 
   function reproducir(v, tipo, base64) {
     pararAudio(v);
+
+    var a;
+    var url;
     try {
       var cadena = window.atob(base64);
       var bytes = new Uint8Array(cadena.length);
       for (var i = 0; i < cadena.length; i++) { bytes[i] = cadena.charCodeAt(i); }
-      var url = window.URL.createObjectURL(new Blob([bytes], { type: tipo }));
-
-      var a = new Audio(url);
-      v.audio = a;
-      v.audioUrl = url;
-
-      var fin = function () {
-        pararAudio(v);
-        if (v.fase === 'habla') { fase(v, 'escucha'); }
-      };
-      a.addEventListener('ended', fin);
-      a.addEventListener('error', function () {
-        avisar('voz', 'el navegador rechazó el audio (formato o datos corruptos)');
-        fin();
-      });
-
-      var p = a.play();
-      if (p && p.catch) {
-        /* Un navegador puede negarse a reproducir sin un gesto previo del
-           visitante. No se insiste ni se avisa AL VISITANTE: el texto ya
-           está ahí. Pero se anota, porque desde fuera «no suena» por
-           autoplay bloqueado y «no suena» por clave mal configurada se
-           ven exactamente igual, y el arreglo es distinto. */
-        p.catch(function (e) {
-          avisar('voz', 'el navegador no dejó reproducir: ' + ((e && e.name) || 'motivo desconocido'));
-          fin();
-        });
-      }
+      url = window.URL.createObjectURL(new Blob([bytes], { type: tipo }));
+      a = new Audio(url);
     } catch (e) {
       avisar('voz', 'no se pudo decodificar el audio: ' + ((e && e.message) || e));
       fase(v, 'escucha');
+      return;
+    }
+
+    var mia = v.gen;
+    v.audio = a;
+    v.audioUrl = url;
+
+    /* CADA REPRODUCCIÓN CIERRA SOBRE LA SUYA, y esto no es puntillismo.
+
+       Antes `fin` cerraba sobre `v` y acababa en `pararAudio(v)`, que
+       actuaba sobre lo que hubiera en `v.audio` EN ESE INSTANTE. Los
+       callbacks del elemento anterior —`ended`, `error` y el rechazo de
+       su promesa de `play()`— seguían vivos después de que `v.audio`
+       apuntara a otro, de modo que un callback rezagado paraba y
+       revocaba el audio que estaba sonando AHORA.
+
+       Y el disparador no era hipotético: `pause()` sobre un elemento con
+       una promesa de `play()` pendiente la rechaza con `AbortError`, y
+       ese rechazo es una microtarea. Si para entonces ya había arrancado
+       una reproducción nueva, el `catch` de la vieja mataba a la nueva. */
+    var fin = function () {
+      soltarAudio(a, url);
+      if (v.audio === a) {
+        v.audio = null;
+        v.audioUrl = null;
+        if (mia === v.gen && v.fase === 'habla') { fase(v, 'escucha'); }
+      }
+    };
+
+    a.addEventListener('ended', fin);
+    a.addEventListener('error', function () {
+      /* Solo se anota si este elemento SIGUE siendo el vigente. Revocar
+         una URL mientras el elemento la está cargando hace que emita
+         `error`, de modo que una parada deliberada se registraba como
+         «el navegador rechazó el audio»: la propia parada ensuciaba el
+         único rastro que servía para diagnosticar. */
+      if (v.audio === a) {
+        avisar('voz', 'el navegador rechazó el audio (formato o datos corruptos)');
+      }
+      fin();
+    });
+
+    var p = a.play();
+    if (p && p.catch) {
+      p.catch(function (e) {
+        var cual = (e && e.name) || 'motivo desconocido';
+
+        /* `AbortError` es nuestra propia parada: lo pidió `pararAudio`.
+           No es un fallo y no se anota. */
+        if ('AbortError' === cual) { fin(); return; }
+
+        /* `NotAllowedError` es el navegador negándose a sonar sin un
+           gesto. Entre el clic del visitante y este `play()` hay dos
+           viajes de red como mínimo —con herramientas, hasta ocho—, y
+           Safari evalúa el permiso contra el elemento, no contra el
+           documento. Aquí NO se tira el audio: se ofrece oírlo con una
+           pulsación, que es un gesto nuevo y sí vale. */
+        if ('NotAllowedError' === cual && v.audio === a) {
+          avisar('voz', 'el navegador no dejó reproducir sin un gesto; se ofrece un botón');
+          ofrecerAudio(v, a);
+          return;
+        }
+
+        avisar('voz', 'el navegador no dejó reproducir: ' + cual);
+        fin();
+      });
+    }
+  }
+
+  /* Un botón de un solo uso para oír la respuesta cuando el navegador no
+     dejó sonarla sola. Va en el hilo, junto al turno que no se oyó, y no
+     en la fila de controles: es del turno, no del panel. */
+  function ofrecerAudio(v, a) {
+    if (!v.p || !v.p.hilo.isConnected) { return; }
+
+    var b = boton(T.oir, 'uhp-voz__btn uhp-voz__btn--fino', function () {
+      if (b.parentNode) { b.parentNode.removeChild(b); }
+      var p2 = a.play();
+      if (p2 && p2.catch) {
+        p2.catch(function (e2) {
+          avisar('voz', 'tampoco con el gesto: ' + ((e2 && e2.name) || 'motivo desconocido'));
+        });
+      }
+    });
+    v.p.hilo.appendChild(b);
+    v.p.hilo.scrollTop = v.p.hilo.scrollHeight;
+    if (v.fase === 'habla') { fase(v, 'escucha'); }
+  }
+
+  /* Parar y soltar UN elemento concreto. Separado de `pararAudio` para
+     que un callback rezagado pueda limpiar lo suyo sin tocar lo ajeno. */
+  function soltarAudio(a, url) {
+    if (a) {
+      try { a.pause(); } catch (e) { /* ya estaba parado */ }
+    }
+    if (url) {
+      try { window.URL.revokeObjectURL(url); } catch (e) { /* ya se fue */ }
     }
   }
 
   function pararAudio(v) {
-    if (v.audio) {
-      try { v.audio.pause(); } catch (e) { /* ya estaba parado */ }
-      v.audio = null;
-    }
-    if (v.audioUrl) {
-      try { window.URL.revokeObjectURL(v.audioUrl); } catch (e) { /* ya se fue */ }
-      v.audioUrl = null;
-    }
+    soltarAudio(v.audio, v.audioUrl);
+    v.audio = null;
+    v.audioUrl = null;
   }
 
   /* ------------------------------------------------------------------ */
@@ -737,6 +835,14 @@
       return;
     }
     if (v.oyendo) { pararEscucha(v); return; }
+
+    // Ni se abre mientras el asistente está respondiendo: lo que se
+    // dictara ahí se descartaría en preguntar(), y haber hablado para
+    // nada es peor que un botón que no responde.
+    if (v.fase === 'pensando') {
+      anunciar(v, T.pensando);
+      return;
+    }
 
     /* Se calla el asistente antes de abrir el micrófono. Si no, su propia
        voz entra por el micrófono, se transcribe como si la hubiera dicho

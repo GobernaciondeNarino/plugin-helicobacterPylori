@@ -3,7 +3,7 @@
  * Plugin Name:  URKUNINA 5000 — Helicobacter pylori y cáncer gástrico (Nariño)
  * Plugin URI:   https://gobiernoabierto.narino.gov.co/datos/urkunina5000/
  * Description:  Plataforma de visualización del proyecto URKUNINA 5000 (BPIN 2015000100064): recreación 3D de Helicobacter pylori, motor de gráficos D3plus, mapa OpenStreetMap y tablero completo de resultados del tamizaje en los 55 municipios priorizados de Nariño. Cada componente es un shortcode independiente.
- * Version:      1.5.0
+ * Version:      2.0.0
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * Author:       Gobernación de Nariño · Secretaría TIC, Innovación y Gobierno Abierto
@@ -35,7 +35,16 @@ use GobernacionNarino\Urkunina\UHP_Activator;
  * convive con este en el mismo sitio. Ver includes/class-uhp-assets.php para
  * la política de librerías compartidas (D3, D3plus, Leaflet, Plotly, Three).
  * ---------------------------------------------------------------------- */
-define( 'UHP_VERSION', '1.5.0' );
+/* LA VERSIÓN SUBE CON CADA CAMBIO, y no es burocracia: es el `?ver=` de
+   los quince recursos que encola UHP_Assets y la condición que decide si
+   corre la migración de UHP_Activator. Congelada, un sitio que ya sirvió
+   la versión anterior sigue entregando el JavaScript viejo desde la
+   caché del navegador, y el asistente no es que suene mal: no contesta.
+
+   Tiene que coincidir con la cabecera de arriba. Hay una comprobación en
+   la suite que lo exige, porque es la única pareja de este archivo que
+   puede desincronizarse sin que nada lo note. */
+define( 'UHP_VERSION', '2.0.0' );
 define( 'UHP_FILE', __FILE__ );
 define( 'UHP_DIR', plugin_dir_path( __FILE__ ) );   // .../urkunina-5000/
 define( 'UHP_URL', plugin_dir_url( __FILE__ ) );     // URL pública de assets

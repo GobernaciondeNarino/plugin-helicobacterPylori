@@ -14,7 +14,11 @@
 
 define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 
-define( 'UHP_VERSION', '1.0.0' );
+/* FALSA A PROPÓSITO. Aquí no se encola ningún recurso y el número no
+   significa nada; dejarlo con forma de versión real invitaba a
+   sincronizarlo con la del plugin, que es justo lo que no hay que hacer.
+   Una prueba comprueba que sigue siendo esta. */
+define( 'UHP_VERSION', '0.0.0-test' );
 define( 'UHP_FILE', dirname( __DIR__ ) . '/urkunina-5000.php' );
 define( 'UHP_DIR', dirname( __DIR__ ) . '/' );
 /* Rutas RELATIVAS a propósito: las páginas de prueba las sirve el
@@ -570,6 +574,12 @@ function untrailingslashit( $cadena ) {
 
 function trailingslashit( $cadena ) {
 	return untrailingslashit( $cadena ) . '/';
+}
+
+function wp_create_nonce( $accion = -1 ) {
+	// Suficiente para la suite: lo que se comprueba es QUE se emite y
+	// cuándo, no su criptografía.
+	return 'nonce_' . substr( md5( (string) $accion ), 0, 10 );
 }
 
 function is_wp_error( $cosa ) {

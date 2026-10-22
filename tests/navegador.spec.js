@@ -190,6 +190,18 @@ test.describe('Objeto 3D', () => {
 });
 
 /* ================================================================== */
+/* Un MP3 de VERDAD, mudo, de 1,056 s: 44 tramas MPEG-2 Layer III
+   idénticas de 24 bytes. Cabecera FF F3 14 C0 —sincronismo, MPEG-2 LSF,
+   capa III, sin CRC, 8 kbps, 24 kHz, mono— y los otros 20 bytes a cero,
+   que con part2_3_length = 0 decodifican a silencio exacto.
+
+   Antes aquí había la cadena '//uQZ', y no era un descuido inocuo: tiene
+   CINCO caracteres, atob() exige un múltiplo de cuatro, y lanzaba. O sea
+   que `new Audio()` no llegaba a ejecutarse nunca y la prueba de audio no
+   probaba el audio: medía que se había llamado a la ruta y nada más. Si
+   reproducir() hubiera estado roto, la suite habría seguido en verde. */
+const MP3_MUDO = '//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA//MUwAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
 test.describe('Asistente de voz', () => {
 
   /* Doble de las DOS rutas del asistente.
@@ -206,7 +218,12 @@ test.describe('Asistente de voz', () => {
      único fingido es lo que diría el modelo, que es justo lo que no se
      puede comprobar en una suite. */
   async function conDoble(page, ajustes) {
-    const cfg = Object.assign({ microfono: true, dictado: true }, ajustes || {});
+    /* El MP3 viaja DENTRO de cfg. El callback de addInitScript se
+       serializa y se ejecuta en el navegador, de modo que una constante
+       declarada aquí arriba, en Node, allí no existe: referenciarla da
+       undefined y la respuesta de audio sale vacía sin que nada lo
+       diga. */
+    const cfg = Object.assign({ microfono: true, dictado: true, mp3: MP3_MUDO }, ajustes || {});
     await page.addInitScript((cfg) => {
       window.__UHP_STUB = {
         // Peticiones a cada ruta, y lo que iba en ellas.
@@ -278,6 +295,34 @@ test.describe('Asistente de voz', () => {
         try { delete window.webkitSpeechRecognition; } catch (e) { window.webkitSpeechRecognition = undefined; }
       }
 
+      /* ESPÍA del elemento Audio, que NO falsea nada: deja que el
+         navegador reproduzca de verdad y solo anota lo que pasa. Hace
+         falta porque el elemento lo crea el código con new Audio() y
+         nunca entra en el documento, de modo que no hay selector que lo
+         alcance. */
+      window.__UHP_AUDIO = [];
+      const AudioReal = window.Audio;
+      window.Audio = function (src) {
+        const el = new AudioReal(src);
+        const ficha = { src: String(src || ''), play: 0, ended: false, error: null, fin: 0 };
+        window.__UHP_AUDIO.push(ficha);
+        el.addEventListener('ended', function () {
+          ficha.ended = true;
+          ficha.fin = el.currentTime;
+        });
+        el.addEventListener('error', function () {
+          ficha.error = (el.error && el.error.code) || 'desconocido';
+        });
+        const playReal = el.play.bind(el);
+        el.play = function () {
+          ficha.play++;
+          return playReal();
+        };
+        ficha.el = el;
+        return el;
+      };
+      window.Audio.prototype = AudioReal.prototype;
+
       /* Las dos rutas. Se responde con un objeto mínimo y no con un
          Response de verdad: el módulo solo mira `ok`, `status` y `json()`,
          y un doble que imite más de lo que se usa esconde lo que se usa. */
@@ -313,10 +358,7 @@ test.describe('Asistente de voz', () => {
           if (S.fallo && S.fallo.ruta === 'hablar') {
             return responder({ code: S.fallo.code || '', message: 'x' }, S.fallo.codigo);
           }
-          /* Un MP3 de verdad, aunque mudo: el módulo lo decodifica a
-             bytes y se lo da a un <audio>. Devolver basura haría fallar
-             la decodificación y la prueba miraría la rama equivocada. */
-          return responder({ tipo: 'audio/mpeg', audio: '//uQZ' });
+          return responder({ tipo: 'audio/mpeg', audio: cfg.mp3 });
         }
 
         return original.apply(this, arguments);
@@ -329,8 +371,26 @@ test.describe('Asistente de voz', () => {
     await page.evaluate((g) => { window.__UHP_STUB.guion = g.slice(); }, guion);
   }
 
+  /** Espera a que el asistente termine de responder.
+   *
+   *  Hace falta desde que `preguntar()` descarta una pregunta nueva
+   *  mientras está pensando o hablando —antes la guardia vivía solo en
+   *  el formulario y el dictado se colaba—. Y «hablando» dura de verdad:
+   *  el audio del doble son 1,056 s de MP3 que se reproducen enteros. */
+  async function reposo(page) {
+    await expect
+      .poll(() => page.evaluate(() => {
+        const r = document.querySelector('[data-uhp-voz]');
+        if (!r) { return 'sin-raiz'; }
+        return r.classList.contains('uhp-voz--habla') ? 'habla'
+          : (r.classList.contains('uhp-voz--pensando') ? 'pensando' : 'listo');
+      }), { timeout: 15000 })
+      .not.toMatch(/habla|pensando/);
+  }
+
   /** Escribe una pregunta y la envía. */
   async function enviar(page, texto) {
+    await reposo(page);
     await page.locator('.uhp-voz__campo').fill(texto);
     await page.locator('[data-uhp-voz-accion="enviar"]').click();
   }
@@ -1182,6 +1242,157 @@ test.describe('Asistente de voz', () => {
     const cuerpo = await page.content();
     expect(cuerpo).not.toContain('sk-el-que-no-debe-salir-nunca');
     expect(cuerpo).not.toContain('sk-ant-que-no-debe-salir-nunca');
+  });
+
+  test('el audio SUENA de verdad, y es el de la respuesta que se entregó', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    const dicho = 'Son 55 municipios priorizados.';
+    await preguntar(page, '¿cuántos municipios hay?', [{ texto: dicho, llamadas: [] }]);
+
+    // Lo que se mandó a sintetizar es LO QUE SE PINTÓ, carácter por
+    // carácter: no un resumen, no un recorte, no otra frase.
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText(dicho);
+    expect(await page.evaluate(() => window.__UHP_STUB.textos)).toEqual([dicho]);
+
+    /* Y AHORA LO QUE DE VERDAD SE PIDIÓ COMPROBAR: que suena. No que se
+       llamó a play(), que es lo único que se medía antes —y ni eso, con
+       un base64 inválido que hacía lanzar a atob() antes de llegar—.
+       Aquí se espera el evento `ended` del elemento real, que solo se
+       dispara si el navegador decodificó el MP3 y lo reprodujo entero. */
+    await expect.poll(
+      () => page.evaluate(() => window.__UHP_AUDIO.length),
+      { timeout: 10000 }
+    ).toBe(1);
+
+    await expect.poll(
+      () => page.evaluate(() => window.__UHP_AUDIO[0].ended),
+      { timeout: 10000 }
+    ).toBe(true);
+
+    const a = await page.evaluate(() => {
+      const f = window.__UHP_AUDIO[0];
+      return { src: f.src.slice(0, 5), play: f.play, error: f.error, fin: f.fin };
+    });
+
+    expect(a.error, 'el navegador rechazó el audio').toBeNull();
+    expect(a.play).toBe(1);
+    expect(a.src).toBe('blob:');
+    // El tiempo llegó al final del clip: 1,056 s. `paused` no sirve como
+    // afirmación —un clip corto termina y vuelve a estar pausado—, y
+    // `currentTime > 0` se cumpliría con un solo fotograma.
+    expect(a.fin).toBeGreaterThan(1);
+  });
+
+  test('cerrar a media reproducción no enmudece la conversación siguiente', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    /* LA CARRERA. `fin()` cerraba sobre la instancia y acababa en
+       `pararAudio`, que actuaba sobre lo que hubiera en `v.audio` EN ESE
+       INSTANTE: los callbacks del elemento anterior seguían vivos y
+       paraban y revocaban el audio que estaba sonando AHORA.
+
+       El disparador no era hipotético y este es el camino real: cerrar
+       el panel mientras suena llama a `pause()` sobre un elemento con su
+       promesa de `play()` pendiente, y la especificación obliga a
+       rechazarla con AbortError. Ese rechazo es una microtarea, así que
+       llegaba DESPUÉS, cuando la conversación siguiente ya había
+       empezado a sonar, y la mataba. */
+    await preguntar(page, 'primera', [{ texto: 'Primera respuesta.', llamadas: [] }]);
+    await expect.poll(() => page.evaluate(() => window.__UHP_AUDIO.length)).toBe(1);
+
+    // Cerrar ANTES de que termine: el clip dura 1,056 s.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeHidden();
+    expect(await page.evaluate(() => window.__UHP_AUDIO[0].ended)).toBe(false);
+
+    // Y ahora otra conversación, con el rechazo de la primera en vuelo.
+    await conversar(page);
+    await preguntar(page, 'segunda', [{ texto: 'Segunda respuesta.', llamadas: [] }]);
+    await expect.poll(() => page.evaluate(() => window.__UHP_AUDIO.length)).toBe(2);
+
+    await expect.poll(
+      () => page.evaluate(() => window.__UHP_AUDIO[1].ended),
+      { timeout: 10000 }
+    ).toBe(true);
+    expect(await page.evaluate(() => window.__UHP_AUDIO[1].error)).toBeNull();
+
+    // Y el panel queda en reposo, no atrapado en «respondiendo».
+    await expect(page.locator('.uhp-voz__estado-txt')).toContainText('Escriba');
+  });
+
+  test('una pregunta nueva no se encola mientras el asistente responde', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    /* La guardia vive ahora en preguntar() y no en el formulario, de
+       modo que deja de importar por dónde entró la pregunta. Dos cadenas
+       concurrentes sobre el MISMO historial dejaban el turno intercalado
+       —la pregunta B entre la A y su respuesta— y las dos pedían audio. */
+    await preguntar(page, 'primera', [{ texto: 'Primera respuesta.', llamadas: [] }]);
+
+    /* Mientras suena, se intenta otra. SIN pasar por `enviar()`, que
+       espera a que el asistente termine: aquí lo que se mide es
+       justamente que escribir a destiempo no cuela. El clip dura
+       1,056 s. */
+    const antes = await page.evaluate(() => window.__UHP_STUB.chat);
+    await page.locator('.uhp-voz__campo').fill('segunda a destiempo');
+    await page.locator('[data-uhp-voz-accion="enviar"]').click();
+    expect(await page.evaluate(() => window.__UHP_STUB.chat)).toBe(antes);
+    await expect(page.locator('.uhp-voz__turno--usted')).toHaveCount(1);
+
+    // Cuando termina, se vuelve a aceptar.
+    await expect.poll(
+      () => page.evaluate(() => window.__UHP_AUDIO[0].ended),
+      { timeout: 10000 }
+    ).toBe(true);
+    await preguntar(page, 'ahora sí', [{ texto: 'Segunda respuesta.', llamadas: [] }]);
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText('Segunda respuesta');
+  });
+
+  test('dictar mientras el asistente responde no abre una segunda conversación', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    /* El cuadro de texto ya descartaba la pregunta mientras el asistente
+       pensaba; el micrófono no, porque la guardia vivía en el submit.
+       Dos cadenas concurrentes sobre el MISMO historial, ninguna
+       descartando a la otra, el historial intercalado y las dos pidiendo
+       audio: la primera, parada a media carga, enmudecía a la segunda. */
+    await page.evaluate(() => {
+      const original = window.fetch;
+      window.fetch = function (url) {
+        if (String(url).indexOf('/voz/chat') !== -1) {
+          const args = arguments; const yo = this;
+          return new Promise((res) => setTimeout(() => res(original.apply(yo, args)), 900));
+        }
+        return original.apply(this, arguments);
+      };
+      window.__UHP_STUB.guion = [{ texto: 'Una sola respuesta.', llamadas: [] }];
+    });
+
+    await enviar(page, 'primera pregunta');
+    await expect(page.locator('.uhp-voz__estado-txt')).toContainText('consultando');
+
+    // Y ahora se dicta encima.
+    await page.locator('[data-uhp-voz-accion="dictar"]').click();
+    const arrancó = await page.evaluate(() => window.__UHP_STUB.dictados);
+    expect(arrancó, 'el micrófono no debe abrirse mientras el asistente piensa').toBe(0);
+
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText('Una sola respuesta', { timeout: 10000 });
+
+    // Una pregunta, una respuesta: el historial no quedó intercalado.
+    await expect(page.locator('.uhp-voz__turno--usted')).toHaveCount(1);
   });
 
   test('lo que el modelo dice antes de una herramienta no se lee en alto', async ({ page }) => {

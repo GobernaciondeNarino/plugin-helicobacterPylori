@@ -246,11 +246,28 @@ como un dato afirmativo—.
 
 ---
 
+## Si no suena: la lista, en orden
+
+1. **¿Subió la versión del plugin?** `UHP_VERSION` es el `?ver=` de los
+   recursos. Congelada, el navegador sigue sirviendo el JavaScript viejo desde
+   su caché, y el viejo pide rutas que ya no existen. Purgue la caché del sitio
+   después de actualizar.
+2. **¿Tiene el sitio una CSP?** Hace falta `media-src 'self' blob:`. Sin esa
+   línea el panel funciona entero y simplemente no suena.
+3. **¿Verificó las claves?** El panel dice si la voz existe en la cuenta.
+4. **Mire la consola del navegador.** `voz: el navegador no dejó reproducir sin
+   un gesto` significa que el navegador bloqueó la reproducción automática: en
+   ese caso aparece un botón «Oír la respuesta», que sí vale. `voz: no se pudo
+   sintetizar` apunta al servidor, y entonces el registro de PHP tiene la línea
+   `voz/hablar` con lo que contestó ElevenLabs.
+5. **¿Está en «editores»?** Desde la 2.0.0 ese modo manda un nonce. Si viene de
+   una versión anterior, era el único que no funcionaba.
+
 ## Cómo comprobarlo
 
 ```bash
-php tests/test-datos.php   # 614 comprobaciones
-npm test                   # lo anterior más 130 de navegador
+php tests/test-datos.php   # 629 comprobaciones
+npm test                   # lo anterior más 135 de navegador
 ```
 
 La sección **14** de `tests/test-datos.php` cubre los dos errores de este

@@ -410,6 +410,25 @@ final class UHP_Voz {
 			'turnos'       => (int) $c['turnos_max'],
 			'rutaChat'     => '/voz/chat',
 			'rutaVoz'      => '/voz/hablar',
+
+			/* EL NONCE, y SOLO en «editores». Sin él, WordPress trata una
+			   petición con cookie como anónima: `wp_get_current_user()`
+			   devuelve 0, `permitido_para_usuario()` dice que no y las
+			   dos rutas contestan 403. Es decir, el modo que existe
+			   justo para ensayar el asistente en el sitio de verdad
+			   antes de abrirlo al ciudadano era el único que no
+			   funcionaba.
+
+			   Solo ahí, y no siempre, porque un nonce en el HTML lo ata
+			   a un usuario y a un momento: en una página cacheada se
+			   serviría el de otra persona, caducado. En «editores» eso
+			   no puede pasar —el shortcode define DONOTCACHEPAGE y
+			   manda cabeceras de no-caché, porque esa salida ya depende
+			   de quién pide la página—, y en los otros dos modos las
+			   rutas son públicas y no hace falta. */
+			'nonce'        => ( 'editores' === self::sanear_visibilidad( $c['visibilidad'] ) && function_exists( 'wp_create_nonce' ) )
+				? wp_create_nonce( 'wp_rest' )
+				: '',
 		);
 	}
 
@@ -449,6 +468,8 @@ final class UHP_Voz {
 			'enviar'        => __( 'Enviar la pregunta', 'urkunina-5000' ),
 			'dictar'        => __( 'Dictar la pregunta', 'urkunina-5000' ),
 			'terminar'      => __( 'Terminar conversación', 'urkunina-5000' ),
+			// Solo aparece si el navegador se negó a sonar sin un gesto.
+			'oir'           => __( 'Oír la respuesta', 'urkunina-5000' ),
 			'conectando'    => __( 'Preparando…', 'urkunina-5000' ),
 			'pensando'      => __( 'El asistente está consultando el tablero.', 'urkunina-5000' ),
 			'escribiendo'   => __( 'Escriba o dicte su pregunta.', 'urkunina-5000' ),
@@ -932,7 +953,37 @@ final class UHP_Voz {
 		   presupuesto del mes. El asistente responde en dos o tres frases;
 		   mil caracteres son de sobra. */
 		if ( mb_strlen( $texto ) > 1000 ) {
-			$texto = mb_substr( $texto, 0, 1000 );
+			/* RECORTA, PERO NO A MEDIA PALABRA Y NO EN SILENCIO.
+
+			   Antes cortaba en el carácter mil y no se lo decía a nadie:
+			   la pantalla mostraba la respuesta entera y el audio se
+			   cortaba a media frase. Para una entidad que pidió
+			   comprobar «que el sonido salga sobre la respuesta que está
+			   entregando el asistente», ese era el punto exacto donde
+			   dejaba de serlo.
+
+			   Ahora se corta en el último final de frase que quepa, de
+			   modo que lo que suena termina donde termina una idea, y se
+			   anota: si esto salta a menudo, lo que hay que arreglar no
+			   es el tope sino la longitud de las respuestas. */
+			$corte = mb_substr( $texto, 0, 1000 );
+
+			$fin = 0;
+			foreach ( array( '. ', '? ', '! ', '; ' ) as $marca ) {
+				$pos = mb_strrpos( $corte, $marca );
+				if ( false !== $pos && $pos > $fin ) {
+					$fin = $pos;
+				}
+			}
+
+			// Solo si queda al menos la mitad: con un corte muy temprano
+			// se perdería más de lo que se gana en que suene redondo.
+			$texto = ( $fin > 500 ) ? mb_substr( $corte, 0, $fin + 1 ) : $corte;
+
+			self::anotar(
+				'voz/hablar',
+				sprintf( 'respuesta recortada para la síntesis: %d caracteres de %d', mb_strlen( $texto ), mb_strlen( $pet->get_param( 'texto' ) ) )
+			);
 		}
 
 		$r = self::sintetizar( $texto );

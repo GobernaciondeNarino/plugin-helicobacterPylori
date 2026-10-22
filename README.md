@@ -324,6 +324,11 @@ rótulo honesto no arregla un número equivocado cuando el correcto existe: ahor
 se suma lo publicado, se prorratea solo el resto, y el pie dice qué parte es
 cada cosa.
 
+**Al actualizar, purgue la caché del sitio.** `UHP_VERSION` es el `?ver=` de
+los recursos que encola el plugin: si una capa de caché sirve el JavaScript
+viejo, el asistente no es que suene mal, es que no contesta. El historial de
+cambios está en [`CHANGELOG.md`](CHANGELOG.md).
+
 Puesta en marcha, definiciones de las herramientas y CSP en
 [`docs/voz/puesta-en-marcha.md`](docs/voz/puesta-en-marcha.md). El análisis de
 protección de datos, en [`docs/voz/privacidad.md`](docs/voz/privacidad.md). Y
@@ -337,8 +342,8 @@ registro y en la consola, en
 
 ```bash
 npm install          # instala Playwright
-npm run test:datos   # 619 comprobaciones de la capa de datos, sin WordPress
-npm test             # lo anterior más 131 pruebas de navegador
+npm run test:datos   # 629 comprobaciones de la capa de datos, sin WordPress
+npm test             # lo anterior más 135 pruebas de navegador
 ```
 
 Las pruebas de navegador abren en Chromium el marcado real que emiten los
