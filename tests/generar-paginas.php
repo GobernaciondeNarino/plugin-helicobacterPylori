@@ -304,12 +304,8 @@ update_option(
 		'esfuerzo'      => 'low',
 		'cuota_dia'     => 200,
 		'turnos_max'    => 8,
-		// Esta página ejercita el canal HABLADO y nada más: un solo
-		// lanzador, para que las pruebas que ya existían sigan apuntando a
-		// un único botón. Los dos canales y el escrito a secas tienen cada
-		// uno su propia página más abajo.
-		'entrada'       => 'voz',
-		'texto'         => 1,
+		// Con micrófono. Lo de «sin micrófono» tiene su página más abajo.
+		'entrada'       => 'ambos',
 		'voz_id'        => 'VozDePruebaDeLaSuite00',
 		'voz_modelo'    => '',
 		'voz_velocidad' => 0.9,
@@ -335,8 +331,8 @@ $paginas['voz'] = construir(
 	'[urkunina_dashboard]'
 );
 
-/* La misma configuración con los DOS canales: dos lanzadores y dos avisos
-   distintos en el HTML, porque aceptar uno no acepta el otro. */
+/* La misma configuración otra vez, con el mismo nombre de antes, porque
+   muchas pruebas la usan. Ya no hay «dos canales»: hay un botón. */
 update_option(
 	'uhp_voz',
 	array_merge(
@@ -347,16 +343,17 @@ update_option(
 
 $paginas['voz-dos'] = construir(
 	'voz-dos',
-	'Tablero con los dos canales',
+	'Tablero con asistente completo',
 	function ( $sc ) {
 		return $sc->sc_dashboard( array() );
 	},
 	'[urkunina_dashboard]'
 );
 
-/* Y solo escrito. Aquí no tiene que haber ni botón de micrófono, ni aviso
-   de voz en el HTML, ni dictado, ni una petición a la ruta que sintetiza:
-   el canal escrito no suena, y lo que no suena no se factura. */
+/* Y SIN micrófono. Aquí no tiene que haber ni icono de micrófono, ni
+   aviso que lo mencione, ni dictado. Pero SÍ tiene que sonar: que no se
+   ofrezca dictar no es motivo para no leer la respuesta en alto, y
+   confundir esas dos cosas era lo que dejaba mudo al asistente. */
 update_option(
 	'uhp_voz',
 	array_merge(
@@ -367,7 +364,7 @@ update_option(
 
 $paginas['voz-texto'] = construir(
 	'voz-texto',
-	'Tablero con asistente escrito',
+	'Tablero con asistente sin micrófono',
 	function ( $sc ) {
 		return $sc->sc_dashboard( array() );
 	},

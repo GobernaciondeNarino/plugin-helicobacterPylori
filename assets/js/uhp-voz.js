@@ -1,25 +1,38 @@
 /* Asistente del tablero — [urkunina_dashboard].
 
-   El visitante pregunta por las cifras del proyecto y el agente de
-   ElevenLabs responde y, cuando se lo piden, mueve los filtros del tablero.
+   El visitante pregunta por las cifras del proyecto; un modelo de
+   lenguaje responde, mueve los filtros del tablero y —si la entidad
+   configuró una voz— la respuesta se lee en alto.
 
-   DOS CANALES, Y NO SON EL MISMO:
+   UNA SOLA CONVERSACIÓN, Y TRES CONTROLES.
 
-     · VOZ. Se concede el micrófono, se habla y se escucha. El SDK abre un
-       VoiceConversation.
+   Antes había dos canales, voz y escrito, con dos lanzadores, dos
+   avisos y dos autorizaciones. Se unificaron, y el motivo no fue la
+   estética: el reparto hacía que una conversación abierta por el
+   lanzador escrito no sonara NUNCA, ni con la voz perfectamente
+   configurada. Como el panel se abría casi siempre por ahí, el
+   asistente mostraba texto y no conversaba.
 
-     · ESCRITO. No se pide el micrófono NUNCA. El SDK abre un
-       TextConversation, que no toca navigator.mediaDevices ni crea un
-       AudioContext, y la sesión se declara `text_only` también al
-       servidor para que no sintetice un audio que nadie va a oír y que
-       se factura igual.
+   Lo que queda es un botón, «Asistente», y dentro una fila de tres:
+   cuadro de texto, enviar y micrófono. La fila se monta UNA vez y
+   después solo cambian atributos; reconstruirla en cada cambio de fase
+   desprendía el <input> con el foco dentro, y con él se iba la tecla
+   Escape.
 
-   No es la misma conversación con otra piel: el aviso de habeas data es
-   distinto —en el canal escrito no se trata ninguna muestra de voz, que es
-   un dato biométrico—, la autorización se guarda por separado, los
-   rótulos que lee un lector de pantalla son otros, y la receta de CSP que
-   necesita el sitio se encoge. Cada vez que este archivo decida algo
-   mirando `v.canal`, es por una de esas razones y no por estética.
+   ENTRAR Y SALIR SON COSAS DISTINTAS, y conviene no volver a juntarlas:
+
+     · El MICRÓFONO es una forma de entrar. Lo pone el navegador del
+       visitante con SpeechRecognition, no cuesta nada y no necesita
+       ninguna clave. En Firefox, Opera, Brave y Vivaldi no existe o
+       falla al usarse, y entonces no se pinta.
+
+     · La VOZ es una forma de salir. La pone ElevenLabs desde el
+       servidor y necesita clave e identificador de voz. Sin ella el
+       asistente responde igual, por escrito.
+
+   Una instalación puede tener micrófono sin voz, voz sin micrófono, las
+   dos o ninguna, y las cuatro combinaciones son conversaciones
+   completas.
 
    CINCO REGLAS QUE SOSTIENEN ESTE ARCHIVO:
 
@@ -76,9 +89,7 @@
     for (var i = 0; i < nodos.length; i++) { iniciar(nodos[i]); }
 
     /* Puerta declarativa: cualquier elemento de la plantilla con
-       data-uhp-voz-abrir abre el asistente, sin escribir JavaScript. El
-       valor del atributo elige canal («voz» o «texto»); vacío, el que la
-       página ofrezca. */
+       data-uhp-voz-abrir abre el asistente, sin escribir JavaScript. */
     if (INSTANCIAS.length) {
       document.addEventListener('click', function (e) {
         var b = (e.target && e.target.closest) ? e.target.closest('[data-uhp-voz-abrir]') : null;
@@ -111,19 +122,12 @@
     return (INSTANCIAS.length === 1) ? INSTANCIAS[0] : null;
   }
 
-  function abrirPorPrograma(destino, canal) {
+  function abrirPorPrograma(destino) {
     var v = instanciaDe(destino);
     if (!v) { return false; }
-
-    // Un canal que esta página no ofrece NO se abre desde aquí: el ajuste
-    // del sitio y el atributo del shortcode mandan sobre quien llame.
-    var c = ('texto' === canal || 'voz' === canal) ? canal : null;
-    if ('voz' === c && v.entrada === 'texto') { return false; }
-    if ('texto' === c && v.entrada === 'voz') { return false; }
-
     if (v.fase !== 'inactivo') { return true; }
     v.lanzadorActivo = null;
-    comenzar(v, c || (v.entrada === 'texto' ? 'texto' : 'voz'));
+    comenzar(v);
     return true;
   }
 
@@ -139,7 +143,7 @@
   /* ------------------------------------------------------------------ */
 
   function iniciar(raiz) {
-    var entrada = raiz.getAttribute('data-uhp-voz-entrada') || 'ambos';
+    var micro = raiz.getAttribute('data-uhp-voz-micro') !== 'no';
     var v = {
       raiz: raiz,
       nodos: zonas(raiz),
@@ -148,10 +152,12 @@
       conv: null,
       fase: 'inactivo',
       error: '',
-      // Qué canales ofrece ESTA página, y por cuál va la conversación de
-      // ahora. La página puede estrechar lo que permite el sitio.
-      entrada: entrada,
-      canal: 'texto' === entrada ? 'texto' : 'voz',
+      /* ¿Esta página ofrece el micrófono? Lo decide el servidor y la
+         página puede estrechar lo que el sitio permite. Ya no hay
+         «canal»: una sola conversación, siempre con cuadro de
+         escritura, y con micrófono si esta página lo ofrece y el
+         navegador sabe dictar. */
+      micro: micro,
       lanzadores: [],
       lanzadorActivo: null,
       // Una pista que solo se usa si la sesión se cae al arrancar y hay
@@ -199,9 +205,11 @@
     var externos = document.querySelectorAll('[data-uhp-voz-abrir]');
     for (var k = 0; k < externos.length; k++) {
       if (instanciaDe(externos[k]) === v && externos[k].hasAttribute('aria-expanded')) {
-        v.lanzadores.push({ nodo: externos[k], txt: null, canal: 'voz', reposo: '', externo: true });
+        v.lanzadores.push({ nodo: externos[k], txt: null, reposo: '', externo: true });
       }
     }
+
+    cablearRevocacion(v);
 
     window.addEventListener('pagehide', function () { soltar(v); });
 
@@ -214,17 +222,44 @@
     });
   }
 
-  /* Puede haber dos: uno por canal. Los dos gobiernan el MISMO panel, de
-     modo que los dos llevan aria-controls contra él y los dos tienen que
-     declarar el mismo aria-expanded: quien llegue tabulando al segundo
-     botón con el panel ya abierto tiene que enterarse de que está abierto,
-     no creer que lo va a abrir. */
+  /* RETIRAR LA AUTORIZACIÓN vive FUERA del panel, junto al aviso corto.
+     Perdió su sitio al reducir la fila a tres controles, y no podía
+     perderse sin más: el artículo 8(e) de la Ley 1581 da derecho a
+     revocar, y un derecho que solo se puede ejercer abriendo primero
+     aquello de lo que uno se quiere ir no es un derecho ejercible.
+
+     Aquí además está mejor que donde estaba: se ve con el panel cerrado,
+     que es justo cuando alguien decide que no quiere seguir.
+
+     Solo aparece si hay algo que revocar. Sin aviso configurado no se
+     guarda autorización ninguna, y un botón para retirar algo que nadie
+     dio es una pregunta sin respuesta. */
+  function cablearRevocacion(v) {
+    if (!CFG.aviso || !CFG.recordar) { return; }
+    var corto = v.raiz.querySelector('.uhp-voz__aviso-corto');
+    if (!corto) { return; }
+
+    var b = C.el('button', 'uhp-voz__retirar', T.retirar);
+    b.type = 'button';
+    b.hidden = !consentido();
+    b.addEventListener('click', function () {
+      guardarConsentimiento(v, false);
+      soltar(v);
+      anunciar(v, T.retirada);
+      if (v.fase !== 'inactivo') { cerrarPanel(v); }
+      b.hidden = true;
+    });
+    corto.appendChild(b);
+    v.botonRetirar = b;
+  }
+
+  /* Uno solo. Puede haber además lanzadores propios de la plantilla, y
+     a esos se les mantiene el aria-expanded al día: un botón que dice
+     «cerrado» con el panel abierto le miente a quien no ve la pantalla. */
   function cablearLanzador(v, boton) {
-    var canal = boton.getAttribute('data-uhp-voz-canal') === 'texto' ? 'texto' : 'voz';
     var ficha = {
       nodo: boton,
       txt: boton.querySelector('span:not(.uhp-voz__icono)'),
-      canal: canal,
       // El rótulo de reposo es el que trae del servidor, ya traducido.
       reposo: ''
     };
@@ -239,7 +274,7 @@
       // y la primera no se cerraba nunca.
       if (v.fase !== 'inactivo') { cerrarPanel(v); return; }
       v.lanzadorActivo = boton;
-      comenzar(v, canal);
+      comenzar(v);
     });
 
     // Sin JavaScript el botón no hace nada: sale deshabilitado del
@@ -277,12 +312,13 @@
   /* Compuerta de consentimiento                                        */
   /* ------------------------------------------------------------------ */
 
-  /* UNA CLAVE POR CANAL. Lo que autoriza quien lee el aviso escrito no es
-     lo que autoriza quien lee el de voz: el segundo incluye el tratamiento
-     de una muestra de su voz, que es un dato biométrico. Guardarlo en la
-     misma casilla haría que aceptar lo pequeño abriera lo grande. */
-  function claveConsentimiento(canal) {
-    return 'uhp_voz_consentimiento_' + canal + '_v' + CFG.avisoVersion;
+  /* Una sola clave: hay una sola conversación y un solo aviso. La
+     versión va dentro a propósito —subirla en el panel invalida lo
+     autorizado con el texto anterior— y así una instalación que venía
+     de la versión de dos canales no arrastra un consentimiento dado
+     sobre un aviso que ya no es el que se muestra. */
+  function claveConsentimiento() {
+    return 'uhp_voz_consentimiento_v' + CFG.avisoVersion;
   }
 
   function leido(clave) {
@@ -291,42 +327,28 @@
     } catch (e) { return false; }
   }
 
-  function consentido(canal) {
+  function consentido() {
     if (!CFG.recordar) { return false; }
-    if (leido(claveConsentimiento(canal))) { return true; }
-    // En un sentido SÍ, y solo en uno: quien autorizó la voz ya leyó un
-    // aviso que incluye el canal escrito y lo dice con esas palabras
-    // («puede escribir sus preguntas en lugar de hablarlas»). Al revés no:
-    // el aviso escrito no menciona el micrófono porque no se enciende.
-    return canal === 'texto' && leido(claveConsentimiento('voz'));
+    return leido(claveConsentimiento());
   }
 
   function guardarConsentimiento(v, si) {
     if (!CFG.recordar) { return; }
     try {
+      if (si && v && v.botonRetirar) { v.botonRetirar.hidden = false; }
       if (si) {
-        window.sessionStorage.setItem(claveConsentimiento(v.canal), '1');
+        window.sessionStorage.setItem(claveConsentimiento(), '1');
       } else {
-        // Retirar la autorización retira LAS DOS. Quien pulsa «Retirar
-        // autorización» está diciendo que no quiere que se trate nada
-        // suyo, no que prefiere el otro canal.
-        window.sessionStorage.removeItem(claveConsentimiento('voz'));
-        window.sessionStorage.removeItem(claveConsentimiento('texto'));
+        window.sessionStorage.removeItem(claveConsentimiento());
       }
     } catch (e) { /* sin almacenamiento, la autorización dura la sesión */ }
   }
 
-  function comenzar(v, canal) {
-    /* Sin canal explícito se CONSERVA el de ahora. Lo llaman también el
-       botón «Volver a preguntar» y la salida de un fallo de micrófono, y
-       con un valor por defecto fijo una conversación escrita reanudaba
-       pidiendo el micrófono: el visitante pulsaba «volver a preguntar» en
-       un panel escrito y le aparecía un diálogo de permiso. */
-    if ('voz' === canal || 'texto' === canal) { v.canal = canal; }
+  function comenzar(v) {
     abrirPanel(v);
     /* La compuerta de autorización es ahora un ajuste del sitio, no un
        requisito. Si la entidad la apagó, se entra directo. */
-    if (!CFG.aviso || consentido(v.canal)) { arrancarSesion(v); return; }
+    if (!CFG.aviso || consentido()) { arrancarSesion(v); return; }
     pintarCompuerta(v);
   }
 
@@ -334,13 +356,13 @@
     var panel = v.nodos.panel;
     if (!panel) { return; }
 
-    /* Sin la plantilla del canal no hay aviso que leer, y un aviso VACÍO
+    /* Sin la plantilla no hay aviso que leer, y un aviso VACÍO
        con un botón de aceptar es lo peor que puede ocurrir en este
        archivo: recogería una autorización sobre un texto que no existe.
        No debería pasar —la página solo imprime los avisos de los canales
        que ofrece, y abrirPorPrograma() rechaza los demás—, pero si pasa
        se para aquí. */
-    var plantilla = v.canal === 'texto' ? v.nodos['aviso-texto'] : v.nodos.aviso;
+    var plantilla = v.nodos.aviso;
     if (!plantilla || !plantilla.content) {
       montarConversacion(v);
       v.error = T.sin_sesion;
@@ -353,7 +375,7 @@
     panel.innerHTML = '';
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
-    var titulo = v.canal === 'texto' ? (T.titulo_txt || T.titulo) : T.titulo;
+    var titulo = T.titulo_dos;
     panel.setAttribute('aria-label', titulo || 'Asistente');
     fase(v, 'aviso');
 
@@ -364,14 +386,14 @@
     var aviso = C.el('div', 'uhp-voz__aviso');
     aviso.setAttribute('tabindex', '0');
     aviso.setAttribute('role', 'document');
-    // La plantilla del canal, no «la» plantilla: el aviso del canal
-    // escrito no pide autorización para tratar una voz que no se captura.
-    // Que existe ya se comprobó arriba.
+    // El aviso que corresponde a esta página: el de una sin micrófono no
+    // pide autorización para tratar una voz que no se captura. Que
+    // existe ya se comprobó arriba.
     aviso.appendChild(plantilla.content.cloneNode(true));
     panel.appendChild(aviso);
 
     var pie = C.el('div', 'uhp-voz__pie');
-    var rotulo = v.canal === 'texto' ? (T.aceptar_txt || T.aceptar) : T.aceptar;
+    var rotulo = T.aceptar;
     var si = boton(rotulo, 'uhp-voz__btn uhp-voz__btn--principal', function () {
       guardarConsentimiento(v, true);
       arrancarSesion(v);
@@ -436,6 +458,15 @@
       console.warn('[URKUNINA 5000] ' + donde + ':', detalle);
     } catch (e) { /* una consola que falla no puede tumbar el panel */ }
   }
+
+  var SVG_ENVIAR = '<svg viewBox="0 0 16 16" width="16" height="16" focusable="false" aria-hidden="true">'
+    + '<path d="M8 13.5V3.2M8 3.2 3.9 7.3M8 3.2l4.1 4.1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>'
+    + '</svg>';
+
+  var SVG_MICRO = '<svg viewBox="0 0 16 16" width="16" height="16" focusable="false" aria-hidden="true">'
+    + '<path d="M8 1.7a2 2 0 0 1 2 2v4a2 2 0 0 1-4 0v-4a2 2 0 0 1 2-2Z" fill="currentColor"/>'
+    + '<path d="M3.6 7.1v.7a4.4 4.4 0 0 0 8.8 0v-.7M8 12.2v2.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'
+    + '</svg>';
 
   function pedir(ruta, cuerpo) {
     // La base la pone el núcleo, y se lee con la misma tolerancia que él:
@@ -514,7 +545,7 @@
     function vuelta() {
       if (mia !== v.gen) { return Promise.resolve(); }
 
-      return pedir(CFG.rutaChat, { mensajes: v.hist, canal: v.canal }).then(function (d) {
+      return pedir(CFG.rutaChat, { mensajes: v.hist }).then(function (d) {
         if (mia !== v.gen) { return; }
 
         var dicho = (d && typeof d.texto === 'string') ? d.texto : '';
@@ -593,7 +624,13 @@
   /* ------------------------------------------------------------------ */
 
   function hablar(v, texto) {
-    if (!CFG.voz || v.canal !== 'voz' || !texto) {
+    /* AQUÍ ESTABA EL SILENCIO. La condición era
+       `!CFG.voz || v.canal !== 'voz' || !texto`, y el término del medio
+       significaba que una conversación abierta por el lanzador escrito
+       no sonaba NUNCA, ni con la voz perfectamente configurada. Como el
+       panel se abría casi siempre por ahí, el asistente mostraba texto y
+       no conversaba. Ahora la voz depende solo de que haya voz. */
+    if (!CFG.voz || !texto) {
       fase(v, 'escucha');
       return;
     }
@@ -1022,19 +1059,18 @@
               cola(r, con, sinDato, fuera);
           }
 
-          var escrito = v.canal === 'texto';
+          /* TODAS, siempre. Esta herramienta le da DATOS al modelo, no
+             redacta la respuesta del visitante: recortar aquí a tres
+             sería decidir por el modelo con información que él no tiene,
+             y dejarlo sin con qué contestar si le piden la lista
+             completa. Cuántas se dicen en alto lo decide el prompt, que
+             es donde vive esa regla. Cada línea lleva pegado su rótulo
+             «(cifra de la subregión)»: eso no es formato, es honestidad,
+             y va igual se lea o se escuche. */
           var tope = parseInt(p && p.cuantas, 10);
-          if (!(tope > 0)) {
-            // Por voz, tres. Una enumeración hablada de once elementos no
-            // se retiene, y el agente acabaría leyendo una lista que nadie
-            // puede seguir. Por escrito se puede releer: van todas.
-            tope = escrito ? con.length : 3;
-          }
-          if (tope > con.length) { tope = con.length; }
+          if (!(tope > 0) || tope > con.length) { tope = con.length; }
 
-          return escrito
-            ? comoTexto(r, con, sinDato, fuera, tope)
-            : comoVoz(r, con, sinDato, fuera, tope);
+          return comoTexto(r, con, sinDato, fuera, tope);
         });
       },
 
@@ -1270,31 +1306,6 @@
     return txt + cola(r, con, sinDato, fuera);
   }
 
-  function comoVoz(r, con, sinDato, fuera, tope) {
-    // Sin ordinales y con los extremos: es lo que se retiene escuchando.
-    var alto = con[0];
-    var bajo = con[con.length - 1];
-
-    var txt = 'Gráfico de barras de ' + r.indicadorEtiqueta +
-      ' por subregión. Son cifras de la subregión y no de los municipios que el ' +
-      'proyecto intervino. La más alta, ' + alto.subregion + ' con ' + cifra(alto.valor);
-    var ca = cobertura(alto);
-    if (ca && alto.intervenidos < alto.municipios) {
-      txt += ', aunque allí el proyecto intervino ' + ca;
-    }
-    txt += '. ';
-
-    var medias = con.slice(1, tope);
-    if (medias.length) {
-      txt += 'Después ' + medias.map(function (f) {
-        return f.subregion + ' con ' + cifra(f.valor) + (f.empatada ? ', empatada' : '');
-      }).join(', ') + '. ';
-    }
-    if (bajo !== alto && con.length > tope) {
-      txt += 'La más baja, ' + bajo.subregion + ' con ' + cifra(bajo.valor) + '. ';
-    }
-    return txt + cola(r, con, sinDato, fuera);
-  }
 
   function valorCon(d) {
     if (d.valor === null) { return 'sin cifra publicada'; }
@@ -1390,7 +1401,7 @@
     panel.removeAttribute('aria-modal');
 
     var cab = C.el('div', 'uhp-voz__cab');
-    cab.appendChild(C.el('h3', '', v.canal === 'texto' ? (T.titulo_txt || T.titulo) : T.titulo));
+    cab.appendChild(C.el('h3', '', T.titulo_dos));
     var estado = C.el('div', 'uhp-voz__estado-txt');
     var pulso = C.el('i', 'uhp-voz__pulso');
     pulso.setAttribute('aria-hidden', 'true');
@@ -1410,90 +1421,67 @@
     hilo.appendChild(C.el('p', 'uhp-voz__vacio', T.conectando));
     panel.appendChild(hilo);
 
-    var pie = C.el('div', 'uhp-voz__pie');
-    panel.appendChild(pie);
+    v.p = { panel: panel, estadoTxt: estadoTxt, hilo: hilo, vacio: hilo.firstChild, forma: null, campo: null, mic: null };
 
-    v.p = { panel: panel, estadoTxt: estadoTxt, hilo: hilo, pie: pie, vacio: hilo.firstChild, forma: null, campo: null };
+    /* El <form> ES el tercer hijo del panel, que declara tres filas de
+       rejilla. Envolverlo en un <div> añadiría un nodo sin función y
+       rompería esa correspondencia. */
+    panel.appendChild(crearFila(v));
     actualizarPie(v);
   }
 
-  /* El pie cambia de botones según la fase, pero el formulario se
-     CONSERVA: recrearlo borraría lo que el visitante está escribiendo. */
-  function actualizarPie(v) {
-    if (!v.p) { return; }
-    var pie = v.p.pie;
-    var enSesion = v.fase === 'escucha' || v.fase === 'habla'
-      || v.fase === 'conectando' || v.fase === 'pensando';
+  /* LA FILA SE MONTA UNA VEZ Y NO SE VUELVE A CREAR.
 
-    // Se vacía el pie salvo el formulario, que se saca y se vuelve a poner.
-    if (v.p.forma && v.p.forma.parentNode === pie) { pie.removeChild(v.p.forma); }
-    pie.innerHTML = '';
+     Antes se reconstruía entera en cada cambio de fase —hasta cinco
+     botones que aparecían y desaparecían—, y eso traía dos problemas
+     que no se ven leyendo el código: desprender el <input> del árbol
+     mientras tiene el foco lo devuelve al <body>, y con él se va la
+     tecla Escape; y la fila cambiaba de ancho entre fases, de modo que
+     un botón se movía debajo del dedo que iba a pulsarlo.
 
-    if (enSesion) {
-      pie.appendChild(boton(T.terminar, 'uhp-voz__btn', function () {
-        soltar(v);
-        fase(v, 'cerrada');
-        actualizarPie(v);
-      }));
-    } else {
-      pie.appendChild(boton(T.reanudar, 'uhp-voz__btn uhp-voz__btn--principal', function () {
-        comenzar(v);
-      }));
-    }
+     Ahora hay tres nodos fijos —campo, enviar, micrófono— y lo único
+     que cambia son atributos. Las tres funciones que perdieron su botón
+     no se perdieron: terminar es cerrar el panel con el propio lanzador
+     o con Escape, volver a preguntar es volver a escribir en el campo, y
+     retirar la autorización vive fuera del panel, junto al aviso corto,
+     que es donde la revocación tiene sentido aunque el panel esté
+     cerrado. */
+  function crearFila(v) {
+    var forma = C.el('form', 'uhp-voz__pie');
+    forma.setAttribute('novalidate', 'novalidate');
 
-    /* Cuando lo que falló fue el micrófono y esta página también ofrece
-       el canal escrito, se ofrece ese camino en vez de dejar al visitante
-       con un mensaje y nada que pulsar. Abre una conversación NUEVA —el
-       canal se fija al abrir la sesión y no se puede cambiar a mitad— y su
-       propia compuerta, porque el aviso del canal escrito es otro. */
-    if (v.fase === 'error' && v.errorMicro && v.canal === 'voz' && v.entrada !== 'voz') {
-      pie.appendChild(boton(T.pasar_texto, 'uhp-voz__btn uhp-voz__btn--principal', function () {
-        comenzar(v, 'texto');
-      }));
-    }
+    var idc = (v.raiz.id || 'uhp-voz') + '-campo';
 
-    /* El micrófono, cuando esta página ofrece el canal hablado y el
-       navegador sabe reconocer voz. Es pulsar para hablar: un micrófono
-       siempre abierto en la página de una entidad pública es algo que
-       habría que justificar, y aquí no hace falta. */
-    if (v.canal === 'voz' && enSesion && motorVoz() && !v.micMuerto) {
-      var mic = boton(
-        v.oyendo ? T.parar_micro : T.hablar_micro,
-        'uhp-voz__btn uhp-voz__btn--principal' + (v.oyendo ? ' uhp-voz__btn--oyendo' : ''),
-        function () { escuchar(v); }
-      );
-      mic.setAttribute('aria-pressed', v.oyendo ? 'true' : 'false');
-      pie.appendChild(mic);
-    }
+    /* Un <label> de verdad recortado, y no un aria-label: así el nombre
+       pasa por las herramientas de traducción y se ve en el código
+       fuente de la página. */
+    var etiqueta = C.el('label', 'uhp-voz__sr', T.escribir);
+    etiqueta.setAttribute('for', idc);
 
-    /* El campo de escritura. También cuando el que falló fue el
-       micrófono: ahí la conversación sigue viva y entera, y es justo
-       cuando quien no puede dictar necesita el otro camino delante. Lo
-       que no se pinta es durante un error de la conversación misma, que
-       es cuando no hay a quién preguntar. */
-    if (CFG.texto && (v.fase === 'escucha' || v.fase === 'habla' || v.fase === 'pensando'
-      || (v.fase === 'error' && v.errorMicro))) {
-      if (!v.p.forma) { crearForma(v); }
-      pie.appendChild(v.p.forma);
-    }
-
-    pie.appendChild(boton(T.retirar, 'uhp-voz__btn uhp-voz__btn--fino', function () {
-      guardarConsentimiento(v, false);
-      soltar(v);
-      anunciar(v, T.retirada);
-      cerrarPanel(v);
-    }));
-  }
-
-  function crearForma(v) {
-    var forma = C.el('form', 'uhp-voz__forma');
     var campo = document.createElement('input');
     campo.type = 'text';
+    campo.id = idc;
     campo.className = 'uhp-voz__campo';
-    campo.setAttribute('aria-label', T.escribir);
     campo.placeholder = T.escribir;
+    campo.autocomplete = 'off';
+    campo.setAttribute('enterkeyhint', 'send');
+
+    forma.appendChild(etiqueta);
     forma.appendChild(campo);
-    forma.appendChild(boton(T.enviar, 'uhp-voz__btn', null, 'submit'));
+    forma.appendChild(iconoBoton(T.enviar, 'enviar', SVG_ENVIAR, 'submit'));
+
+    /* El micrófono solo si esta página lo ofrece Y el navegador sabe
+       dictar. No necesita la clave de ElevenLabs: el dictado lo hace el
+       navegador. Si no sabe, no se pinta: un botón desactivado que nunca
+       se va a activar es ruido en el recorrido del teclado. */
+    if (v.micro && motorVoz()) {
+      var mic = iconoBoton(T.dictar, 'dictar', SVG_MICRO);
+      mic.setAttribute('aria-pressed', 'false');
+      mic.addEventListener('click', function () { escuchar(v); });
+      forma.appendChild(mic);
+      v.p.mic = mic;
+    }
+
     forma.addEventListener('submit', function (e) {
       e.preventDefault();
       var texto = campo.value.trim();
@@ -1504,8 +1492,49 @@
       campo.value = '';
       preguntar(v, texto);
     });
+
     v.p.forma = forma;
     v.p.campo = campo;
+    return forma;
+  }
+
+  /* Un botón de icono con su nombre accesible en un <span> recortado. El
+     texto va en el árbol, no en un atributo: un aria-label no se ve en
+     pantalla ni lo recogen las herramientas de traducción, y aquí es el
+     ÚNICO nombre que el control va a tener. */
+  function iconoBoton(rotulo, accion, svg, tipo) {
+    var b = C.el('button', 'uhp-voz__icono-btn');
+    b.type = tipo || 'button';
+    b.setAttribute('data-uhp-voz-accion', accion);
+    b.title = rotulo;
+    b.appendChild(C.el('span', 'uhp-voz__sr', rotulo));
+    var caja = C.el('span', 'uhp-voz__icono');
+    caja.setAttribute('aria-hidden', 'true');
+    caja.innerHTML = svg;
+    b.appendChild(caja);
+    return b;
+  }
+
+  /* Lo único que cambia de la fila: el estado del micrófono. Ni se crea
+     ni se borra nada. */
+  function actualizarPie(v) {
+    if (!v.p || !v.p.mic) { return; }
+    var oyendo = !!v.oyendo;
+    v.p.mic.setAttribute('aria-pressed', oyendo ? 'true' : 'false');
+    v.p.mic.title = oyendo ? T.parar_micro : T.dictar;
+    var sr = v.p.mic.querySelector('.uhp-voz__sr');
+    if (sr) { sr.textContent = oyendo ? T.parar_micro : T.dictar; }
+    if (oyendo) {
+      v.p.mic.classList.add('uhp-voz__icono-btn--oyendo');
+    } else {
+      v.p.mic.classList.remove('uhp-voz__icono-btn--oyendo');
+    }
+    /* Si el motor se murió a mitad de la visita, el botón desaparece en
+       vez de quedarse prometiendo algo que ya no ocurre. */
+    if (v.micMuerto && v.p.mic.parentNode) {
+      v.p.mic.parentNode.removeChild(v.p.mic);
+      v.p.mic = null;
+    }
   }
 
   function turno(v, quien, texto) {
@@ -1625,35 +1654,29 @@
     // única señal de que el asistente pasó de escuchar a hablar.
     if (v.p && v.p.estadoTxt) { v.p.estadoTxt.textContent = texto; }
 
-    // Los lanzadores dicen lo que hacen AHORA, no lo que hacían al
-    // cargar, y los dos a la vez: con el panel abierto, el botón del otro
-    // canal también cierra.
+    // El lanzador dice lo que hace AHORA, no lo que hacía al cargar: con
+    // el panel abierto, cierra. Y lo mismo cualquier lanzador propio de
+    // la plantilla que declare aria-expanded.
     pintarLanzadores(v, f !== 'inactivo');
 
-    /* Se anuncia lo que importa. En el canal hablado, «escucha» y «habla»
-       se alternan muchas veces por frase y anunciarlas sería ruido
-       continuo —además, ahí el propio audio dice quién tiene el turno—.
-       En el escrito no hay audio ninguno: quien no ve la pantalla no tiene
-       cómo saber que el asistente está redactando, y el cambio ocurre una
-       vez por turno, no veinte. WCAG 2.1 §4.1.3. */
+    /* Se anuncia lo que importa. «Habla» solo cuando NO va a sonar: si
+       suena, el propio audio dice quién tiene el turno, y anunciarlo
+       además es ruido encima del audio. Si no hay voz configurada, quien
+       no ve la pantalla no tiene otra forma de saber que el asistente
+       está respondiendo. WCAG 2.1 §4.1.3. */
     var relevante = (f === 'cerrada' || f === 'error' || f === 'pensando');
-    if (v.canal === 'texto' && (f === 'habla' || f === 'escucha')) { relevante = true; }
+    if (!CFG.voz && (f === 'habla' || f === 'escucha')) { relevante = true; }
     if (relevante) { anunciar(v, texto); }
   }
 
   function textoDeFase(v) {
-    var escrito = v.canal === 'texto';
     if (v.fase === 'aviso') { return T.aviso_fase; }
     if (v.fase === 'conectando') { return T.conectando; }
     if (v.fase === 'pensando') { return T.pensando; }
-    // En reposo, el rótulo dice QUÉ HACER. «Escuchando» a quien está
-    // teclando describe una pantalla que no tiene delante, y es justo
-    // quien no la ve el que depende de esto.
-    if (v.fase === 'escucha') {
-      if (escrito) { return T.escribiendo; }
-      return v.oyendo ? T.oyendo : T.listo_voz;
-    }
-    if (v.fase === 'habla') { return escrito ? T.redactando : T.hablando; }
+    // En reposo, el rótulo dice QUÉ HACER. Y con un solo canal son las
+    // dos cosas a la vez: se puede escribir y se puede dictar.
+    if (v.fase === 'escucha') { return v.oyendo ? T.oyendo : T.escribiendo; }
+    if (v.fase === 'habla') { return T.hablando; }
     if (v.fase === 'error') { return v.error || T.sin_sesion; }
     return T.cerrada;
   }

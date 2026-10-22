@@ -225,14 +225,75 @@
   color: var(--uhp-db-ink-2);
 }
 
-/* ---------- Pie de acciones ---------- */
+/* ---------- La fila: campo, enviar y micrófono ---------- */
+/* SIN flex-wrap a propósito. Un icono de 44 px que se va a una segunda
+   línea mueve el pie entero y empuja la transcripción hacia arriba
+   justo cuando alguien está leyéndola. */
 .uhp-voz__pie {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
   align-items: center;
   border-top: 1px solid var(--uhp-db-linea);
   padding-top: 9px;
+}
+
+/* 44 × 44 px de área táctil. Es el mínimo de la WCAG 2.2 §2.5.8 (Target
+   Size, Minimum, nivel AA) y de las guías de Apple y de Android. El
+   icono dentro mide 16 px: lo que crece es la zona que recibe el dedo,
+   no el dibujo. */
+.uhp-voz__icono-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--uhp-db-borde-control);
+  background: var(--uhp-db-panel-2);
+  color: var(--uhp-db-ink);
+  cursor: pointer;
+}
+.uhp-voz__icono-btn:hover { background: var(--uhp-db-sel-fondo); }
+.uhp-voz__icono-btn:focus-visible {
+  outline: 2px solid var(--uhp-db-acc);
+  outline-offset: 2px;
+}
+.uhp-voz__icono-btn[data-uhp-voz-accion="enviar"] {
+  background: var(--uhp-db-acc);
+  border-color: var(--uhp-db-acc);
+  /* Tinta oscura sobre el verde de acento: el claro no llega a 4,5:1. */
+  color: #06231a;
+}
+.uhp-voz__icono-btn[data-uhp-voz-accion="enviar"]:hover { background: var(--uhp-db-acc-claro); }
+
+/* Oyendo. El color no es lo único que lo dice —el rótulo accesible
+   cambia a «Dejar de hablar» y aria-pressed pasa a true—, porque un
+   estado que solo se distingue por el color no lo distingue todo el
+   mundo. WCAG 2.1 §1.4.1. */
+.uhp-voz__icono-btn--oyendo {
+  background: var(--uhp-db-roja);
+  border-color: var(--uhp-db-roja);
+  color: #2a0a0a;
+}
+
+/* La revocación, fuera del panel y junto al aviso corto. */
+.uhp-voz__retirar {
+  margin-left: 6px;
+  padding: 2px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--uhp-db-ink-2);
+  font: inherit;
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.uhp-voz__retirar:hover { color: var(--uhp-db-ink); }
+.uhp-voz__retirar:focus-visible {
+  outline: 2px solid var(--uhp-db-acc);
+  outline-offset: 2px;
 }
 
 .uhp-voz__btn {
@@ -266,11 +327,11 @@
 .uhp-voz__btn--fino:hover { color: var(--uhp-db-ink); }
 .uhp-voz__btn[disabled] { opacity: .5; cursor: default; }
 
-/* ---------- Escribir en vez de hablar ---------- */
-.uhp-voz__forma { display: flex; gap: 6px; flex: 1 1 12em; min-width: 0; }
+/* El campo, que es lo que crece. */
 .uhp-voz__campo {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  height: 44px;
   padding: 7px 10px;
   border-radius: 7px;
   border: 1px solid var(--uhp-db-borde-control);

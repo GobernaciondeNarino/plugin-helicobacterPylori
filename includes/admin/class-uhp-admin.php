@@ -273,7 +273,10 @@ final class UHP_Admin {
 			'voz_modelo'      => UHP_Voz::sanear_modelo( isset( $entrada['voz_modelo'] ) ? $entrada['voz_modelo'] : '' ),
 			'voz_velocidad'   => UHP_Voz::sanear_velocidad( isset( $entrada['voz_velocidad'] ) ? $entrada['voz_velocidad'] : '' ),
 
-			'entrada'         => UHP_Voz::sanear_entrada( isset( $entrada['entrada'] ) ? $entrada['entrada'] : '' ),
+			// Una casilla: marcada manda «ambos», desmarcada no manda nada
+			// y `sanear_entrada('')` no puede caer en «sin micrófono» por
+			// omisión, así que se decide aquí.
+			'entrada'         => empty( $entrada['entrada'] ) ? 'texto' : 'ambos',
 			'texto'           => empty( $entrada['texto'] ) ? 0 : 1,
 			'cuota_dia'       => min( 5000, max( 10, isset( $entrada['cuota_dia'] ) ? (int) $entrada['cuota_dia'] : $def['cuota_dia'] ) ),
 			'turnos_max'      => min( 20, max( 2, isset( $entrada['turnos_max'] ) ? (int) $entrada['turnos_max'] : $def['turnos_max'] ) ),
@@ -1684,7 +1687,7 @@ final class UHP_Admin {
 						<?php $this->copiable( '[urkunina_dashboard voz_visible="no"]' ); ?>
 					</p>
 					<p class="uhpa-nota">
-						<?php esc_html_e( 'Dejar en esta página solo el canal escrito, aunque el sitio permita los dos:', 'urkunina-5000' ); ?>
+						<?php esc_html_e( 'Quitar el micrófono en esta página, aunque el sitio lo ofrezca:', 'urkunina-5000' ); ?>
 						<?php $this->copiable( '[urkunina_dashboard voz_entrada="texto"]' ); ?>
 					</p>
 					<p class="uhpa-nota">
@@ -1952,14 +1955,8 @@ final class UHP_Admin {
 
 						<p class="uhpa-alerta uhpa-alerta--aviso">
 							<strong><?php esc_html_e( 'El dictado por micrófono no lo hace este servidor.', 'urkunina-5000' ); ?></strong>
-							<?php esc_html_e( 'Lo hace el navegador del visitante, y en Chrome, Edge y Safari eso significa que el audio se envía a servidores de Google o de Apple para convertirlo en texto. Ni este sitio ni el proveedor de la voz intervienen ahí, y la entidad no controla ese tratamiento ni puede pactarlo: es del navegador que el ciudadano eligió. En Firefox, Opera, Brave y Vivaldi no funciona en absoluto, y esos visitantes solo tendrán el canal escrito. Si eso no le encaja, ponga «solo por escrito»: entonces no se pide el micrófono nunca.', 'urkunina-5000' ); ?>
+							<?php esc_html_e( 'Lo hace el navegador del visitante, y en Chrome, Edge y Safari eso significa que el audio se envía a servidores de Google o de Apple para convertirlo en texto. Ni este sitio ni el proveedor de la voz intervienen ahí, y la entidad no controla ese tratamiento ni puede pactarlo: es del navegador que el ciudadano eligió. En Firefox, Opera, Brave y Vivaldi no funciona en absoluto, y esos visitantes escribirán su pregunta. Si eso no le encaja, desmarque la casilla de arriba: entonces no se pide el micrófono nunca.', 'urkunina-5000' ); ?>
 						</p>
-
-						<p>
-							<label><input type="checkbox" name="uhp_voz[texto]" value="1" <?php checked( 1, (int) $cfg['texto'] ); ?>>
-								<?php esc_html_e( 'Dentro de una conversación hablada, permitir escribir también', 'urkunina-5000' ); ?></label>
-						</p>
-						<p class="uhpa-nota"><?php esc_html_e( 'Es el campo de escritura que aparece DENTRO de una conversación de voz, y es también el camino de salida cuando el navegador deniega el micrófono o no sabe dictar. En «solo por escrito» está puesto a la fuerza: sin él el panel no tendría forma de preguntar nada.', 'urkunina-5000' ); ?></p>
 
 						<hr>
 						<p class="uhpa-texto"><strong><?php esc_html_e( 'Límites', 'urkunina-5000' ); ?></strong></p>
@@ -2056,7 +2053,7 @@ final class UHP_Admin {
 
 					<p class="uhpa-texto"><strong><?php esc_html_e( 'Instrucciones que recibe el modelo', 'urkunina-5000' ); ?></strong></p>
 					<p class="uhpa-nota"><?php esc_html_e( 'Se mandan desde el servidor en cada pregunta y no se pueden editar desde una página: son las reglas de honestidad con las que este tablero publica cifras, y no deben depender de quién edita un post.', 'urkunina-5000' ); ?></p>
-					<textarea class="uhpa-input" rows="10" readonly onclick="this.select()"><?php echo esc_textarea( UHP_Voz::prompt_sistema( 'texto' ) ); ?></textarea>
+					<textarea class="uhpa-input" rows="10" readonly onclick="this.select()"><?php echo esc_textarea( UHP_Voz::prompt_sistema() ); ?></textarea>
 
 					<p class="uhpa-texto"><strong><?php esc_html_e( 'Política de seguridad de contenido', 'urkunina-5000' ); ?></strong></p>
 					<?php $csp = UHP_Voz::hosts_csp(); ?>
