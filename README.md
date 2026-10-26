@@ -158,6 +158,7 @@ del mapa y todos los contrastes están calculados sobre él.
 | **Gráficos** | Catálogo de vistas con su descripción, su análisis y su shortcode. |
 | **Shortcodes** | Los dieciséis componentes con sus atributos y ejemplos. |
 | **Componentes** | Valores por defecto del tablero y del objeto 3D. |
+| **Asistente AI** | El asistente del tablero: proveedor y claves, voz, micrófono, bienvenida (nombre del anfitrión, saludo y preguntas sugeridas), cupo y verificación. |
 | **Apariencia** | Identidad visual: paleta institucional y tipografía. |
 | **Diagnóstico** | Entorno, convivencia con otros plugins y medidas de seguridad. |
 
@@ -263,10 +264,25 @@ asistente lo dice con esas palabras en vez de dejar un botón que falla. Quien
 no quiera ese tratamiento puede dejar el asistente en «solo por escrito», y
 entonces no se pide el micrófono nunca.
 
-**Un botón, «Asistente», y dentro tres controles:** un cuadro de texto, el
-icono de enviar y el icono del micrófono. Nada más. Antes eran dos lanzadores
-—«Preguntar por voz» y «Preguntar por escrito»— y hasta cinco botones dentro
-del panel.
+**Un botón, «Asistente», que abre una ventana** con la estructura que pidió la
+entidad: el nombre del anfitrión encima de cada globo, el saludo, una fila
+«Puedes preguntar:» con preguntas sugeridas que se envían con un toque, y una
+barra con el micrófono, el campo de escritura con «enviar» dentro, «parar» y
+«cerrar». «Parar» corta lo que esté en curso —la consulta, la voz o el
+dictado— sin cerrar la conversación. El nombre del anfitrión, el saludo y las
+sugerencias se escriben en el módulo **Asistente AI**.
+
+**Habla de tú, con calidez y paciencia**, como alguien de la región que conoce
+el proyecto: explica cada término técnico la primera vez, no hace sentir torpe
+a nadie y, cuando la pregunta toca la salud de alguien, responde con serenidad
+y recuerda que las cifras son de una población y que las dudas personales van a
+la EPS.
+
+**El micrófono espera la pregunta completa.** No corta en la primera pausa:
+espera a que la persona empiece a hablar, va mostrando lo que entiende en el
+campo y solo envía cuando lleva un rato callada (dos segundos por omisión,
+configurable). Pulsar otra vez el micrófono envía ya; «parar» descarta lo
+dictado.
 
 **Dictar y hablar son cosas distintas, y se configuran aparte.** El micrófono
 es una forma de ENTRAR: lo pone el navegador del visitante, no cuesta nada y no
@@ -328,6 +344,11 @@ cada cosa.
 los recursos que encola el plugin: si una capa de caché sirve el JavaScript
 viejo, el asistente no es que suene mal, es que no contesta. El historial de
 cambios está en [`CHANGELOG.md`](CHANGELOG.md).
+
+**Cada fallo tiene un código** `UHP-ÁREA-NN` —el mismo en la consola del
+navegador, en el registro de PHP, en el panel y en la pantalla del visitante—,
+con un `ref` que une la captura de un ciudadano con la línea exacta del
+registro. La tabla completa está en [`docs/voz/codigos.md`](docs/voz/codigos.md).
 
 Puesta en marcha, definiciones de las herramientas y CSP en
 [`docs/voz/puesta-en-marcha.md`](docs/voz/puesta-en-marcha.md). El análisis de

@@ -75,6 +75,7 @@ final class UHP_Plugin {
 
 		// REST (depende de datos y vistas).
 		require_once $base . 'class-uhp-rest.php';
+		require_once $base . 'class-uhp-codigos.php';
 		require_once $base . 'class-uhp-llm.php';
 		require_once $base . 'class-uhp-voz.php';
 

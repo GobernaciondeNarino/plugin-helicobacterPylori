@@ -2,7 +2,8 @@
 
 Qué falló, por qué, qué se arregló y dónde mirar la próxima vez.
 
-Origen: el panel de **URKUNINA 5000 → Componentes → Asistente** devolvió
+Origen: el panel de **URKUNINA 5000 → Componentes → Asistente** (desde la
+2.1, **URKUNINA 5000 → Asistente AI**) devolvió
 estos dos errores al pulsar «Verificar las claves».
 
 > ● Google Gemini no respondió: el proveedor rechazó la petición por mal formada
@@ -125,51 +126,56 @@ una cuenta de veinte voces la correcta podía no aparecer.
 
 ---
 
-## Lo que ahora se puede diagnosticar y antes no
+## Desde la 2.1: cada fallo tiene un código
 
-### En el registro de errores de PHP
+Las frases libres de la 2.0 —`voz/hablar: http 401: …` en el registro,
+`voz: no se pudo sintetizar` en la consola— se sustituyeron por **códigos
+`UHP-ÁREA-NN`**. El mismo fallo tiene el mismo código en los cuatro sitios
+donde se puede mirar:
 
-Todo con el mismo prefijo: `grep '\[URKUNINA 5000\]'` saca la historia
-entera sin saber de antemano qué buscar.
-
-| Línea | Cuándo |
+| Dónde | Cómo se ve |
 |---|---|
-| `verificar: modelo=… voz=…` | En cada verificación, con el resultado de las dos piezas |
-| `verificar/<proveedor>: modelo=… codigo=… <cuerpo>` | El modelo rechazó la verificación |
-| `verificar/voz: voz configurada no está en la cuenta: <id>` | El identificador no existe |
-| `voces: http <codigo>: <cuerpo>` | ElevenLabs rechazó el listado |
-| `voces: transporte: <motivo>` | No se pudo abrir la conexión |
-| `voz/chat: <cuerpo del proveedor>` | Una conversación falló |
-| `voz/chat: se descartó del historial: …` | El navegador mandó algo que el servidor no reconoce |
-| `voz/hablar: http <codigo>: <cuerpo> · voz=<id> modelo=<m>` | La síntesis falló |
-| `voz/hablar: transporte: <motivo>` | No se pudo abrir la conexión |
-| `cupo: El asistente agotó su cupo diario de N preguntas…` | Una vez al día |
+| Consola del navegador | `[URKUNINA 5000] UHP-VOZ-03 · la síntesis de voz rechazó la clave · HTTP 502 · ref 7c2e9a · /voz/hablar · v2.1.0` |
+| Registro de PHP | `[URKUNINA 5000] UHP-VOZ-03 · la síntesis de voz rechazó la clave · ref 7c2e9a · voz/hablar · voz=… modelo=… http=401 · dijo: …` |
+| Pantalla del visitante | El mensaje de siempre y, al lado, `UHP-VOZ-03` |
+| Panel → Asistente AI → Verificación | El código delante del mensaje |
 
-Antes había **tres** líneas en todo el plugin y ninguna estaba en el camino
-que usa un administrador: el botón «Verificar las claves» no escribía nada.
+**La tabla completa, con qué mirar en cada caso, está en
+[`codigos.md`](codigos.md)**, que se genera desde los dos catálogos
+(`php tests/generar-codigos.php`) y la suite comprueba que no se queda
+atrás.
 
-### En la consola del navegador
+Tres cosas que conviene saber:
 
-Mismo prefijo, y cubren los cuatro caminos por los que el audio puede no
-sonar y los cinco por los que el micrófono puede no funcionar. Todos eran
-mudos: desde fuera, «no suena» por una clave mal puesta y «no suena»
-porque el navegador bloqueó la reproducción se ven exactamente igual.
+- **El `ref`** —seis caracteres— une la captura del visitante con la línea
+  exacta del registro de PHP: `grep 7c2e9a` sobre el registro. Un mismo
+  fallo repetido escribe **una** línea por minuto (proveedores) o por diez
+  minutos (puertas), y todas las peticiones de esa ventana devuelven el
+  mismo `ref`: las rutas son públicas y un registro sin tope tira el disco.
+- **Al navegador no viajan** claves, ni el nombre del proveedor o del
+  modelo, ni lo que contestó el proveedor, ni la pregunta del visitante.
+  Eso queda en el registro de PHP, con su `ref`.
+- **`UHPVozAsistente.diagnostico()`** en la consola del navegador devuelve
+  las últimas veinte entradas como texto: `copy(UHPVozAsistente.diagnostico())`
+  y se pega en un correo, sin capturas.
 
-| Línea | Qué significa |
-|---|---|
-| `consulta a /voz/chat: HTTP 503 · uhp_voz_cuota → se muestra «sin-cuota»` | Qué contestó el servidor y qué se le pintó al visitante |
-| `voz: no se pudo sintetizar: …` | La ruta de audio falló |
-| `voz: el servidor contestó sin audio…` | Respondió 200 pero sin nada que reproducir |
-| `voz: el navegador rechazó el audio…` | Formato o datos corruptos |
-| `voz: el navegador no dejó reproducir: NotAllowedError` | Reproducción automática bloqueada: **no es un fallo de configuración** |
-| `micrófono: not-allowed` | El visitante denegó el permiso |
-| `micrófono: network` / `service-not-allowed` | El navegador no puede transcribir (Brave, Vivaldi, Opera) |
-| `micrófono: este navegador no tiene SpeechRecognition…` | Firefox y los demás sin dictado |
-| `micrófono: no arrancó: InvalidStateError` | Se pulsó con el reconocedor ya activo |
+Los niveles importan: `console.error` solo cuando alguien de la entidad
+tiene que actuar. Un micrófono denegado o un audio que Safari no deja sonar
+sin un gesto salen como `warn`, porque no tienen arreglo en el sitio. Un
+sitio sano no tiene ningún `error` en la consola.
 
-**Lo que se pinta al visitante no cambia.** Un mensaje del servidor en
-pantalla no le dice nada a quien está preguntando por el cáncer gástrico en
-su municipio. La consola es para quien tenga que diagnosticarlo.
+### Lo que la clasificación por código corrigió
+
+Hasta la 2.0 los fallos de los proveedores se clasificaban **solo por el
+estado HTTP**, y eso se equivocaba en cuatro casos reales. Ahora se lee
+primero el tipo de error del cuerpo:
+
+| Caso | La 2.0 decía | La 2.1 dice |
+|---|---|---|
+| OpenAI sin saldo, que llega como 429 (`insufficient_quota`) | límite de peticiones | `UHP-LLM-07` sin saldo |
+| Gemini con clave inválida, que llega como 400 (`API_KEY_INVALID`) | petición mal formada | `UHP-LLM-03` clave rechazada |
+| Anthropic sin saldo, que llega como 400 («credit balance») | petición rechazada | `UHP-LLM-07` sin saldo |
+| ElevenLabs sin caracteres, que llega como 401 (`quota_exceeded`) | la clave no es válida | `UHP-VOZ-07` sin saldo |
 
 ---
 
@@ -248,28 +254,36 @@ como un dato afirmativo—.
 
 ## Si no suena: la lista, en orden
 
-1. **¿Subió la versión del plugin?** `UHP_VERSION` es el `?ver=` de los
-   recursos. Congelada, el navegador sigue sirviendo el JavaScript viejo desde
-   su caché, y el viejo pide rutas que ya no existen. Purgue la caché del sitio
-   después de actualizar.
+1. **¿La página y el servidor son de la misma versión?** Si la consola dice
+   `UHP-CFG-03`, la página es una copia en caché de otra versión: purgue la
+   caché del sitio y la CDN después de actualizar.
 2. **¿Tiene el sitio una CSP?** Hace falta `media-src 'self' blob:`. Sin esa
-   línea el panel funciona entero y simplemente no suena.
-3. **¿Verificó las claves?** El panel dice si la voz existe en la cuenta.
-4. **Mire la consola del navegador.** `voz: el navegador no dejó reproducir sin
-   un gesto` significa que el navegador bloqueó la reproducción automática: en
-   ese caso aparece un botón «Oír la respuesta», que sí vale. `voz: no se pudo
-   sintetizar` apunta al servidor, y entonces el registro de PHP tiene la línea
-   `voz/hablar` con lo que contestó ElevenLabs.
-5. **¿Está en «editores»?** Desde la 2.0.0 ese modo manda un nonce. Si viene de
-   una versión anterior, era el único que no funcionaba.
+   línea el panel funciona entero y simplemente no suena: la consola dice
+   `UHP-AUD-02 · … · MediaError 4`, y justo encima el navegador imprime la
+   violación de la política.
+3. **¿Verificó las claves?** Panel → Asistente AI → «Verificar las claves»:
+   dice si la voz existe en la cuenta, con su código si no.
+4. **Mire la consola del navegador**, filtrando por `URKUNINA`:
+   - `UHP-AUD-03`: el navegador bloqueó la reproducción automática. No es un
+     fallo de configuración: aparece el botón «Oír la respuesta», que sí vale.
+   - `UHP-VOZ-…`: el servidor no pudo sintetizar. La línea trae el `ref`;
+     con él, el registro de PHP tiene lo que contestó ElevenLabs.
+   - `UHP-ACC-07`: se agotó el cupo diario de lecturas en voz alta.
+5. **¿Está en «solo editores»?** Ese modo manda un nonce desde la 2.0.0. Si
+   la consola dice `UHP-ACC-03`, la pestaña llevaba más de un día abierta:
+   basta con recargar.
 
 ## Cómo comprobarlo
 
 ```bash
-php tests/test-datos.php   # 629 comprobaciones
-npm test                   # lo anterior más 135 de navegador
+php tests/test-datos.php   # 724 comprobaciones
+npm test                   # lo anterior más las del navegador
 ```
 
-La sección **14** de `tests/test-datos.php` cubre los dos errores de este
-reporte, y en la suite de navegador hay tres pruebas nuevas que comprueban
-que lo que falla en silencio para el visitante deja rastro en la consola.
+Las secciones **14**, **16** y **17** de `tests/test-datos.php` cubren los
+errores de este reporte, los códigos y lo que exige la documentación de cada
+proveedor; la **19** comprueba que `codigos.md` tiene todos los códigos. En
+la suite de navegador, «cuando el servidor dice que no, se dice por qué» y
+«lo que falla en silencio para el visitante deja rastro en la consola»
+comprueban que el código llega a la pantalla, al atributo
+`data-uhp-voz-error` y a la consola con su `ref`.

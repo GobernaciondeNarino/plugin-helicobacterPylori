@@ -13,8 +13,11 @@
    configurada. Como el panel se abría casi siempre por ahí, el
    asistente mostraba texto y no conversaba.
 
-   Lo que queda es un botón, «Asistente», y dentro una fila de tres:
-   cuadro de texto, enviar y micrófono. La fila se monta UNA vez y
+   Lo que queda es un botón, «Asistente», que abre una ventana con la
+   estructura que mandó la entidad: el hilo, con el nombre de quien habla
+   ENCIMA de cada globo; la línea de estado; «Puedes preguntar:» con sus
+   pastillas; y una barra con el micrófono, el campo en píldora con
+   «enviar» dentro, «parar» y «cerrar». La barra se monta UNA vez y
    después solo cambian atributos; reconstruirla en cada cambio de fase
    desprendía el <input> con el foco dentro, y con él se iba la tecla
    Escape.
@@ -76,7 +79,21 @@
   var MUT_MINIMO_MS = 1500;
   var MUT_POR_MINUTO = 8;
 
-  if (!C || !DATOS || !CFG) { return; }
+  /* UHP-CFG-01. Sin núcleo o sin configuración no hay asistente, y antes
+     eso pasaba EN SILENCIO: el botón se quedaba deshabilitado y nadie
+     sabía por qué. Casi siempre es un optimizador de JavaScript que
+     separó el bloque en línea de este archivo. Se escribe con console
+     directo porque sin núcleo no hay avisar(), y solo si la página tiene
+     un asistente: en las demás este archivo no tendría por qué estar. */
+  if (!C || !DATOS || !CFG) {
+    var sinNucleo = function () {
+      if (!document.querySelector('[data-uhp-voz]') || !window.console || !console.error) { return; }
+      console.error('[URKUNINA 5000] UHP-CFG-01 · el script del asistente corrió sin el núcleo o sin su configuración · ' +
+        (!C ? 'falta window.UHPcore' : 'falta window.UHPVoz'));
+    };
+    if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', sinNucleo); } else { sinNucleo(); }
+    return;
+  }
 
   /* Registro de instancias. Hace falta por la visibilidad «oculto», donde
      el plugin no pinta ningún botón y el de la entidad lo pone su
@@ -124,7 +141,12 @@
 
   function abrirPorPrograma(destino) {
     var v = instanciaDe(destino);
-    if (!v) { return false; }
+    if (!v) {
+      // Dos tableros en la página y un botón que no dice cuál: hay que
+      // indicarlo con data-uhp-voz-abrir="#id".
+      avisar(null, 'UHP-PAN-02', INSTANCIAS.length + ' asistentes en la página');
+      return false;
+    }
     if (v.fase !== 'inactivo') { return true; }
     v.lanzadorActivo = null;
     comenzar(v);
@@ -188,7 +210,13 @@
       desuscribir: null,
       temporizadorCtx: 0,
       trampa: null,
-      focoPrevio: null
+      focoPrevio: null,
+      // La petición en curso, para que «Parar» y el cierre la corten en
+      // la red; y hasta dónde se deshace el historial si se para.
+      abortar: null,
+      marca: null,
+      botonOir: null,
+      errorCodigo: ''
     };
 
     INSTANCIAS.push(v);
@@ -205,7 +233,7 @@
     var externos = document.querySelectorAll('[data-uhp-voz-abrir]');
     for (var k = 0; k < externos.length; k++) {
       if (instanciaDe(externos[k]) === v && externos[k].hasAttribute('aria-expanded')) {
-        v.lanzadores.push({ nodo: externos[k], txt: null, reposo: '', externo: true });
+        v.lanzadores.push({ nodo: externos[k], externo: true });
       }
     }
 
@@ -217,9 +245,25 @@
     // puede estar fuera del panel, y entonces la tecla no llegaría.
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape' || v.fase === 'inactivo') { return; }
+      // Otro control ya usó la tecla, o un método de entrada está
+      // cancelando lo que compone.
+      if (e.defaultPrevented || e.isComposing) { return; }
       if (!v.raiz.isConnected) { return; }
+      if (!focoEsDelAsistente(v)) { return; }
       cerrarPanel(v);
     });
+  }
+
+  /* Escape cierra cuando la persona está EN el asistente: foco dentro, en
+     el <body> o en un lanzador propio de la plantilla. Con el foco en el
+     mapa o en el modal de un gráfico, la tecla es de ellos: antes se
+     cerraban los dos a la vez. */
+  function focoEsDelAsistente(v) {
+    var f = document.activeElement;
+    if (!f || f === document.body || f === document.documentElement) { return true; }
+    if (v.raiz.contains(f)) { return true; }
+    var externo = f.closest ? f.closest('[data-uhp-voz-abrir]') : null;
+    return !!(externo && instanciaDe(externo) === v);
   }
 
   /* RETIRAR LA AUTORIZACIÓN vive FUERA del panel, junto al aviso corto.
@@ -257,14 +301,7 @@
      a esos se les mantiene el aria-expanded al día: un botón que dice
      «cerrado» con el panel abierto le miente a quien no ve la pantalla. */
   function cablearLanzador(v, boton) {
-    var ficha = {
-      nodo: boton,
-      txt: boton.querySelector('span:not(.uhp-voz__icono)'),
-      // El rótulo de reposo es el que trae del servidor, ya traducido.
-      reposo: ''
-    };
-    ficha.reposo = ficha.txt ? ficha.txt.textContent : '';
-    v.lanzadores.push(ficha);
+    v.lanzadores.push({ nodo: boton });
 
     boton.addEventListener('click', function () {
       // Cualquier estado distinto de «inactivo» significa que el panel
@@ -282,13 +319,12 @@
     boton.disabled = false;
   }
 
+  /* El lanzador dice SIEMPRE «Asistente». El estado lo dicen
+     aria-expanded y el fondo: un rótulo que cambia junto con aria-expanded
+     da el estado dos veces y contradice el patrón de botón desplegable. */
   function pintarLanzadores(v, abierto) {
     for (var i = 0; i < v.lanzadores.length; i++) {
-      var l = v.lanzadores[i];
-      l.nodo.setAttribute('aria-expanded', abierto ? 'true' : 'false');
-      // El rótulo solo en los nuestros: el de la plantilla lo escribió la
-      // entidad y no nos toca reescribirlo.
-      if (l.txt && !l.externo) { l.txt.textContent = abierto ? T.cerrar : l.reposo; }
+      v.lanzadores[i].nodo.setAttribute('aria-expanded', abierto ? 'true' : 'false');
     }
   }
 
@@ -324,7 +360,12 @@
   function leido(clave) {
     try {
       return window.sessionStorage.getItem(clave) === '1';
-    } catch (e) { return false; }
+    } catch (e) {
+      // Ventana privada o almacenamiento bloqueado: la autorización se
+      // pedirá cada vez. No es un fallo del sitio.
+      avisarUnaVez(null, 'UHP-AVI-03', (e && e.name) || '');
+      return false;
+    }
   }
 
   function consentido() {
@@ -341,7 +382,10 @@
       } else {
         window.sessionStorage.removeItem(claveConsentimiento());
       }
-    } catch (e) { /* sin almacenamiento, la autorización dura la sesión */ }
+    } catch (e) {
+      // Sin almacenamiento, la autorización dura lo que dure el panel.
+      avisarUnaVez(v, 'UHP-AVI-03', (e && e.name) || '');
+    }
   }
 
   function comenzar(v) {
@@ -354,7 +398,7 @@
 
   function pintarCompuerta(v) {
     var panel = v.nodos.panel;
-    if (!panel) { return; }
+    if (!panel) { avisar(v, 'UHP-PAN-01'); return; }
 
     /* Sin la plantilla no hay aviso que leer, y un aviso VACÍO
        con un botón de aceptar es lo peor que puede ocurrir en este
@@ -364,6 +408,10 @@
        se para aquí. */
     var plantilla = v.nodos.aviso;
     if (!plantilla || !plantilla.content) {
+      /* Un filtro del tema o de kses que quita la etiqueta <template>, o
+         una copia en caché de antes de encender el aviso. */
+      avisar(v, 'UHP-AVI-01');
+      v.errorCodigo = 'UHP-AVI-01';
       montarConversacion(v);
       v.error = T.sin_sesion;
       fase(v, 'error');
@@ -373,6 +421,7 @@
 
     v.p = null;
     panel.innerHTML = '';
+    panel.classList.remove('uhp-voz__panel--conversacion');
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
     var titulo = T.titulo_dos;
@@ -429,7 +478,18 @@
        salude cuesta un turno entero —el prompt del sistema y las diez
        herramientas viajan igual— para decir «hola». */
     turno(v, 'asistente', T.saludo);
-    if (v.p && v.p.campo) { v.p.campo.focus(); }
+    enfocarAlAbrir(v);
+  }
+
+  /* En táctil el foco va al hilo y no al campo: enfocar el campo saca el
+     teclado de golpe y tapa media pantalla a quien venía a dictar. */
+  function enfocarAlAbrir(v) {
+    if (!v.p) { return; }
+    var tactil = false;
+    try { tactil = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) { tactil = false; }
+    var destino = tactil ? v.p.hilo : v.p.campo;
+    if (!destino) { return; }
+    try { destino.focus({ preventScroll: true }); } catch (e) { destino.focus(); }
   }
 
   /* ------------------------------------------------------------------ */
@@ -446,33 +506,206 @@
      se puede hacer en la página que los tiene delante. El servidor no
      tiene tablero que mover. */
 
-  /* Todo lo que va a la consola pasa por aquí, con el mismo prefijo:
-     así `[URKUNINA 5000]` en el filtro de la consola saca la historia
-     entera del asistente. Antes había tres `console.*` sueltos y cuatro
-     caminos de fallo completamente mudos —el audio que no suena, el
-     micrófono que no transcribe—, que son justo los que alguien tiene
-     que diagnosticar desde el equipo de un visitante. */
-  function avisar(donde, detalle) {
-    if (!window.console || !console.warn) { return; }
+  /* LOS CÓDIGOS QUE DETECTA EL NAVEGADOR.
+
+     Cada fallo tiene un código UHP-ÁREA-NN que es el MISMO en la consola,
+     en el registro de PHP, en el panel de administración y en la pantalla
+     del visitante. El área dice dónde mirar y el número qué pasó. Los
+     que detecta el servidor viven en includes/class-uhp-codigos.php y
+     llegan aquí con su frase; la tabla de los dos lados está en
+     docs/voz/codigos.md.
+
+     El nivel es del código y no de quien lo emite: `error` solo cuando
+     alguien de la entidad tiene que actuar. Un micrófono denegado o un
+     autoplay que Safari bloquea no pueden salir en rojo: un sitio sano
+     tiene que tener cero errores en la consola, y si los fallos que no
+     tienen arreglo dieran error, los de verdad dejarían de verse. */
+  var CODIGOS = {
+    // Este se escribe antes de existir el catálogo (sin núcleo no hay
+    // avisar()); está aquí para que la tabla de documentación lo tenga.
+    'UHP-CFG-01': ['error', 'el script del asistente corrió sin el núcleo o sin su configuración'],
+    'UHP-CFG-02': ['error', 'falta la base de la API del sitio (window.UHP.rest)'],
+    'UHP-CFG-03': ['warn', 'la página es de otra versión del plugin que el servidor'],
+    'UHP-ACC-03': ['warn', 'el nonce caducó o la sesión se cerró: hay que recargar la página'],
+    'UHP-RED-01': ['warn', 'el equipo del visitante está sin conexión'],
+    'UHP-RED-02': ['error', 'la petición se quedó sin respuesta del sitio'],
+    'UHP-RED-03': ['error', 'el sitio contestó con algo que no es JSON'],
+    'UHP-RED-04': ['error', 'la ruta del asistente no existe en este sitio'],
+    'UHP-RED-05': ['error', 'otra pieza de WordPress rechazó la petición'],
+    'UHP-RED-06': ['error', 'error fatal de PHP al atender la ruta'],
+    'UHP-RED-07': ['error', 'la respuesta de error no la generó este plugin'],
+    'UHP-RED-08': ['error', 'el sitio contestó con una forma inesperada'],
+    'UHP-AUD-01': ['error', 'el audio no se pudo decodificar'],
+    'UHP-AUD-02': ['error', 'el navegador rechazó el audio al cargarlo'],
+    'UHP-AUD-03': ['warn', 'el navegador no dejó sonar sin un gesto'],
+    'UHP-AUD-04': ['error', 'el navegador no dejó reproducir el audio'],
+    'UHP-AUD-05': ['warn', 'tampoco sonó con el gesto del visitante'],
+    'UHP-MIC-01': ['info', 'este navegador no tiene reconocimiento de voz'],
+    'UHP-MIC-02': ['info', 'el micrófono se apagó para esta visita tras un fallo'],
+    'UHP-MIC-03': ['warn', 'no se pudo crear el reconocedor de voz'],
+    'UHP-MIC-04': ['warn', 'se denegó el permiso del micrófono'],
+    'UHP-MIC-05': ['warn', 'el navegador no ofrece el servicio de transcripción'],
+    'UHP-MIC-06': ['warn', 'el servicio de transcripción del navegador no respondió'],
+    'UHP-MIC-07': ['warn', 'no hay micrófono o lo está usando otra aplicación'],
+    'UHP-MIC-08': ['warn', 'el navegador no transcribe español de Colombia'],
+    'UHP-MIC-09': ['info', 'no se oyó nada mientras se esperaba la pregunta'],
+    'UHP-MIC-10': ['warn', 'el reconocedor de voz no arrancó'],
+    'UHP-MIC-11': ['info', 'el dictado terminó sin texto'],
+    'UHP-MIC-99': ['warn', 'el reconocedor dio un motivo no previsto'],
+    'UHP-CNV-01': ['info', 'pregunta descartada: el asistente todavía respondía'],
+    'UHP-CNV-02': ['warn', 'se alcanzó el tope de vueltas de herramientas'],
+    'UHP-CNV-03': ['warn', 'la respuesta llegó vacía'],
+    'UHP-CNV-04': ['error', 'excepción inesperada en la conversación'],
+    'UHP-HER-01': ['warn', 'el modelo pidió una herramienta que este navegador no tiene'],
+    'UHP-HER-02': ['error', 'una herramienta lanzó una excepción'],
+    'UHP-HER-03': ['warn', 'el tablero rechazó el cambio'],
+    'UHP-HER-04': ['info', 'se agotó el presupuesto de cambios del tablero'],
+    'UHP-HER-05': ['info', 'el argumento de la herramienta no cruza con el tablero'],
+    'UHP-HER-06': ['info', 'la selección espera la confirmación del visitante'],
+    'UHP-HER-07': ['error', 'la confirmación no logró seleccionar el municipio'],
+    'UHP-TAB-01': ['error', 'no hay mando del tablero'],
+    'UHP-TAB-02': ['warn', 'el tablero todavía no tiene datos'],
+    'UHP-TAB-03': ['error', 'al mando le falta una función que pide la herramienta'],
+    'UHP-TAB-04': ['warn', 'el perfil de los participantes no ha cargado'],
+    'UHP-TAB-05': ['warn', 'no se pudo leer el estado de la pantalla'],
+    'UHP-AVI-01': ['error', 'el aviso está encendido pero la página no trae su plantilla'],
+    'UHP-AVI-03': ['info', 'el navegador no deja guardar la autorización'],
+    'UHP-PAN-01': ['error', 'falta el nodo del panel del asistente'],
+    'UHP-PAN-02': ['warn', 'un botón no sabe qué asistente abrir'],
+    'UHP-PAN-03': ['error', 'no se pudo dibujar un icono de la barra'],
+    'UHP-PAN-04': ['info', 'la persona paró la consulta, la voz o el dictado'],
+    'UHP-PAN-05': ['info', 'este navegador no puede cortar la petición en la red'],
+    'UHP-PAN-06': ['info', 'no hay preguntas sugeridas: la fila no se pinta']
+  };
+
+  /* Las últimas veinte entradas, SOLO EN MEMORIA. Con
+     copy(UHPVozAsistente.diagnostico()) el soporte recibe texto en vez de
+     una captura. Nunca en localStorage: en bibliotecas y puntos de acceso
+     público los equipos son compartidos, y un rastro que sobrevive a la
+     visita no le pertenece a quien se sienta después. */
+  var DIARIO = [];
+  var YA_DICHO = {};
+
+  /* TODO lo que va a la consola pasa por aquí, en UNA cadena por fallo:
+
+       [URKUNINA 5000] UHP-MIC-04 · se denegó el permiso del micrófono · not-allowed · v2.1.0
+
+     Una cadena y no objetos, porque en una captura un objeto sale como
+     {…}. El detalle sale de una lista cerrada —nombres de error del
+     navegador, estado HTTP, nombre de herramienta, ref, ruta— y NUNCA
+     lleva la pregunta, la transcripción ni el texto del modelo.
+
+     `extra.frase` y `extra.nivel` los trae el servidor para sus propios
+     códigos: así la consola sigue siendo legible aunque esta página sea
+     de una versión anterior y no conozca el código. `extra.err` es un
+     Error de verdad y va como segundo argumento, para conservar su pila. */
+  function avisar(v, codigo, detalle, extra) {
+    extra = extra || {};
+    var fila = CODIGOS[codigo];
+    var nivel = extra.nivel || (fila ? fila[0] : 'error');
+    var frase = extra.frase || (fila ? fila[1] : 'código sin catalogar');
+
+    var trozos = ['[URKUNINA 5000] ' + codigo, frase];
+    if (detalle) { trozos.push(String(detalle)); }
+    if (extra.ref) { trozos.push('ref ' + extra.ref); }
+    if (extra.ruta) { trozos.push(extra.ruta); }
+    if (CFG.version) { trozos.push('v' + CFG.version); }
+    var linea = trozos.join(' · ');
+
+    DIARIO.push({ hora: new Date().toISOString(), codigo: codigo, nivel: nivel, detalle: detalle ? String(detalle) : '', ref: extra.ref || '' });
+    if (DIARIO.length > 20) { DIARIO.shift(); }
+
+    /* Para las pruebas y para quien inspecciona la página: el último
+       código que no fue informativo. No se borra al recuperarse. */
+    if (v && v.raiz && nivel !== 'info') {
+      v.raiz.setAttribute('data-uhp-voz-error', codigo);
+      if (extra.ref) { v.raiz.setAttribute('data-uhp-voz-ref', extra.ref); } else { v.raiz.removeAttribute('data-uhp-voz-ref'); }
+    }
+
+    if (!window.console) { return; }
+    var fn = (nivel === 'info' ? console.info : (nivel === 'warn' ? console.warn : console.error)) || console.warn;
     try {
-      console.warn('[URKUNINA 5000] ' + donde + ':', detalle);
+      if (extra.err) { fn.call(console, linea, extra.err); } else { fn.call(console, linea); }
     } catch (e) { /* una consola que falla no puede tumbar el panel */ }
   }
 
-  var SVG_ENVIAR = '<svg viewBox="0 0 16 16" width="16" height="16" focusable="false" aria-hidden="true">'
-    + '<path d="M8 13.5V3.2M8 3.2 3.9 7.3M8 3.2l4.1 4.1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>'
-    + '</svg>';
+  // Para los que basta decir una vez por página: no tiene arreglo y
+  // repetirlo en cada pulsación es ruido.
+  function avisarUnaVez(v, codigo, detalle, extra) {
+    if (YA_DICHO[codigo]) { return; }
+    YA_DICHO[codigo] = true;
+    avisar(v, codigo, detalle, extra);
+  }
 
-  var SVG_MICRO = '<svg viewBox="0 0 16 16" width="16" height="16" focusable="false" aria-hidden="true">'
-    + '<path d="M8 1.7a2 2 0 0 1 2 2v4a2 2 0 0 1-4 0v-4a2 2 0 0 1 2-2Z" fill="currentColor"/>'
-    + '<path d="M3.6 7.1v.7a4.4 4.4 0 0 0 8.8 0v-.7M8 12.2v2.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'
-    + '</svg>';
+  // Un argumento libre, recortado: es lo que extrajo el modelo y solo va
+  // a la consola de quien está en este equipo.
+  function corto(x) {
+    var t = String(x == null ? '' : x).replace(/\s+/g, ' ').trim();
+    return t.length > 40 ? t.slice(0, 40) + '…' : t;
+  }
 
-  function pedir(ruta, cuerpo) {
+  /* El code de WordPress de un servidor de antes de los códigos, o de una
+     pieza que no es este plugin, traducido al código UHP que le toca. */
+  function codigoDeWordPress(wp, http, ruta) {
+    var porCode = {
+      uhp_voz_inactivo: 'UHP-ACC-01',
+      uhp_voz_origen: 'UHP-ACC-04',
+      uhp_rate_limit: 'UHP-ACC-05',
+      uhp_voz_cuota: 'UHP-ACC-06',
+      uhp_voz_vacio: 'UHP-CNV-05',
+      uhp_voz_larga: 'UHP-CNV-06',
+      uhp_voz_sin_voz: 'UHP-CFG-04',
+      uhp_voz_red: 'UHP-VOZ-01',
+      rest_no_route: 'UHP-RED-04',
+      rest_cookie_invalid_nonce: 'UHP-ACC-03'
+    };
+    if (porCode[wp]) { return porCode[wp]; }
+    if (wp === 'uhp_voz_proveedor') { return ruta === CFG.rutaVoz ? 'UHP-VOZ-99' : 'UHP-LLM-99'; }
+    if (wp && wp.indexOf('rest_') === 0 && (http === 401 || http === 403)) { return 'UHP-RED-05'; }
+    if (http >= 500 && (!wp || wp === 'internal_server_error')) { return 'UHP-RED-06'; }
+    return 'UHP-RED-07';
+  }
+
+  /* Qué frase ve el visitante, según el código. El mensaje del servidor
+     NO se pinta: no le dice nada a quien pregunta por el cáncer gástrico
+     en su municipio. */
+  function claveVisible(codigo) {
+    if (codigo === 'UHP-ACC-06' || codigo === 'UHP-ACC-07') { return 'sin-cuota'; }
+    if (codigo === 'UHP-ACC-05') { return 'muchas'; }
+    if (codigo === 'UHP-CNV-06') { return 'larga'; }
+    if (codigo === 'UHP-LLM-11' || codigo === 'UHP-LLM-12') { return 'sin-respuesta'; }
+    if (codigo === 'UHP-RED-01') { return 'sin-red'; }
+    return 'sin-sesion';
+  }
+
+  /* LOS ICONOS. Constantes de este archivo: nada del modelo ni del
+     servidor pasa nunca por aquí. Rejilla de 20, trazo 1,75, puntas
+     redondas.
+
+     El micrófono va DOS veces en su botón —tachado en reposo, entero
+     escuchando— y el CSS enseña el que dice aria-pressed: el estado que
+     se ve y el que se oye salen del mismo atributo y no pueden
+     contradecirse. La diagonal del tachado va por y = x − 1 y no por el
+     centro: centrada, el trozo de abajo quedaba pegado a la cápsula y a
+     20 px se leía como un borrón. */
+  var SVG_ABRE = '<svg class="uhp-voz__ico" viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">';
+  var SVG_MICRO_REPOSO = SVG_ABRE.replace('uhp-voz__ico"', 'uhp-voz__ico uhp-voz__ico--reposo"')
+    + '<path d="M12.5 7.25v-3a2.5 2.5 0 0 0-4.47-1.54"/><path d="M7.5 6.5v3.25a2.5 2.5 0 0 0 4.6 1.35"/>'
+    + '<path d="M4.75 8.75v.75a5.25 5.25 0 0 0 9.2 3.45"/><path d="M15.14 10.59a5.25 5.25 0 0 0 .11-1.09v-.75"/>'
+    + '<path d="M10 14.75v3M7.25 17.75h5.5"/><path d="M3.75 2.75l13.5 13.5"/></svg>';
+  var SVG_MICRO_ACTIVO = SVG_ABRE.replace('uhp-voz__ico"', 'uhp-voz__ico uhp-voz__ico--activo"')
+    + '<path d="M10 1.75a2.5 2.5 0 0 1 2.5 2.5v5.5a2.5 2.5 0 0 1-5 0v-5.5a2.5 2.5 0 0 1 2.5-2.5Z"/>'
+    + '<path d="M4.75 8.75v.75a5.25 5.25 0 0 0 10.5 0v-.75"/><path d="M10 14.75v3M7.25 17.75h5.5"/></svg>';
+  var SVG_ENVIAR = SVG_ABRE + '<path d="M10 15.75V4.5"/><path d="M5.25 9.25 10 4.5l4.75 4.75"/></svg>';
+  var SVG_PARAR = SVG_ABRE + '<rect class="uhp-voz__ico-relleno" x="5.5" y="5.5" width="9" height="9" rx="1.5" fill="currentColor"/></svg>';
+  var SVG_CERRAR = SVG_ABRE + '<path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg>';
+
+  function pedir(v, ruta, cuerpo) {
     // La base la pone el núcleo, y se lee con la misma tolerancia que él:
     // `window.UHP.rest` a secas lanza un TypeError en una página donde el
     // bloque del núcleo no haya llegado.
     var base = (window.UHP && window.UHP.rest) || '';
+    if (!base) { avisarUnaVez(v, 'UHP-CFG-02', 'se pide a una ruta relativa'); }
 
     /* El nonce solo viaja cuando el servidor lo mandó, y solo lo manda
        con la visibilidad en «editores». Sin él, WordPress trata la
@@ -481,13 +714,65 @@
     var cab = { 'Content-Type': 'application/json' };
     if (CFG.nonce) { cab['X-WP-Nonce'] = CFG.nonce; }
 
-    return fetch(base + ruta, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: cab,
-      body: JSON.stringify(cuerpo)
-    }).then(function (r) {
-      if (r.ok) { return r.json(); }
+    /* Cada fallo sale de aquí como un Error con su código UHP colgado, y
+       quien lo recibe escribe UNA línea en la consola. Antes pedir()
+       escribía una y quien la recibía otra, de modo que cada fallo
+       aparecía dos veces con dos frases distintas. */
+    function fallo(codigo, detalle, extra) {
+      extra = extra || {};
+      var e = new Error(claveVisible(codigo));
+      e.uhp = codigo;
+      e.detalle = detalle || '';
+      e.frase = extra.frase || '';
+      e.nivel = extra.nivel || '';
+      e.ref = extra.ref || '';
+      e.ruta = ruta;
+      return e;
+    }
+
+    /* Cada petición lleva su interruptor, y el de la última queda en
+       v.abortar para que «Parar» y el cierre la corten en la red. Cortar
+       aquí NO devuelve lo gastado: si el servidor ya preguntó al
+       proveedor, esa consulta cuenta en el cupo. */
+    var ctl = null;
+    if (typeof window.AbortController === 'function') {
+      ctl = new window.AbortController();
+      v.abortar = ctl;
+    } else {
+      avisarUnaVez(v, 'UHP-PAN-05', '«Parar» descarta la respuesta pero no corta la petición');
+    }
+    var op = { method: 'POST', credentials: 'same-origin', headers: cab, body: JSON.stringify(cuerpo) };
+    if (ctl) { op.signal = ctl.signal; }
+    var suelta = function () { if (v.abortar === ctl) { v.abortar = null; } };
+
+    return fetch(base + ruta, op).then(function (r) {
+      /* LA VERSIÓN. Si la página es de una y el servidor de otra, es una
+         copia en caché sin purgar después de actualizar: la causa número
+         uno de «no suena». Una vez por página. */
+      var delServidor = r.headers && r.headers.get ? r.headers.get('X-UHP-Version') : '';
+      if (delServidor && CFG.version && delServidor !== CFG.version) {
+        avisarUnaVez(v, 'UHP-CFG-03', 'página ' + CFG.version + ' · servidor ' + delServidor);
+      }
+
+      if (r.ok) {
+        return r.json().then(function (d) {
+          if (!d || typeof d !== 'object') { throw fallo('UHP-RED-08', 'HTTP ' + r.status + ' sin objeto'); }
+          // Lo que no corta la conversación pero conviene que se sepa: una
+          // respuesta recortada, un historial podado. Con el nivel y la
+          // frase del servidor.
+          if (d.avisos && d.avisos.length) {
+            d.avisos.forEach(function (a) {
+              if (a && a.codigo) { avisar(v, String(a.codigo), '', { frase: a.frase, nivel: a.nivel || 'warn', ruta: ruta }); }
+            });
+          }
+          return d;
+        }, function (e) {
+          if (e && (e.uhp || e.name === 'AbortError')) { throw e; }
+          // Casi siempre son avisos de PHP impresos antes del JSON, o una
+          // caché que sirve HTML con 200.
+          throw fallo('UHP-RED-03', 'HTTP ' + r.status + (e && e.name ? ' · ' + e.name : ''));
+        });
+      }
 
       /* El cuerpo SÍ se lee. WordPress devuelve ahí el `code` del
          WP_Error —uhp_voz_inactivo, uhp_voz_origen, uhp_voz_cuota,
@@ -502,20 +787,36 @@
          Un mensaje del servidor en pantalla no le dice nada a quien está
          preguntando por el cáncer gástrico en su municipio. */
       return r.json().catch(function () { return null; }).then(function (d) {
-        var codigo = (d && typeof d.code === 'string') ? d.code : '';
-        var clave = r.status === 429 ? 'muchas'
-          : (r.status === 413 ? 'larga'
-            : (r.status === 503 ? (codigo === 'uhp_voz_cuota' ? 'sin-cuota' : 'sin-sesion')
-              : 'sin-sesion'));
+        var wp = (d && typeof d.code === 'string') ? d.code : '';
+        var uhp = (d && d.data && d.data.uhp && typeof d.data.uhp.codigo === 'string') ? d.data.uhp : null;
+        var cabecera = r.headers && r.headers.get ? r.headers.get('X-UHP-Codigo') : '';
 
-        avisar('consulta a ' + ruta, 'HTTP ' + r.status + (codigo ? ' · ' + codigo : '') + ' → se muestra «' + clave + '»');
-
-        var e = new Error(clave);
-        e.codigo = r.status;
-        e.servidor = codigo;
-        throw e;
+        /* El código, en este orden: el que trae el cuerpo, el de la
+           cabecera, el que corresponde al code de WordPress y, si no hay
+           nada, RED-07. Que falte el código ES el diagnóstico: la
+           respuesta no la generó este plugin. */
+        var codigo = uhp ? uhp.codigo : (cabecera || codigoDeWordPress(wp, r.status, ruta));
+        var detalle = 'HTTP ' + r.status + ((!uhp && wp) ? ' · ' + wp : '');
+        throw fallo(codigo, detalle, uhp ? { frase: uhp.frase, nivel: uhp.nivel, ref: uhp.ref } : {
+          ref: r.headers && r.headers.get ? (r.headers.get('X-UHP-Ref') || '') : ''
+        });
       });
-    });
+    }, function (e) {
+      if (e && e.uhp) { throw e; }
+      // Una parada propia no es un fallo: la pidió «Parar» o el cierre.
+      if (e && e.name === 'AbortError') { throw e; }
+      /* fetch rechazado: no hubo respuesta. Sin conexión es cosa del
+         equipo del visitante; con conexión, la línea roja del propio
+         navegador justo encima dice qué fue (CSP, certificado, extensión). */
+      var sinRed = (typeof navigator !== 'undefined' && navigator.onLine === false);
+      throw fallo(sinRed ? 'UHP-RED-01' : 'UHP-RED-02', (e && e.name ? e.name : '') + (e && e.message ? ': ' + e.message : ''));
+    }).then(function (d) { suelta(); return d; }, function (e) { suelta(); throw e; });
+  }
+
+  function abortarPeticion(v) {
+    if (!v.abortar) { return; }
+    try { v.abortar.abort(); } catch (e) { /* ya había terminado */ }
+    v.abortar = null;
   }
 
   /* Un turno entero: entra la pregunta del visitante y sale la respuesta.
@@ -536,11 +837,14 @@
        Puesta aquí, deja de importar si la pregunta vino del teclado, del
        micrófono o de una confirmación. */
     if (v.fase === 'pensando' || v.fase === 'habla') {
-      avisar('conversación', 'pregunta descartada: el asistente todavía está respondiendo');
+      avisar(v, 'UHP-CNV-01');
       return Promise.resolve();
     }
 
     var mia = v.gen;
+    // Hasta aquí se deshace el historial si se pulsa «Parar».
+    v.marca = v.hist.length;
+    v.errorCodigo = '';
 
     /* Qué hay en pantalla, antes de la pregunta y solo cuando cambió.
        Dos razones, y ninguna es de estilo:
@@ -570,7 +874,7 @@
     function vuelta() {
       if (mia !== v.gen) { return Promise.resolve(); }
 
-      return pedir(CFG.rutaChat, { mensajes: v.hist }).then(function (d) {
+      return pedir(v, CFG.rutaChat, { mensajes: v.hist }).then(function (d) {
         if (mia !== v.gen) { return; }
 
         var dicho = (d && typeof d.texto === 'string') ? d.texto : '';
@@ -583,7 +887,12 @@
             turno(v, 'asistente', dicho);
             hablar(v, dicho);
           } else {
-            fase(v, 'escucha');
+            /* Desde la 2.1 el servidor convierte una respuesta vacía en
+               UHP-LLM-12. Que llegue una aquí es la pista de un servidor
+               de versión anterior. Y no se deja al visitante sin nada. */
+            avisar(v, 'UHP-CNV-03');
+            turno(v, 'asistente', T.sin_respuesta);
+            hablar(v, T.sin_respuesta);
           }
           return;
         }
@@ -604,6 +913,17 @@
              muda: el panel entregaba una frase y el canal de audio no la
              acompañaba, de modo que quien depende del oído no se
              enteraba de que había habido respuesta. */
+          avisar(v, 'UHP-CNV-02', 'tope ' + tope);
+          /* Y CADA LLAMADA CON SU RESULTADO, aunque no se ejecute. Los tres
+             proveedores exigen que a una llamada le siga su resultado: sin
+             esto, la pregunta siguiente de esta conversación daba 400 y el
+             asistente se quedaba mudo hasta cerrar el panel. */
+          v.hist.push({
+            rol: 'herramienta',
+            resultados: llamadas.map(function (l) {
+              return { id: l.id, nombre: l.nombre, salida: 'No se ejecutó: se alcanzó el tope de vueltas.' };
+            })
+          });
           turno(v, 'asistente', T.vueltas);
           hablar(v, T.vueltas);
           return;
@@ -616,6 +936,7 @@
 
     return vuelta().catch(function (err) {
       if (mia !== v.gen) { return; }
+      if (err && err.name === 'AbortError') { return; }
       fallar(v, err);
     });
   }
@@ -630,14 +951,19 @@
       var fn = util[l.nombre];
       var r;
       if (typeof fn !== 'function') {
+        // Un JS en caché anterior a las herramientas del servidor, o un
+        // nombre inventado por el modelo.
+        avisar(v, 'UHP-HER-01', corto(l.nombre));
         r = 'No existe una herramienta con ese nombre.';
       } else {
+        v.herramientaActual = l.nombre;
         try {
           r = fn(l.args || {});
         } catch (e) {
           r = 'La herramienta falló.';
-          avisar('herramienta ' + l.nombre, e);
+          avisar(v, 'UHP-HER-02', l.nombre + ' · ' + ((e && e.name) || 'Error') + ': ' + ((e && e.message) || ''), { err: e });
         }
+        v.herramientaActual = '';
       }
       salida.push({
         id: l.id,
@@ -666,21 +992,26 @@
     var mia = v.gen;
     fase(v, 'habla');
 
-    pedir(CFG.rutaVoz, { texto: texto }).then(function (d) {
+    pedir(v, CFG.rutaVoz, { texto: texto }).then(function (d) {
       if (mia !== v.gen) { return; }
       if (!d || !d.audio) {
-        avisar('voz', 'el servidor contestó sin audio; revise el registro del sitio');
+        avisar(v, 'UHP-RED-08', 'la síntesis contestó sin audio', { ruta: CFG.rutaVoz });
         fase(v, 'escucha');
         return;
       }
       reproducir(v, d.tipo || 'audio/mpeg', d.audio);
     }).catch(function (e) {
+      if (e && e.name === 'AbortError') { return; }
       /* Que no suene no es un fallo de la conversación: la respuesta ya
          está escrita en el panel. Se sigue, en silencio PARA EL
          VISITANTE, en vez de pintarle un error a quien ya tiene delante
          lo que preguntó. Pero no en silencio para quien tenga que
          averiguar por qué no suena: eso antes no dejaba ni un rastro. */
-      avisar('voz', 'no se pudo sintetizar: ' + ((e && e.message) || 'motivo desconocido'));
+      if (e && e.uhp) {
+        avisar(v, e.uhp, e.detalle, { frase: e.frase, nivel: e.nivel, ref: e.ref, ruta: e.ruta });
+      } else {
+        avisar(v, 'UHP-CNV-04', ((e && e.name) || 'Error') + ': ' + ((e && e.message) || ''), { err: e });
+      }
       if (mia === v.gen) { fase(v, 'escucha'); }
     });
   }
@@ -697,7 +1028,8 @@
       url = window.URL.createObjectURL(new Blob([bytes], { type: tipo }));
       a = new Audio(url);
     } catch (e) {
-      avisar('voz', 'no se pudo decodificar el audio: ' + ((e && e.message) || e));
+      // Una respuesta truncada por un proxy con límite de tamaño, casi siempre.
+      avisar(v, 'UHP-AUD-01', (e && e.name) || 'Error');
       fase(v, 'escucha');
       return;
     }
@@ -736,7 +1068,10 @@
          «el navegador rechazó el audio»: la propia parada ensuciaba el
          único rastro que servía para diagnosticar. */
       if (v.audio === a) {
-        avisar('voz', 'el navegador rechazó el audio (formato o datos corruptos)');
+        /* El número de MediaError dice cuál: con 4, casi siempre es la
+           CSP del sitio sin `media-src 'self' blob:`, y el navegador
+           imprime la violación justo antes; con 3, datos corruptos. */
+        avisar(v, 'UHP-AUD-02', 'MediaError ' + ((a.error && a.error.code) || '?'));
       }
       fin();
     });
@@ -757,12 +1092,12 @@
            documento. Aquí NO se tira el audio: se ofrece oírlo con una
            pulsación, que es un gesto nuevo y sí vale. */
         if ('NotAllowedError' === cual && v.audio === a) {
-          avisar('voz', 'el navegador no dejó reproducir sin un gesto; se ofrece un botón');
+          avisar(v, 'UHP-AUD-03', 'NotAllowedError · se ofrece «' + T.oir + '»');
           ofrecerAudio(v, a);
           return;
         }
 
-        avisar('voz', 'el navegador no dejó reproducir: ' + cual);
+        avisar(v, 'UHP-AUD-04', cual);
         fin();
       });
     }
@@ -775,14 +1110,21 @@
     if (!v.p || !v.p.hilo.isConnected) { return; }
 
     var b = boton(T.oir, 'uhp-voz__btn uhp-voz__btn--fino', function () {
-      if (b.parentNode) { b.parentNode.removeChild(b); }
+      if (v.audio !== a) { quitarOir(v); return; }
+      // Suena: es «habla», y «Parar» se activa. El foco pasa a él ANTES de
+      // quitar este botón, que si no se iría al <body> con el nodo.
+      fase(v, 'habla');
+      if (v.p && v.p.parar) { v.p.parar.focus(); }
+      quitarOir(v);
       var p2 = a.play();
       if (p2 && p2.catch) {
         p2.catch(function (e2) {
-          avisar('voz', 'tampoco con el gesto: ' + ((e2 && e2.name) || 'motivo desconocido'));
+          avisar(v, 'UHP-AUD-05', (e2 && e2.name) || 'motivo desconocido');
+          if (v.fase === 'habla') { fase(v, 'escucha'); }
         });
       }
     });
+    v.botonOir = b;
     v.p.hilo.appendChild(b);
     v.p.hilo.scrollTop = v.p.hilo.scrollHeight;
     if (v.fase === 'habla') { fase(v, 'escucha'); }
@@ -803,6 +1145,13 @@
     soltarAudio(v.audio, v.audioUrl);
     v.audio = null;
     v.audioUrl = null;
+    // El botón apuntaba a un audio cuya URL acaba de revocarse.
+    quitarOir(v);
+  }
+
+  function quitarOir(v) {
+    if (v.botonOir && v.botonOir.parentNode) { v.botonOir.parentNode.removeChild(v.botonOir); }
+    v.botonOir = null;
   }
 
   /* ------------------------------------------------------------------ */
@@ -816,6 +1165,34 @@
     return window.SpeechRecognition || window.webkitSpeechRecognition || null;
   }
 
+  /* EL DICTADO ESPERA A QUE LA PERSONA TERMINE.
+
+     Antes el reconocedor iba con `continuous = false`, y eso significa
+     que el navegador da por terminada la frase en la PRIMERA pausa y
+     entrega solo ese trozo. Quien decía «¿cuántos municipios… hay en la
+     zona roja?» con un respiro en medio mandaba «¿cuántos municipios»,
+     y el asistente contestaba a media pregunta. Es justo el público de
+     este tablero —personas de 40 a 65 años— el que hace esas pausas.
+
+     Ahora son tres reglas:
+
+       1. ESPERA A QUE EMPIECE. Hasta que no llega la primera palabra no
+          corre ningún reloj. Si el navegador se cansa de esperar —Chrome
+          cierra a los pocos segundos de silencio inicial con 'no-speech'—
+          se vuelve a abrir, hasta ESPERA_MAX_MS.
+
+       2. NO CORTA EN LAS PAUSAS. Modo continuo y resultados parciales: el
+          texto se va acumulando y se ve en el campo mientras se dicta. Si
+          el navegador cierra solo a mitad —Chrome en Android lo hace tras
+          cada frase—, se vuelve a abrir y se sigue acumulando.
+
+       3. TERMINA CUANDO CALLA. Desde la última palabra corre un reloj de
+          `CFG.silencio` segundos, configurable en el panel. Si no dice
+          nada más, se entrega la pregunta entera. Pulsar el micrófono
+          otra vez la entrega ya; pulsar «parar» la descarta. */
+  var ESPERA_MAX_MS = 20000;
+  var REINICIOS_MAX = 12;
+
   function escuchar(v) {
     var Motor = motorVoz();
     /* `v.micMuerto` lo pone el primer fallo del servicio. La detección
@@ -825,16 +1202,18 @@
        servicio de Google que esos navegadores no tienen. Reintentar ahí
        es pedirle al visitante que pulse un botón roto. */
     if (!Motor || v.micMuerto) {
-      avisar('micrófono', Motor
-        ? 'apagado para esta visita tras un fallo del servicio de transcripción'
-        : 'este navegador no tiene SpeechRecognition (Firefox, Opera, Brave, Vivaldi)');
+      avisar(v, Motor ? 'UHP-MIC-02' : 'UHP-MIC-01', Motor ? '' : 'sin SpeechRecognition');
+      v.errorCodigo = Motor ? 'UHP-MIC-02' : 'UHP-MIC-01';
       v.errorMicro = true;
       v.error = T.sin_reconocimiento;
       fase(v, 'error');
       actualizarPie(v);
       return;
     }
-    if (v.oyendo) { pararEscucha(v); return; }
+
+    // Pulsar otra vez mientras escucha ENTREGA lo dictado: es la forma
+    // de no esperar al silencio cuando uno ya sabe que terminó.
+    if (v.oyendo && v.dictado) { pedirFinDictado(v, v.dictado); return; }
 
     // Ni se abre mientras el asistente está respondiendo: lo que se
     // dictara ahí se descartaría en preguntar(), y haber hablado para
@@ -846,96 +1225,233 @@
 
     /* Se calla el asistente antes de abrir el micrófono. Si no, su propia
        voz entra por el micrófono, se transcribe como si la hubiera dicho
-       el ciudadano, y el asistente se pone a conversar consigo mismo. */
+       la persona, y el asistente se pone a conversar consigo mismo. */
     pararAudio(v);
     if (v.fase === 'habla') { fase(v, 'escucha'); }
 
-    var mia = v.gen;
+    if (v.fase === 'error') { v.error = ''; v.errorCodigo = ''; v.errorMicro = false; fase(v, 'escucha'); }
+
+    var d = {
+      gen: v.gen,
+      finales: '',
+      parcial: '',
+      hablo: false,
+      inicio: Date.now(),
+      reinicios: 0,
+      reloj: null,
+      seguro: null,
+      terminando: false,
+      terminado: false,
+      motor: Motor
+    };
+    v.dictado = d;
+    if (v.p && v.p.campo) { v.p.campo.value = ''; }
+
+    if (!abrirMotor(v, d)) { return; }
+    v.oyendo = true;
+    anunciar(v, T.oyendo);
+    actualizarPie(v);
+  }
+
+  /* Abre UNA instancia del reconocedor. Se llama al empezar y cada vez
+     que el navegador cierra solo antes de tiempo. */
+  function abrirMotor(v, d) {
     var r;
     try {
-      r = new Motor();
+      r = new d.motor();
     } catch (e) {
-      avisar('micrófono', 'no se pudo crear el reconocedor: ' + ((e && e.message) || e));
+      avisar(v, 'UHP-MIC-03', (e && e.name) || 'Error');
+      soltarDictado(v, d);
+      v.errorCodigo = 'UHP-MIC-03';
       v.errorMicro = true;
       v.error = T.sin_reconocimiento;
       fase(v, 'error');
       actualizarPie(v);
-      return;
+      return false;
     }
 
     r.lang = 'es-CO';
-    r.continuous = false;
-    r.interimResults = false;
+    r.continuous = true;
+    r.interimResults = true;
     r.maxAlternatives = 1;
 
     r.onresult = function (e) {
-      if (mia !== v.gen) { return; }
-      var t = '';
-      try { t = e.results[0][0].transcript; } catch (err) { t = ''; }
-      t = String(t || '').trim();
-      if (t) { preguntar(v, t); }
+      if (!vigente(v, d)) { return; }
+      var parcial = '';
+      var desde = (e && typeof e.resultIndex === 'number') ? e.resultIndex : 0;
+      var res = (e && e.results) || [];
+      for (var i = desde; i < res.length; i++) {
+        var t = (res[i] && res[i][0] && res[i][0].transcript) || '';
+        if (res[i].isFinal) {
+          d.finales = juntar(d.finales, t);
+        } else {
+          parcial = juntar(parcial, t);
+        }
+      }
+      d.parcial = parcial;
+
+      var todo = juntar(d.finales, d.parcial);
+      if (todo) {
+        d.hablo = true;
+        // Se ve en el campo mientras se dicta: quien habla comprueba que
+        // se le está entendiendo, y quien no ve la pantalla lo oirá como
+        // su turno cuando se entregue.
+        if (v.p && v.p.campo) { v.p.campo.value = todo; }
+        relojSilencio(v, d);
+      }
     };
 
     r.onerror = function (e) {
-      if (mia !== v.gen) { return; }
+      if (!vigente(v, d)) { return; }
       var cual = (e && e.error) || '';
-      /* El motivo lo da el navegador y decide la frase y si se apaga el
-         micrófono, pero no se veía en ninguna parte. Es el dato que
-         separa «el visitante dijo que no» ('not-allowed') de «este
-         navegador no puede» ('network', 'service-not-allowed') de «no
-         hay micrófono» ('audio-capture'), y los tres se arreglan
-         distinto. */
-      avisar('micrófono', cual || 'motivo desconocido');
 
-      // «Sin habla» es que el visitante no dijo nada: ni es un fallo ni
-      // merece un cartel rojo.
+      /* 'no-speech' es «todavía no ha dicho nada»: no es un fallo y no se
+         corta, que es exactamente lo que pidió la entidad —que espere a
+         que la persona hable—. Lo resuelve `onend`, volviendo a abrir.
+         'aborted' es nuestra propia parada. */
       if ('no-speech' === cual || 'aborted' === cual) { return; }
 
-      /* Que el fallo fue del MICRÓFONO y no de la conversación. De eso
-         depende que el pie siga ofreciendo por dónde preguntar: sin esta
-         marca, quien deniega el permiso se queda con un cartel y nada
-         que pulsar, que es exactamente lo que la Resolución 1519 de 2020
-         llama no tener alternativa. */
+      /* El motivo lo da el navegador y decide la frase y si se apaga el
+         micrófono. Es el dato que separa «la persona dijo que no»
+         ('not-allowed') de «este navegador no puede» ('network',
+         'service-not-allowed') de «no hay micrófono» ('audio-capture'). */
+      var porMotivo = {
+        'not-allowed': 'UHP-MIC-04',
+        'service-not-allowed': 'UHP-MIC-05',
+        'network': 'UHP-MIC-06',
+        'audio-capture': 'UHP-MIC-07',
+        'language-not-supported': 'UHP-MIC-08'
+      };
+      /* 'not-allowed' junta tres causas que el navegador no deja
+         distinguir: la persona dijo que no, la cabecera Permissions-Policy
+         del sitio, o una página sin HTTPS. */
+      avisar(v, porMotivo[cual] || 'UHP-MIC-99', cual || 'sin motivo');
+      v.errorCodigo = porMotivo[cual] || 'UHP-MIC-99';
       v.errorMicro = true;
-
       if ('not-allowed' === cual) {
-        // Lo denegó el visitante. Puede cambiar de idea, así que el
-        // micrófono sigue ahí.
         v.error = T.sin_micro;
       } else {
-        /* Cualquier otra cosa —'network', 'service-not-allowed',
-           'audio-capture'— significa que este navegador no va a poder, y
-           se apaga el micrófono para esta visita en vez de dejar un botón
-           que falla cada vez. El canal escrito sigue entero. */
         v.micMuerto = true;
         v.error = T.sin_reconocimiento;
       }
+      soltarDictado(v, d);
       fase(v, 'error');
       actualizarPie(v);
     };
 
     r.onend = function () {
-      v.oyendo = false;
-      v.escucha = null;
-      if (mia === v.gen) { actualizarPie(v); }
+      if (!vigente(v, d)) { return; }
+
+      // Lo pidió el reloj de silencio o un segundo toque: se entrega.
+      if (d.terminando) { entregarDictado(v, d); return; }
+
+      /* El navegador cerró SOLO. Antes eso era el final; ahora no: si la
+         persona aún no habló, se la sigue esperando; si ya habló, puede
+         estar tomando aire, y lo decide el reloj de silencio. */
+      var esperando = !d.hablo && (Date.now() - d.inicio) < ESPERA_MAX_MS;
+      if ((esperando || d.hablo) && d.reinicios < REINICIOS_MAX) {
+        d.reinicios++;
+        if (abrirMotor(v, d)) { return; }
+        return;
+      }
+
+      if (d.hablo) {
+        entregarDictado(v, d);
+      } else {
+        // Se acabó la espera sin oír nada. Se dice, y el micrófono queda
+        // listo para otro intento.
+        avisar(v, 'UHP-MIC-09', Math.round(ESPERA_MAX_MS / 1000) + ' s');
+        soltarDictado(v, d);
+        anunciar(v, T.no_oi);
+        actualizarPie(v);
+      }
     };
 
     try {
       r.start();
+      d.instancia = r;
       v.escucha = r;
-      v.oyendo = true;
-      anunciar(v, T.oyendo);
-      actualizarPie(v);
+      return true;
     } catch (e) {
       // `start()` sobre un reconocedor ya activo lanza InvalidStateError.
-      avisar('micrófono', 'no arrancó: ' + ((e && e.name) || e));
-      v.oyendo = false;
-      v.escucha = null;
+      // Casi siempre una doble pulsación rápida.
+      avisar(v, 'UHP-MIC-10', (e && e.name) || 'Error');
+      soltarDictado(v, d);
+      actualizarPie(v);
+      return false;
     }
   }
 
+  function vigente(v, d) {
+    return v.dictado === d && d.gen === v.gen && !d.terminado;
+  }
+
+  function juntar(a, b) {
+    return (String(a || '') + ' ' + String(b || '')).replace(/\s+/g, ' ').trim();
+  }
+
+  // Cada palabra nueva reinicia la cuenta: lo que se mide es el silencio
+  // DESPUÉS de la última, no el tiempo desde que se pulsó.
+  function relojSilencio(v, d) {
+    window.clearTimeout(d.reloj);
+    var ms = Math.max(1000, Math.min(6000, (Number(CFG.silencio) || 2) * 1000));
+    d.reloj = window.setTimeout(function () {
+      if (vigente(v, d)) { pedirFinDictado(v, d); }
+    }, ms);
+  }
+
+  /* Se le pide al navegador que cierre con `stop()` —no `abort()`—,
+     porque `stop()` todavía entrega como definitivo lo último que
+     estaba oyendo. Y un seguro por si `onend` no llega nunca, que en
+     algunos navegadores pasa tras un corte de red. */
+  function pedirFinDictado(v, d) {
+    if (d.terminando) { return; }
+    d.terminando = true;
+    window.clearTimeout(d.reloj);
+    d.seguro = window.setTimeout(function () {
+      if (vigente(v, d)) { entregarDictado(v, d); }
+    }, 1500);
+    try {
+      if (d.instancia) { d.instancia.stop(); }
+    } catch (e) {
+      entregarDictado(v, d);
+    }
+  }
+
+  function entregarDictado(v, d) {
+    if (d.terminado) { return; }
+    var texto = juntar(d.finales, d.parcial);
+    soltarDictado(v, d);
+    actualizarPie(v);
+    if (v.p && v.p.campo) { v.p.campo.value = ''; }
+    if (texto) { preguntar(v, texto); return; }
+    // Safari a veces cierra sin evento de error y sin texto: sin esto el
+    // visitante creía que el botón no hacía nada.
+    avisar(v, 'UHP-MIC-11');
+    anunciar(v, T.no_oi);
+  }
+
+  function soltarDictado(v, d) {
+    if (!d) { return; }
+    d.terminado = true;
+    window.clearTimeout(d.reloj);
+    window.clearTimeout(d.seguro);
+    if (v.dictado === d) { v.dictado = null; }
+    if (v.escucha === d.instancia) { v.escucha = null; }
+    v.oyendo = false;
+  }
+
+  // Parar SIN entregar: lo dictado se descarta. Es lo que hace el botón
+  // de parar, cerrar la ventana y la tecla Escape.
   function pararEscucha(v) {
-    if (v.escucha) {
+    var d = v.dictado;
+    if (d) {
+      soltarDictado(v, d);
+      if (d.instancia) {
+        try { d.instancia.abort(); } catch (e) { /* ya terminó */ }
+      }
+      if (v.p && v.p.campo) { v.p.campo.value = ''; }
+    } else if (v.escucha) {
       try { v.escucha.abort(); } catch (e) { /* ya terminó */ }
       v.escucha = null;
     }
@@ -953,6 +1469,8 @@
     // micrófono escuchando. No hay sesión que cerrar contra nadie.
     pararAudio(v);
     pararEscucha(v);
+    abortarPeticion(v);
+    v.marca = null;
 
     // Lo sugerido y lo confirmado son de UNA conversación. Si sobreviven,
     // la confirmación por pulsación que protege de elegir el municipio
@@ -977,23 +1495,69 @@
        mensajes de red cambian entre navegadores y entre versiones, y una
        clasificación por texto acaba enseñándole al visitante el error
        equivocado. */
-    var clave = (err && err.message) || '';
+    var clave = (err && err.uhp) ? err.message : '';
     var mensaje = T.sin_sesion;
 
     if (clave === 'sin-cuota') { mensaje = T.sin_cuota; }
     else if (clave === 'muchas') { mensaje = T.muchas; }
     else if (clave === 'larga') { mensaje = T.larga; }
+    else if (clave === 'sin-respuesta') { mensaje = T.sin_respuesta; }
+    else if (clave === 'sin-red') { mensaje = T.sin_red || T.sin_sesion; }
+
+    if (err && err.uhp) {
+      avisar(v, err.uhp, err.detalle, { frase: err.frase, nivel: err.nivel, ref: err.ref, ruta: err.ruta });
+    } else {
+      // Sin código es un defecto de este archivo, no del servidor: va con
+      // la pila del Error.
+      avisar(v, 'UHP-CNV-04', ((err && err.name) || 'Error') + ': ' + ((err && err.message) || ''), { err: err });
+    }
 
     v.error = mensaje;
+    v.errorCodigo = (err && err.uhp) || 'UHP-CNV-04';
     v.errorMicro = false;
     fase(v, 'error');
     actualizarPie(v);
-    avisar(
-      'conversación',
-      (clave || 'desconocido')
-        + (err && err.codigo ? ' · HTTP ' + err.codigo : '')
-        + (err && err.servidor ? ' · ' + err.servidor : '')
-    );
+  }
+
+  function ocupado(v) { return v.fase === 'pensando' || v.fase === 'habla'; }
+
+  /* «PARAR»: corta lo que esté en curso y deja la ventana lista. No
+     cierra, no borra el hilo y no toca el tablero.
+       · ESPERA del modelo → se aborta y el historial vuelve a antes de la
+         pregunta: una pregunta abandonada que siguiera ahí la contestaría
+         el modelo en el turno siguiente, mezclada con la nueva.
+       · VOZ pidiéndose o sonando → se aborta o se para.
+       · DICTADO → se corta SIN entregar.
+     v.gen sube: lo que vuelva después es de una pregunta abandonada. */
+  function detener(v) {
+    var consultando = v.fase === 'pensando';
+    var hablando = v.fase === 'habla' || !!(v.audio && !v.audio.paused);
+    var dictando = !!v.oyendo;
+    if (!consultando && !hablando && !dictando) { return; }
+
+    v.gen++;
+    abortarPeticion(v);
+    pararEscucha(v);
+    pararAudio(v);
+
+    if (consultando && typeof v.marca === 'number' && v.marca <= v.hist.length) {
+      v.hist.length = v.marca;
+      v.ultimoEstado = '';
+    }
+    v.marca = null;
+
+    avisar(v, 'UHP-PAN-04', [consultando ? 'consulta' : '', hablando ? 'voz' : '', dictando ? 'dictado' : ''].filter(Boolean).join(' + '));
+    fase(v, 'escucha');
+    actualizarPie(v);
+    if (consultando) { nota(v, T.parado); } else { anunciar(v, T.parado); }
+  }
+
+  function nota(v, texto) {
+    if (!v.p || !v.p.hilo.isConnected) { return; }
+    var n = C.el('p', 'uhp-voz__nota', texto);
+    if (v.confirmaCaja && v.confirmaCaja.parentNode === v.p.hilo) { v.p.hilo.insertBefore(n, v.confirmaCaja); }
+    else { v.p.hilo.appendChild(n); }
+    v.p.hilo.scrollTop = v.p.hilo.scrollHeight;
   }
 
   /* ------------------------------------------------------------------ */
@@ -1006,10 +1570,10 @@
         return conMando(v, function (m) {
           var val = p && p.indicador;
           if (val !== 'lpm' && val !== 'hp') {
-            return 'Solo puedo mostrar dos indicadores: lesión precursora de malignidad e infección por H. pylori.';
+            return noCruza(v, val, 'Solo puedo mostrar dos indicadores: lesión precursora de malignidad e infección por H. pylori.');
           }
-          if (!gastar(v)) { return T.demasiado; }
-          if (!m.setIndicador(val)) { return 'No pude cambiar el indicador.'; }
+          if (!gastar(v)) { return sinCupo(v); }
+          if (!m.setIndicador(val)) { return rechazo(v, 'No pude cambiar el indicador.'); }
           var e = m.estado();
           return 'Indicador cambiado a ' + e.indicadorEtiqueta + '. Promedio de la selección: ' + cifra(e.promedio) + '.';
         });
@@ -1020,10 +1584,10 @@
           var z = p && p.zona;
           var destino = (!z || z === 'todas') ? null : String(z).toLowerCase();
           if (destino && m.catalogo().zonas.indexOf(destino) < 0) {
-            return 'No conozco esa zona. Las zonas son roja, amarilla y verde.';
+            return noCruza(v, z, 'No conozco esa zona. Las zonas son roja, amarilla y verde.');
           }
-          if (!gastar(v)) { return T.demasiado; }
-          if (!m.setZona(destino)) { return 'No pude aplicar ese filtro.'; }
+          if (!gastar(v)) { return sinCupo(v); }
+          if (!m.setZona(destino)) { return rechazo(v, 'No pude aplicar ese filtro.'); }
           var e = m.estado();
           return destino
             ? (e.zonaEtiqueta + ': ' + e.visibles + ' municipios de los 55 intervenidos.')
@@ -1035,14 +1599,14 @@
         return conMando(v, function (m) {
           var texto = p && p.subregion;
           if (!texto || String(texto).toLowerCase() === 'todas') {
-            if (!gastar(v)) { return T.demasiado; }
-            m.setSubregion(null);
+            if (!gastar(v)) { return sinCupo(v); }
+            if (!m.setSubregion(null)) { return rechazo(v, 'No pude quitar ese filtro.'); }
             return 'Filtro de subregión retirado: ' + m.estado().visibles + ' municipios.';
           }
           var nombre = cruzarSubregion(m, texto);
-          if (!nombre) { return sinSubregion(m); }
-          if (!gastar(v)) { return T.demasiado; }
-          if (!m.setSubregion(nombre)) { return 'No pude aplicar ese filtro.'; }
+          if (!nombre) { return noCruza(v, texto, sinSubregion(m)); }
+          if (!gastar(v)) { return sinCupo(v); }
+          if (!m.setSubregion(nombre)) { return rechazo(v, 'No pude aplicar ese filtro.'); }
           var e = m.estado();
           return 'Subregión ' + nombre + ': ' + e.visibles + ' municipios. ' +
             e.indicadorEtiqueta + ' promedio ' + cifra(e.promedio) + '.';
@@ -1060,28 +1624,31 @@
           }
           if (r.estado === 'ambiguo') {
             v.sugerido = r.sugerencias;
+            avisar(v, 'UHP-HER-06', r.sugerencias.join(', '));
             pedirConfirmacion(v, r.sugerencias);
             return 'Hay varios municipios con ese nombre de cerca: ' + r.sugerencias.join(', ') +
-              '. Le he puesto los botones en pantalla para que elija.';
+              '. Le puse los botones en pantalla para que elija.';
           }
           if (r.estado === 'sugerencia') {
             v.sugerido = [r.sugerencia];
+            avisar(v, 'UHP-HER-06', r.sugerencia);
             pedirConfirmacion(v, [r.sugerencia]);
             return 'No encontré ese municipio. ¿Quiso decir ' + r.sugerencia +
-              '? Le he puesto un botón en pantalla para confirmarlo.';
+              '? Le puse un botón en pantalla para confirmarlo.';
           }
           if (r.estado !== 'exacto') {
-            return 'No encuentro ese municipio entre los 55 que intervino el proyecto.';
+            return noCruza(v, p && p.municipio, 'No encuentro ese municipio entre los 55 que intervino el proyecto.');
           }
           // Lo que llegó por sugerencia necesita la pulsación aunque ahora
           // cruce exacto: si no, el modelo se autoconfirma en el turno
           // siguiente y la salvaguarda no sirve de nada.
           if (v.sugerido && v.sugerido.indexOf(r.municipio.n) >= 0 && v.confirmado !== r.municipio.n) {
+            avisar(v, 'UHP-HER-06', r.municipio.n);
             pedirConfirmacion(v, v.sugerido);
             return 'Necesito que confirme ' + r.municipio.n + ' con el botón de la pantalla.';
           }
-          if (!gastar(v)) { return T.demasiado; }
-          if (!m.setMunicipio(r.municipio.n)) { return 'No pude seleccionarlo.'; }
+          if (!gastar(v)) { return sinCupo(v); }
+          if (!m.setMunicipio(r.municipio.n)) { return rechazo(v, 'No pude seleccionarlo.'); }
           // De un solo uso: ni dentro de la misma conversación vale dos veces.
           v.sugerido = null;
           v.confirmado = null;
@@ -1091,8 +1658,8 @@
 
       uhp_limpiar_tablero: function () {
         return conMando(v, function (m) {
-          if (!gastar(v)) { return T.demasiado; }
-          m.limpiar();
+          if (!gastar(v)) { return sinCupo(v); }
+          if (m.limpiar() === false) { return rechazo(v, 'No pude quitar los filtros.'); }
           return 'Filtros quitados: los 55 municipios priorizados a la vista.';
         });
       },
@@ -1116,7 +1683,7 @@
         if (r.estado === 'sugerencia') {
           return 'No encontré ese municipio. ¿Quiso decir ' + r.sugerencia + '?';
         }
-        if (r.estado !== 'exacto') { return 'No encuentro ese municipio entre los 55.'; }
+        if (r.estado !== 'exacto') { return noCruza(v, p && p.municipio, 'No encuentro ese municipio entre los 55.'); }
         return describir(r.municipio, r.vecino);
         });
       },
@@ -1142,6 +1709,8 @@
       uhp_comparar_subregiones: function (p) {
         return conMando(v, function (m) {
           if (!m.rankingSubregiones) {
+            // uhp-dashboard.js y este archivo son de versiones distintas.
+            avisar(v, 'UHP-TAB-03', 'rankingSubregiones');
             return 'Este tablero no puede darme el gráfico de barras.';
           }
           var r = m.rankingSubregiones();
@@ -1198,9 +1767,13 @@
              ausencias en personas. */
       uhp_consultar_perfil: function (p) {
         return conMando(v, function (m) {
-          if (!m.perfil) { return 'Este tablero no puede darme el perfil de los participantes.'; }
+          if (!m.perfil) {
+            avisar(v, 'UHP-TAB-03', 'perfil');
+            return 'Este tablero no puede darme el perfil de los participantes.';
+          }
           var perfil = m.perfil();
           if (!perfil || !perfil.bloques || !perfil.bloques.length) {
+            avisar(v, 'UHP-TAB-04');
             return 'El perfil de los participantes todavía no ha cargado.';
           }
 
@@ -1212,8 +1785,8 @@
                 normalizar(b.rotulo).indexOf(pedido) >= 0;
             });
             if (!filtrados.length) {
-              return 'No tengo ese aspecto del perfil. Tengo: ' +
-                bloques.map(function (b) { return b.rotulo; }).join(', ') + '.';
+              return noCruza(v, p && p.aspecto, 'No tengo ese aspecto del perfil. Tengo: ' +
+                bloques.map(function (b) { return b.rotulo; }).join(', ') + '.');
             }
             bloques = filtrados;
           }
@@ -1254,13 +1827,13 @@
           // significa contestar otra pregunta sin avisar, y el agente lo
           // leería como si fuera la respuesta a la que hizo.
           if (m.catalogo().zonas.indexOf(z) < 0) {
-            return 'No conozco esa zona. Las zonas son roja, amarilla y verde.';
+            return noCruza(v, z, 'No conozco esa zona. Las zonas son roja, amarilla y verde.');
           }
           filtro.zona = z;
         }
         if (p && p.subregion) {
           var sr = cruzarSubregion(m, p.subregion);
-          if (!sr) { return sinSubregion(m); }
+          if (!sr) { return noCruza(v, p.subregion, sinSubregion(m)); }
           filtro.subregion = sr;
         }
 
@@ -1285,19 +1858,45 @@
     try {
       return resumenHablado(m.estado());
     } catch (e) {
+      // La pregunta sigue, sin ese contexto.
+      avisar(v, 'UHP-TAB-05', (e && e.name) || 'Error', { err: e });
       return '';
     }
   }
 
   function conMando(v, fn) {
     var m = mandoDe(v);
-    if (!m || !m.disponible()) { return 'El tablero todavía no terminó de cargar.'; }
+    if (!m) {
+      // uhp-dashboard.js no corrió, o el asistente quedó fuera de un
+      // [data-uhp-tablero].
+      avisar(v, 'UHP-TAB-01', v.herramientaActual || '');
+      return 'El tablero todavía no terminó de cargar.';
+    }
+    if (!m.disponible()) {
+      avisar(v, 'UHP-TAB-02', v.herramientaActual || '');
+      return 'El tablero todavía no terminó de cargar.';
+    }
     try {
       return fn(m);
     } catch (e) {
-      avisar('herramienta de voz', e);
+      avisar(v, 'UHP-HER-02', (v.herramientaActual || 'herramienta') + ' · ' + ((e && e.name) || 'Error') + ': ' + ((e && e.message) || ''), { err: e });
       return 'No pude hacer ese cambio.';
     }
+  }
+
+  /* Los tres desenlaces de una herramienta que no cambian nada, con su
+     código y devolviendo lo que el modelo tiene que leer. */
+  function rechazo(v, txt) {
+    avisar(v, 'UHP-HER-03', v.herramientaActual || '');
+    return txt;
+  }
+  function sinCupo(v) {
+    avisar(v, 'UHP-HER-04', v.herramientaActual || '');
+    return T.demasiado;
+  }
+  function noCruza(v, arg, txt) {
+    avisar(v, 'UHP-HER-05', (v.herramientaActual || '') + ' · «' + corto(arg) + '»');
+    return txt;
   }
 
   /* El presupuesto se cobra JUSTO ANTES de cambiar algo, no al entrar en
@@ -1480,6 +2079,7 @@
     pintarLanzadores(v, false);
     if (v.nodos.panel) {
       v.nodos.panel.hidden = true;
+      v.nodos.panel.classList.remove('uhp-voz__panel--conversacion');
       v.nodos.panel.innerHTML = '';
       v.nodos.panel.removeAttribute('role');
       v.nodos.panel.removeAttribute('aria-modal');
@@ -1496,26 +2096,27 @@
     if (destino && destino.focus) { destino.focus(); }
   }
 
-  /* Monta cabecera, hilo y pie UNA vez. Lo que cambia después cambia por
-     textContent o añadiendo un nodo al hilo, nunca repintando: el campo
-     de texto tiene que sobrevivir a que el agente hable. */
+  /* Monta la ventana UNA vez: hilo, línea de estado, pastillas y barra.
+     Lo que cambia después cambia por textContent o añadiendo un nodo al
+     hilo, nunca repintando: el campo de texto tiene que sobrevivir a que
+     el agente hable. */
   function montarConversacion(v) {
     var panel = v.nodos.panel;
-    if (!panel) { return; }
+    if (!panel) { avisar(v, 'UHP-PAN-01'); return; }
     panel.innerHTML = '';
     panel.removeAttribute('role');
     panel.removeAttribute('aria-modal');
+    // Lo deja la compuerta; sin rol no nombra nada.
+    panel.removeAttribute('aria-label');
+    panel.classList.add('uhp-voz__panel--conversacion');
 
-    var cab = C.el('div', 'uhp-voz__cab');
-    cab.appendChild(C.el('h3', '', T.titulo_dos));
-    var estado = C.el('div', 'uhp-voz__estado-txt');
-    var pulso = C.el('i', 'uhp-voz__pulso');
-    pulso.setAttribute('aria-hidden', 'true');
-    var estadoTxt = C.el('span', '', '');
-    estado.appendChild(pulso);
-    estado.appendChild(estadoTxt);
-    cab.appendChild(estado);
-    panel.appendChild(cab);
+    var base = v.raiz.id || 'uhp-voz';
+
+    // La captura no tiene cabecera: el título queda para quien no ve la
+    // pantalla, fuera del flujo.
+    var titulo = C.el('h3', 'uhp-voz__sr', T.titulo_dos);
+    titulo.id = base + '-titulo';
+    panel.appendChild(titulo);
 
     var hilo = C.el('div', 'uhp-voz__hilo');
     // role="log" y tabindex: una caja con overflow que no puede recorrerse
@@ -1527,122 +2128,253 @@
     hilo.appendChild(C.el('p', 'uhp-voz__vacio', T.conectando));
     panel.appendChild(hilo);
 
-    v.p = { panel: panel, estadoTxt: estadoTxt, hilo: hilo, vacio: hilo.firstChild, forma: null, campo: null, mic: null };
+    /* La línea de estado, pegada a la barra: es donde mira quien acaba de
+       pulsar. El código del fallo va al lado, visible, pero NO en la
+       región viva: el lector no tiene por qué deletrearlo. */
+    var estado = C.el('p', 'uhp-voz__estado-txt');
+    var pulso = C.el('i', 'uhp-voz__pulso');
+    pulso.setAttribute('aria-hidden', 'true');
+    var estadoTxt = C.el('span', '', '');
+    var codigo = C.el('span', 'uhp-voz__codigo', '');
+    codigo.hidden = true;
+    estado.appendChild(pulso);
+    estado.appendChild(estadoTxt);
+    estado.appendChild(codigo);
+    panel.appendChild(estado);
 
-    /* El <form> ES el tercer hijo del panel, que declara tres filas de
-       rejilla. Envolverlo en un <div> añadiría un nodo sin función y
-       rompería esa correspondencia. */
-    panel.appendChild(crearFila(v));
+    v.p = {
+      panel: panel, hilo: hilo, vacio: hilo.firstChild, estadoTxt: estadoTxt, codigo: codigo,
+      forma: null, campo: null, mic: null, enviar: null, parar: null, cerrar: null,
+      pastillas: []
+    };
+
+    var sug = crearSugerencias(v, base);
+    if (sug) { panel.appendChild(sug); }
+    panel.appendChild(crearFila(v, base));
     actualizarPie(v);
   }
 
-  /* LA FILA SE MONTA UNA VEZ Y NO SE VUELVE A CREAR.
+  /* «PUEDES PREGUNTAR:». Botones en un grupo nombrado por el rótulo, que
+     se quedan toda la conversación: quitar la pastilla recién pulsada se
+     llevaría el foco al <body>, y quitar la fila entera cambiaría el alto
+     de la ventana debajo de la persona. Pulsarla ENVÍA la pregunta tal
+     cual; no la copia al campo, porque lo que haya escrito ahí es suyo. */
+  function crearSugerencias(v, base) {
+    var lista = Object.prototype.toString.call(CFG.sugerencias) === '[object Array]' ? CFG.sugerencias : [];
+    var textos = [];
+    for (var i = 0; i < lista.length && textos.length < 8; i++) {
+      var t = String(lista[i] == null ? '' : lista[i]).trim();
+      if (t) { textos.push(t); }
+    }
+    if (!textos.length) {
+      avisarUnaVez(v, 'UHP-PAN-06');
+      return null;
+    }
 
-     Antes se reconstruía entera en cada cambio de fase —hasta cinco
-     botones que aparecían y desaparecían—, y eso traía dos problemas
-     que no se ven leyendo el código: desprender el <input> del árbol
-     mientras tiene el foco lo devuelve al <body>, y con él se va la
-     tecla Escape; y la fila cambiaba de ancho entre fases, de modo que
-     un botón se movía debajo del dedo que iba a pulsarlo.
+    var caja = C.el('div', 'uhp-voz__sugerencias');
+    var rotulo = C.el('span', 'uhp-voz__sug-rotulo', T.sugerencias);
+    rotulo.id = base + '-sugerencias';
+    var fila = C.el('div', 'uhp-voz__pastillas');
+    fila.setAttribute('role', 'group');
+    fila.setAttribute('aria-labelledby', rotulo.id);
 
-     Ahora hay tres nodos fijos —campo, enviar, micrófono— y lo único
-     que cambia son atributos. Las tres funciones que perdieron su botón
-     no se perdieron: terminar es cerrar el panel con el propio lanzador
-     o con Escape, volver a preguntar es volver a escribir en el campo, y
-     retirar la autorización vive fuera del panel, junto al aviso corto,
-     que es donde la revocación tiene sentido aunque el panel esté
-     cerrado. */
-  function crearFila(v) {
-    var forma = C.el('form', 'uhp-voz__pie');
+    textos.forEach(function (texto) {
+      // textContent: el texto lo escribió un administrador, pero entra
+      // igual que todo lo demás, como texto.
+      var b = C.el('button', 'uhp-voz__pastilla', texto);
+      b.type = 'button';
+      b.setAttribute('data-uhp-voz-accion', 'sugerencia');
+      b.addEventListener('click', function () {
+        if (b.getAttribute('aria-disabled') === 'true') { anunciar(v, textoDeFase(v)); return; }
+        sugerir(v, texto);
+      });
+      fila.appendChild(b);
+      v.p.pastillas.push(b);
+    });
+
+    desplazarConRueda(fila);
+    caja.appendChild(rotulo);
+    caja.appendChild(fila);
+    return caja;
+  }
+
+  /* La rueda vertical no mueve una fila horizontal sin script. Solo se
+     captura si de verdad desplazó: al llegar al final, la rueda vuelve a
+     mover la página. Ctrl+rueda es zoom y no se toca. */
+  function desplazarConRueda(fila) {
+    fila.addEventListener('wheel', function (e) {
+      if (e.ctrlKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) { return; }
+      var max = fila.scrollWidth - fila.clientWidth;
+      if (max <= 0) { return; }
+      var paso = e.deltaY * (e.deltaMode === 1 ? 16 : (e.deltaMode === 2 ? fila.clientWidth : 1));
+      var antes = fila.scrollLeft;
+      fila.scrollLeft = Math.max(0, Math.min(max, antes + paso));
+      if (fila.scrollLeft !== antes) { e.preventDefault(); }
+    }, { passive: false });
+  }
+
+  function sugerir(v, texto) {
+    if (ocupado(v)) {
+      avisar(v, 'UHP-CNV-01', 'pastilla');
+      anunciar(v, textoDeFase(v));
+      return;
+    }
+    if (v.oyendo) { pararEscucha(v); }
+    preguntar(v, texto);
+  }
+
+  /* LA BARRA SE MONTA UNA VEZ Y NO SE VUELVE A CREAR, en el orden de la
+     captura: micrófono, campo en píldora con «enviar» dentro, «parar» y
+     «cerrar».
+
+     Antes se reconstruía entera en cada cambio de fase, y eso traía dos
+     problemas que no se ven leyendo el código: desprender el <input> del
+     árbol mientras tiene el foco lo devuelve al <body>, y con él se va la
+     tecla Escape; y la fila cambiaba de ancho entre fases, de modo que un
+     botón se movía debajo del dedo que iba a pulsarlo. Ahora lo único que
+     cambia son atributos. */
+  function crearFila(v, base) {
+    var forma = C.el('form', 'uhp-voz__pie uhp-voz__pie--chat');
     forma.setAttribute('novalidate', 'novalidate');
-
-    var idc = (v.raiz.id || 'uhp-voz') + '-campo';
-
-    /* Un <label> de verdad recortado, y no un aria-label: así el nombre
-       pasa por las herramientas de traducción y se ve en el código
-       fuente de la página. */
-    var etiqueta = C.el('label', 'uhp-voz__sr', T.escribir);
-    etiqueta.setAttribute('for', idc);
-
-    var campo = document.createElement('input');
-    campo.type = 'text';
-    campo.id = idc;
-    campo.className = 'uhp-voz__campo';
-    campo.placeholder = T.escribir;
-    campo.autocomplete = 'off';
-    campo.setAttribute('enterkeyhint', 'send');
-
-    forma.appendChild(etiqueta);
-    forma.appendChild(campo);
-    forma.appendChild(iconoBoton(T.enviar, 'enviar', SVG_ENVIAR, 'submit'));
+    var idc = base + '-campo';
 
     /* El micrófono solo si esta página lo ofrece Y el navegador sabe
        dictar. No necesita la clave de ElevenLabs: el dictado lo hace el
        navegador. Si no sabe, no se pinta: un botón desactivado que nunca
        se va a activar es ruido en el recorrido del teclado. */
-    if (v.micro && motorVoz()) {
-      var mic = iconoBoton(T.dictar, 'dictar', SVG_MICRO);
+    if (v.micro && !motorVoz()) {
+      // Antes el micrófono simplemente no aparecía y nadie sabía por qué.
+      avisarUnaVez(v, 'UHP-MIC-01', 'sin SpeechRecognition');
+    }
+    var conMicro = !!(v.micro && motorVoz() && !v.micMuerto);
+    forma.setAttribute('data-uhp-voz-micro', conMicro ? 'si' : 'no');
+
+    if (conMicro) {
+      var mic = iconoBoton(v, T.dictar, 'dictar', SVG_MICRO_REPOSO + SVG_MICRO_ACTIVO);
       mic.setAttribute('aria-pressed', 'false');
       mic.addEventListener('click', function () { escuchar(v); });
       forma.appendChild(mic);
       v.p.mic = mic;
     }
 
+    /* La píldora: el campo y «enviar» son HERMANOS dentro de ella, y el
+       texto termina donde empieza el botón por construcción, sin un
+       relleno calculado que se rompa con otra letra. Un <label> de verdad,
+       recortado, y no un aria-label: así el nombre pasa por las
+       herramientas de traducción. */
+    var caja = C.el('div', 'uhp-voz__caja');
+    var etiqueta = C.el('label', 'uhp-voz__sr', T.escribir);
+    etiqueta.setAttribute('for', idc);
+    var campo = document.createElement('input');
+    campo.type = 'text';
+    campo.id = idc;
+    campo.className = 'uhp-voz__campo';
+    campo.placeholder = T.escribir_ph || T.escribir;
+    campo.autocomplete = 'off';
+    campo.setAttribute('enterkeyhint', 'send');
+    var enviar = iconoBoton(v, T.enviar, 'enviar', SVG_ENVIAR, 'submit', 'uhp-voz__enviar');
+    caja.appendChild(etiqueta);
+    caja.appendChild(campo);
+    caja.appendChild(enviar);
+    caja.addEventListener('click', function (e) { if (e.target === caja) { campo.focus(); } });
+    forma.appendChild(caja);
+
+    /* «Parar» usa aria-disabled y no disabled: se inactiva en el mismo
+       clic que lo usa, y con disabled el foco se iría al <body>. Así
+       además sigue en el recorrido del teclado, y quien navega con Tab
+       sabe que existe antes de que algo suene. */
+    var parar = iconoBoton(v, T.parar, 'parar', SVG_PARAR);
+    parar.setAttribute('aria-disabled', 'true');
+    parar.addEventListener('click', function () {
+      if (parar.getAttribute('aria-disabled') === 'true') { return; }
+      detener(v);
+    });
+    forma.appendChild(parar);
+
+    // Cerrar, Escape y volver a pulsar «Asistente» son la MISMA función.
+    var cerrar = iconoBoton(v, T.cerrar, 'cerrar', SVG_CERRAR);
+    cerrar.addEventListener('click', function () { cerrarPanel(v); });
+    forma.appendChild(cerrar);
+
     forma.addEventListener('submit', function (e) {
       e.preventDefault();
       var texto = campo.value.trim();
+      if (!texto) { return; }
       // Mientras el asistente está pensando o hablando no se encola otra
       // pregunta: el servidor recibiría dos conversaciones divergentes y
       // la segunda llegaría sin lo que acaba de contestar la primera.
-      if (!texto || v.fase === 'pensando' || v.fase === 'habla') { return; }
+      if (ocupado(v)) { anunciar(v, textoDeFase(v)); return; }
+      // El texto se lee ANTES de cortar el dictado: pararEscucha() vacía
+      // el campo, que es donde el dictado continuo va escribiendo.
+      if (v.oyendo) { pararEscucha(v); }
       campo.value = '';
       preguntar(v, texto);
     });
 
     v.p.forma = forma;
     v.p.campo = campo;
+    v.p.enviar = enviar;
+    v.p.parar = parar;
+    v.p.cerrar = cerrar;
     return forma;
   }
 
   /* Un botón de icono con su nombre accesible en un <span> recortado. El
      texto va en el árbol, no en un atributo: un aria-label no se ve en
      pantalla ni lo recogen las herramientas de traducción, y aquí es el
-     ÚNICO nombre que el control va a tener. */
-  function iconoBoton(rotulo, accion, svg, tipo) {
-    var b = C.el('button', 'uhp-voz__icono-btn');
+     ÚNICO nombre que el control va a tener. Se repite en title para quien
+     usa ratón. */
+  function iconoBoton(v, rotulo, accion, svg, tipo, clase) {
+    var b = C.el('button', clase || 'uhp-voz__redondo');
     b.type = tipo || 'button';
     b.setAttribute('data-uhp-voz-accion', accion);
     b.title = rotulo;
     b.appendChild(C.el('span', 'uhp-voz__sr', rotulo));
-    var caja = C.el('span', 'uhp-voz__icono');
-    caja.setAttribute('aria-hidden', 'true');
-    caja.innerHTML = svg;
-    b.appendChild(caja);
+    try {
+      // Constantes de este archivo, nunca datos.
+      b.insertAdjacentHTML('beforeend', svg);
+    } catch (e) {
+      // Una CSP con Trusted Types lo impide: el botón conserva nombre y
+      // función, y se queda sin dibujo.
+      avisar(v, 'UHP-PAN-03', accion + ' · ' + ((e && e.name) || 'Error'));
+    }
     return b;
   }
 
-  /* Lo único que cambia de la fila: el estado del micrófono. Ni se crea
-     ni se borra nada. */
+  /* Lo único que cambia de la barra: atributos. Lo llama fase() en cada
+     transición. El NOMBRE del micrófono no cambia nunca —un nombre que
+     cambia junto con aria-pressed se lee al revés—; cambia su title, que
+     el navegador expone como descripción y dice qué hace la segunda
+     pulsación. */
   function actualizarPie(v) {
-    if (!v.p || !v.p.mic) { return; }
+    if (!v.p) { return; }
     var oyendo = !!v.oyendo;
-    v.p.mic.setAttribute('aria-pressed', oyendo ? 'true' : 'false');
-    v.p.mic.title = oyendo ? T.parar_micro : T.dictar;
-    var sr = v.p.mic.querySelector('.uhp-voz__sr');
-    if (sr) { sr.textContent = oyendo ? T.parar_micro : T.dictar; }
-    if (oyendo) {
-      v.p.mic.classList.add('uhp-voz__icono-btn--oyendo');
-    } else {
-      v.p.mic.classList.remove('uhp-voz__icono-btn--oyendo');
-    }
+    var ocupa = ocupado(v);
+
     /* Si el motor se murió a mitad de la visita, el botón desaparece en
        vez de quedarse prometiendo algo que ya no ocurre. */
-    if (v.micMuerto && v.p.mic.parentNode) {
-      v.p.mic.parentNode.removeChild(v.p.mic);
+    if (v.p.mic && v.micMuerto) {
+      if (document.activeElement === v.p.mic && v.p.campo) { v.p.campo.focus(); }
+      if (v.p.mic.parentNode) { v.p.mic.parentNode.removeChild(v.p.mic); }
       v.p.mic = null;
+      if (v.p.forma) { v.p.forma.setAttribute('data-uhp-voz-micro', 'no'); }
     }
+    if (v.p.mic) {
+      v.p.mic.setAttribute('aria-pressed', oyendo ? 'true' : 'false');
+      v.p.mic.title = oyendo ? T.parar_micro : T.dictar;
+    }
+    if (v.p.enviar) { v.p.enviar.setAttribute('aria-disabled', ocupa ? 'true' : 'false'); }
+    if (v.p.parar) { v.p.parar.setAttribute('aria-disabled', (ocupa || oyendo) ? 'false' : 'true'); }
+    for (var i = 0; i < v.p.pastillas.length; i++) {
+      v.p.pastillas[i].setAttribute('aria-disabled', ocupa ? 'true' : 'false');
+    }
+    // «Te escucho» no es una fase: la línea visible se refresca aquí.
+    if (v.p.estadoTxt && v.fase === 'escucha') { v.p.estadoTxt.textContent = textoDeFase(v); }
   }
 
+  /* El nombre de quien habla va ENCIMA y FUERA del globo, como en la
+     captura. En los turnos de la persona va recortado: en pantalla lo
+     dice el lado del globo, pero al oído no hay lado. */
   function turno(v, quien, texto) {
     if (!v.p || !v.p.hilo.isConnected) { return; }
     if (v.p.vacio && v.p.vacio.parentNode) {
@@ -1650,10 +2382,11 @@
       v.p.vacio = null;
     }
 
-    var caja = C.el('div', 'uhp-voz__turno' + (quien === 'usted' ? ' uhp-voz__turno--usted' : ''));
-    caja.appendChild(C.el('span', 'uhp-voz__quien', quien === 'usted' ? T.usted : T.asistente));
+    var usted = quien === 'usted';
+    var caja = C.el('div', 'uhp-voz__turno ' + (usted ? 'uhp-voz__turno--usted' : 'uhp-voz__turno--asistente'));
+    caja.appendChild(C.el('span', usted ? 'uhp-voz__quien uhp-voz__sr' : 'uhp-voz__quien', usted ? T.usted : T.asistente));
     // textContent: lo que devuelve el modelo es texto y solo texto.
-    caja.appendChild(C.el('span', '', texto));
+    caja.appendChild(C.el('p', 'uhp-voz__globo', texto));
 
     // Si hay una confirmación pendiente, los turnos nuevos van ANTES de
     // ella para que el botón siga siendo lo último.
@@ -1699,13 +2432,18 @@
         // La pulsación es del VISITANTE aunque la sugerencia la trajera
         // el agente: atribuírsela al asistente sería mentirle a quien no
         // ve la pantalla.
-        if (m) { m.setMunicipio(nombre, 'usuario'); }
+        var hecho = !!(m && m.setMunicipio(nombre, 'usuario'));
+        if (!hecho) { avisar(v, 'UHP-HER-07', nombre); }
         /* Y se le dice al asistente, como un turno más de la
            conversación: sin esto seguiría esperando una confirmación que
-           ya ocurrió, y volvería a pedirla. */
+           ya ocurrió, y volvería a pedirla. Lo que de verdad pasó: antes
+           decía «ya está seleccionado» aunque el tablero no lo hubiera
+           conseguido, y el modelo le leía al visitante una pantalla que
+           no existía. */
         v.hist.push({
           rol: 'usuario',
-          texto: 'Confirmo que me refería a ' + nombre + '. Ya está seleccionado en el tablero.'
+          texto: 'Confirmo que me refería a ' + nombre + '. ' +
+            (hecho ? 'Ya está seleccionado en el tablero.' : 'El tablero no pudo seleccionarlo; no lo des por seleccionado.')
         });
       });
       if (!primero) { primero = b; }
@@ -1759,6 +2497,13 @@
     // El rótulo se actualiza siempre: el color del punto no puede ser la
     // única señal de que el asistente pasó de escuchar a hablar.
     if (v.p && v.p.estadoTxt) { v.p.estadoTxt.textContent = texto; }
+    // El código del fallo, solo en la fase de error y solo si lo hay.
+    if (v.p && v.p.codigo) {
+      var conCodigo = f === 'error' && !!v.errorCodigo;
+      v.p.codigo.textContent = conCodigo ? v.errorCodigo : '';
+      v.p.codigo.hidden = !conCodigo;
+    }
+    actualizarPie(v);
 
     // El lanzador dice lo que hace AHORA, no lo que hacía al cargar: con
     // el panel abierto, cierra. Y lo mismo cualquier lanzador propio de
@@ -1781,7 +2526,11 @@
     if (v.fase === 'pensando') { return T.pensando; }
     // En reposo, el rótulo dice QUÉ HACER. Y con un solo canal son las
     // dos cosas a la vez: se puede escribir y se puede dictar.
-    if (v.fase === 'escucha') { return v.oyendo ? T.oyendo : T.escribiendo; }
+    if (v.fase === 'escucha') {
+      if (v.oyendo) { return T.oyendo; }
+      // «Escribe o dicta» solo donde hay micrófono.
+      return (v.p && v.p.mic) ? T.escribiendo : (T.escribiendo_txt || T.escribiendo);
+    }
     if (v.fase === 'habla') { return T.hablando; }
     if (v.fase === 'error') { return v.error || T.sin_sesion; }
     return T.cerrada;
@@ -1824,6 +2573,14 @@
   window.UHPVozAsistente = {
     iniciar: iniciar,
     abrir: abrirPorPrograma,
-    cerrar: cerrarPorPrograma
+    cerrar: cerrarPorPrograma,
+    // copy(UHPVozAsistente.diagnostico()) en la consola: texto para el
+    // soporte en vez de una captura. Solo vive en memoria.
+    diagnostico: function () {
+      return DIARIO.map(function (d) {
+        return [d.hora, d.codigo, d.nivel, d.detalle, d.ref ? 'ref ' + d.ref : ''].filter(Boolean).join(' · ');
+      }).join('\n');
+    },
+    codigos: function () { return JSON.parse(JSON.stringify(CODIGOS)); }
   };
 }());

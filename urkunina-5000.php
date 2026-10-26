@@ -3,7 +3,7 @@
  * Plugin Name:  URKUNINA 5000 — Helicobacter pylori y cáncer gástrico (Nariño)
  * Plugin URI:   https://gobiernoabierto.narino.gov.co/datos/urkunina5000/
  * Description:  Plataforma de visualización del proyecto URKUNINA 5000 (BPIN 2015000100064): recreación 3D de Helicobacter pylori, motor de gráficos D3plus, mapa OpenStreetMap y tablero completo de resultados del tamizaje en los 55 municipios priorizados de Nariño. Cada componente es un shortcode independiente.
- * Version:      2.0.0
+ * Version:      2.1.0
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * Author:       Gobernación de Nariño · Secretaría TIC, Innovación y Gobierno Abierto
@@ -44,7 +44,7 @@ use GobernacionNarino\Urkunina\UHP_Activator;
    Tiene que coincidir con la cabecera de arriba. Hay una comprobación en
    la suite que lo exige, porque es la única pareja de este archivo que
    puede desincronizarse sin que nada lo note. */
-define( 'UHP_VERSION', '2.0.0' );
+define( 'UHP_VERSION', '2.1.0' );
 define( 'UHP_FILE', __FILE__ );
 define( 'UHP_DIR', plugin_dir_path( __FILE__ ) );   // .../urkunina-5000/
 define( 'UHP_URL', plugin_dir_url( __FILE__ ) );     // URL pública de assets

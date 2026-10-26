@@ -852,6 +852,30 @@ falla la suite en vez de llegar a producción.
 
 El tablero puede atender preguntas y mover sus propios filtros al responderlas.
 
+#### Lo que trae la 2.1
+
+- **Un módulo propio, «Asistente AI»**, en el menú del plugin (antes era una
+  pestaña de Componentes; la dirección vieja redirige). Arriba, la tarjeta
+  «Estado del módulo»: activar, visible en el sitio, nombre del anfitrión,
+  saludo inicial y preguntas sugeridas.
+- **La ventana de la captura**: el nombre del anfitrión encima de cada globo,
+  la fila «Puedes preguntar:» con pastillas que envían la pregunta, y una
+  barra con micrófono (tachado en reposo, entero mientras escucha), el campo
+  con «enviar» dentro, «parar» y «cerrar». Cada icono tiene su nombre
+  accesible y mide 44 × 44 píxeles; a menos de 354 px de ancho la barra se
+  parte en dos filas.
+- **El tono**: de tú, con calidez y paciencia; explica los términos técnicos y,
+  si la pregunta toca la salud de alguien, remite a la EPS sin alarmar.
+- **El dictado espera la pregunta completa**: no corta en las pausas y envía
+  tras unos segundos de silencio (configurable). Antes cortaba en la primera.
+- **Lo que sabe del proyecto sin consultar**: un apartado fijo del prompt con
+  el nombre, quién lo hizo y lo financió, qué es la bacteria, la cascada de
+  Correa y quién podía participar, atado por la suite a los JSON y sin una
+  sola cifra de resultados.
+- **Códigos de error `UHP-ÁREA-NN`** en la consola, el registro de PHP, el
+  panel y la pantalla del visitante, con un `ref` que une una captura con la
+  línea exacta del registro. Tabla completa en `docs/voz/codigos.md`.
+
 #### Tres piezas, y cada una donde corresponde
 
 | Pieza | Quién la hace | Dónde |

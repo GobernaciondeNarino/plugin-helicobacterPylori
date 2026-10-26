@@ -72,7 +72,7 @@ lleno de siglas y de porcentajes.
 
 ## 3. Configurar el plugin
 
-**URKUNINA 5000 → Componentes → Asistente de voz.**
+**URKUNINA 5000 → Asistente AI.** (Hasta la 2.0.0 era una pestaña de Componentes; la dirección vieja redirige aquí.)
 
 Las dos claves se pueden escribir en el panel, pero **es mejor ponerlas en
 `wp-config.php`**: así no entran en la base de datos ni viajan en una
@@ -87,17 +87,38 @@ Los campos de clave del panel se pintan **siempre vacíos**: dejarlos en blanco
 conserva la guardada, de modo que tocar cualquier otro ajuste de la pestaña no
 la borra. Para eliminar una, escriba `borrar`.
 
+### Estado del módulo y bienvenida
+
+La primera tarjeta del módulo es la de la captura que mandó la entidad:
+
+| Ajuste | Qué hace |
+|---|---|
+| **Activar** | Enciende el asistente. Sin la clave del modelo no se publica aunque esté marcado. |
+| **Visible en el sitio** | Marcado, lo ve todo el mundo. Desmarcado, queda en ensayo para quien pueda editar contenido (o sin botón, si así estaba). |
+| **Nombre del anfitrión** | El rótulo encima de cada globo del asistente. Vacío, «Tu anfitrión» —sin tilde: es posesivo—. Si la voz es femenina, «Tu anfitriona». |
+| **Saludo inicial** | Lo primero que dice al abrir. Vacío, el del ejemplo. No gasta ninguna consulta: lo pinta la página. |
+| **Preguntas sugeridas** | Una por línea, como mucho ocho y de unos 30 caracteres. Aparecen como pastillas encima de la barra y se envían con un toque. Vacío, las del ejemplo. |
+
+Escriba sugerencias que el asistente pueda contestar con los datos del
+proyecto: una que acaba en «no tengo ese dato» enseña a no volver a pulsar
+ninguna. Las del ejemplo lo están: el asistente conoce los hechos del proyecto
+—el nombre, quién lo hizo y lo financió, qué es la bacteria, la cascada de
+Correa, quién podía participar— y las cifras las saca siempre del tablero.
+
 ### Por dónde pregunta el visitante
 
-Hay **un botón**, «Asistente», y dentro tres controles: un cuadro de texto, el
-icono de enviar y el icono del micrófono.
+Hay **un botón**, «Asistente», que abre una ventana: el hilo de la
+conversación, la línea de estado, las preguntas sugeridas y una barra con
+cuatro controles redondos —micrófono, el campo con «enviar» dentro, «parar» y
+«cerrar»—. «Parar» corta lo que esté en curso sin cerrar la conversación; la
+X, la tecla Escape y volver a pulsar «Asistente» cierran.
 
 El **cuadro de texto está siempre**, con el micrófono ofrecido o sin él: es la
 alternativa equivalente que pide la Resolución 1519 de 2020 y no puede depender
 de ningún ajuste.
 
-Lo único que se configura es si además aparece el **icono del micrófono**. Y
-conviene no confundirlo con la voz:
+Lo único que se configura es si además aparece el **icono del micrófono**, y
+cuánto espera tras la última palabra. Conviene no confundirlo con la voz:
 
 | | Micrófono | Voz |
 |---|---|---|
@@ -109,6 +130,13 @@ conviene no confundirlo con la voz:
 Las cuatro combinaciones son conversaciones completas: micrófono sin voz —se
 dicta y se lee en pantalla—, voz sin micrófono —se escribe y se escucha—, las
 dos, o ninguna.
+
+**El dictado espera la pregunta completa.** Hasta la 2.0 el navegador daba
+por terminada la frase en la primera pausa y el asistente contestaba a media
+pregunta. Ahora espera a que la persona empiece a hablar, no corta en las
+pausas y envía cuando lleva un rato callada: **«Espera tras la última
+palabra»**, dos segundos por omisión, entre uno y seis. Si el público habla
+despacio, súbalo a tres. Pulsar otra vez el micrófono envía sin esperar.
 
 ### El dictado por micrófono no lo hace este plugin
 
@@ -239,10 +267,11 @@ micrófono tiene que estar permitido para este origen o el dictado no arranca.
 - [ ] Mirar el código fuente de la página y buscar las claves. No pueden estar.
 - [ ] Comprobar el **tope diario** y el límite de gasto del proveedor.
 
-Si algo de esto falla, el reporte de los errores de configuración ya
-diagnosticados —qué significa cada mensaje del panel, qué líneas escribe el
-plugin en el registro de PHP y en la consola del navegador, y qué mirar en
-cada caso— está en [`diagnostico.md`](diagnostico.md).
+Si algo de esto falla, cada error tiene un código `UHP-ÁREA-NN` —el mismo en
+la consola, en el registro de PHP, en el panel y junto al mensaje que ve el
+visitante—. Qué significa cada uno y qué mirar está en
+[`codigos.md`](codigos.md); el reporte de los errores ya diagnosticados, en
+[`diagnostico.md`](diagnostico.md).
 
 El JSON con las definiciones de las diez herramientas está en
 [`herramientas.json`](herramientas.json). No hay que pegarlo en ninguna parte:

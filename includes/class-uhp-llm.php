@@ -51,17 +51,68 @@ final class UHP_LLM {
 	const ESPERA = 45;
 
 	/**
-	 * Tope de la respuesta.
+	 * Tope de la respuesta, según cuánto se le deja pensar.
 	 *
-	 * Bajo a propósito, y es una de las pocas veces que bajarlo está
-	 * justificado: esto son dos o tres frases sobre una cifra, el visitante
-	 * está esperando delante de la pantalla, y lo paga una entidad pública
-	 * por cada pregunta de cada ciudadano. Si alguna vez una respuesta se
-	 * corta, el sitio donde subirlo es este y no un ajuste del panel: que
-	 * el administrador pueda encarecer cada turno sin querer no ayuda a
-	 * nadie.
+	 * HASTA LA 2.0 ERA 2.000 PARA TODO, y no alcanzaba. Los tres modelos
+	 * por omisión razonan antes de responder, y en los tres el tope cuenta
+	 * el razonamiento ADEMÁS del texto: con el esfuerzo medio que OpenAI y
+	 * Gemini usan si no se les dice nada, el modelo podía gastarse los
+	 * 2.000 pensando y devolver una respuesta vacía. Eso es lo que
+	 * documentan los tres («including thought tokens», «including visible
+	 * output tokens and reasoning tokens», «thinking counts toward
+	 * max_tokens»).
+	 *
+	 * El tope es un TECHO, no un gasto: se cobra lo que se usa. Las
+	 * respuestas siguen siendo de dos o tres frases porque así lo pide el
+	 * prompt; lo que cambia es que pensar ya no deja al visitante sin
+	 * respuesta. Y si aun así se corta, el adaptador lo dice con
+	 * UHP-LLM-13 en vez de callarlo.
+	 *
+	 * @param string $esfuerzo low|medium|high.
+	 * @return int
 	 */
-	const TOPE_SALIDA = 2000;
+	public static function tope_salida( $esfuerzo ) {
+		switch ( $esfuerzo ) {
+			case 'high':
+				return 16000;
+			case 'medium':
+				return 12000;
+			default:
+				return 6000;
+		}
+	}
+
+	/**
+	 * ¿Admite este modelo de Claude el parámetro de esfuerzo?
+	 *
+	 * Por LISTA DE INCLUSIÓN y no de exclusión: un modelo que no lo admite
+	 * rechaza la petición entera con 400 (Haiku 4.5, Sonnet 4.5), y uno
+	 * nuevo que no esté en la lista solo pierde el ajuste y usa su valor
+	 * por omisión. Equivocarse hacia el lado de no mandarlo no rompe nada.
+	 *
+	 * @param string $modelo Modelo.
+	 * @return bool
+	 */
+	private static function claude_con_esfuerzo( $modelo ) {
+		return (bool) preg_match( '#^claude-(fable-5|mythos-5|opus-5|opus-4-[5-9]|sonnet-5|sonnet-4-6|haiku-5)#', (string) $modelo );
+	}
+
+	/**
+	 * ¿Tiene este modelo de Claude reintento del lado del servidor?
+	 *
+	 * Los modelos actuales pasan clasificadores de seguridad que pueden
+	 * declinar una pregunta corriente —y este tablero habla de una
+	 * infección y de cáncer gástrico—. Con `fallbacks: "default"` la API
+	 * reintenta en el modelo que Anthropic recomienda para ese caso, en la
+	 * misma petición, en vez de dejar al ciudadano sin respuesta. Solo en
+	 * las familias donde está documentado; Haiku 5.5 no lo tiene.
+	 *
+	 * @param string $modelo Modelo.
+	 * @return bool
+	 */
+	private static function claude_con_reintento( $modelo ) {
+		return (bool) preg_match( '#^claude-(fable-5|mythos-5|opus-5|sonnet-5)#', (string) $modelo );
+	}
 
 	/**
 	 * El modelo recomendado de cada proveedor.
@@ -144,6 +195,8 @@ final class UHP_LLM {
 	 *     @type array  $llamadas Herramientas que quiere ejecutar.
 	 *     @type string $error    Mensaje para el registro, nunca para el visitante.
 	 *     @type int    $codigo   HTTP, cuando lo hay.
+	 *     @type string $clase    Código UHP del fallo, vacío si no lo hubo.
+	 *     @type array  $avisos   Códigos UHP de lo que no corta la respuesta.
 	 *     @type array  $uso      Tokens de entrada y salida, cuando el proveedor los da.
 	 * }
 	 */
@@ -184,7 +237,7 @@ final class UHP_LLM {
 	 * @param \WP_Error $e Error del transporte.
 	 * @return string
 	 */
-	private static function sin_url( $e ) {
+	public static function sin_url( $e ) {
 		$codigo  = method_exists( $e, 'get_error_code' ) ? (string) $e->get_error_code() : '';
 		$mensaje = method_exists( $e, 'get_error_message' ) ? (string) $e->get_error_message() : '';
 
@@ -227,16 +280,52 @@ final class UHP_LLM {
 	 *
 	 * @param string $error  Mensaje interno.
 	 * @param int    $codigo HTTP.
+	 * @param string $clase  Código UHP del fallo (véase UHP_Codigos).
 	 * @return array
 	 */
-	private static function fallo( $error, $codigo = 0 ) {
+	private static function fallo( $error, $codigo = 0, $clase = 'UHP-LLM-99' ) {
 		return array(
 			'ok'       => false,
 			'texto'    => '',
 			'llamadas' => array(),
 			'error'    => $error,
 			'codigo'   => (int) $codigo,
+			'clase'    => $clase,
+			'avisos'   => array(),
 			'uso'      => array(),
+		);
+	}
+
+	/**
+	 * Resultado bueno, o el fallo de una respuesta vacía.
+	 *
+	 * UN 200 SIN TEXTO NI HERRAMIENTAS NO ES UNA RESPUESTA. Hasta la 2.0
+	 * salía como éxito: el visitante preguntaba y no recibía nada, y el
+	 * cupo no se devolvía. Pasa con un bloqueo de seguridad, un filtro de
+	 * contenido o una respuesta que se cortó antes de empezar, y cada
+	 * proveedor dice cuál en un campo distinto: quien llama pasa ese
+	 * motivo para el registro.
+	 *
+	 * @param string $texto    Texto.
+	 * @param array  $llamadas Llamadas.
+	 * @param array  $uso      Tokens.
+	 * @param array  $avisos   Códigos UHP de lo que no corta la respuesta.
+	 * @param string $porque   Motivo de parada del proveedor, para el registro.
+	 * @return array
+	 */
+	private static function exito( $texto, $llamadas, $uso, $avisos, $porque ) {
+		if ( '' === trim( (string) $texto ) && ! $llamadas ) {
+			return self::fallo( 'respuesta sin texto ni herramientas' . ( '' !== $porque ? ' · ' . $porque : '' ), 200, 'UHP-LLM-12' );
+		}
+		return array(
+			'ok'       => true,
+			'texto'    => $texto,
+			'llamadas' => $llamadas,
+			'error'    => '',
+			'codigo'   => 200,
+			'clase'    => '',
+			'avisos'   => array_values( array_unique( $avisos ) ),
+			'uso'      => $uso,
 		);
 	}
 
@@ -266,7 +355,8 @@ final class UHP_LLM {
 			   distingue un cortafuegos de un certificado rechazado ni de
 			   un tiempo de espera agotado, y son tres arreglos
 			   distintos. */
-			return array( '__fallo' => self::fallo( 'transporte: ' . self::sin_url( $r ) ) );
+			$dicho = self::sin_url( $r );
+			return array( '__fallo' => self::fallo( 'transporte: ' . $dicho, 0, UHP_Codigos::de_transporte( 'LLM', $dicho ) ) );
 		}
 
 		$codigo = (int) wp_remote_retrieve_response_code( $r );
@@ -277,7 +367,15 @@ final class UHP_LLM {
 			   registro del sitio es de la entidad: aun así, un proveedor
 			   que devuelva la petición completa en el error devolvería
 			   también la conversación del ciudadano. */
-			return array( '__fallo' => self::fallo( 'http ' . $codigo . ': ' . self::recortar( $cuerpo ), $codigo ) );
+			return array(
+				'__fallo' => self::fallo(
+					'http ' . $codigo . ': ' . self::recortar( $cuerpo ),
+					$codigo,
+					// El cuerpo ENTERO para clasificar: el tipo de error puede
+					// ir después de los trescientos caracteres que se anotan.
+					UHP_Codigos::de_proveedor( 'LLM', $codigo, $cuerpo )
+				),
+			);
 		}
 
 		$d = json_decode( $cuerpo, true );
@@ -287,7 +385,7 @@ final class UHP_LLM {
 			   página HTML con 200, y las primeras líneas de esa página
 			   dicen cuál. Sin ellas, el panel solo puede decir «respuesta
 			   que no es JSON», que no lleva a ninguna parte. */
-			return array( '__fallo' => self::fallo( 'respuesta que no es JSON: ' . self::recortar( $cuerpo ) ) );
+			return array( '__fallo' => self::fallo( 'respuesta que no es JSON: ' . self::recortar( $cuerpo ), 200, 'UHP-LLM-10' ) );
 		}
 		return $d;
 	}
@@ -355,9 +453,10 @@ final class UHP_LLM {
 			}
 		}
 
-		$cuerpo = array(
+		$esfuerzo = isset( $pet['esfuerzo'] ) ? $pet['esfuerzo'] : 'low';
+		$cuerpo   = array(
 			'model'      => $modelo,
-			'max_tokens' => self::TOPE_SALIDA,
+			'max_tokens' => self::tope_salida( $esfuerzo ),
 			/* El prefijo estable —herramientas y sistema, en ese orden—
 			   se cachea. Son los mismos dos o tres mil tokens en cada
 			   turno de cada conversación de cada visitante: pagarlos
@@ -370,8 +469,20 @@ final class UHP_LLM {
 				),
 			),
 			'messages'   => $mensajes,
-			'output_config' => array( 'effort' => isset( $pet['esfuerzo'] ) ? $pet['esfuerzo'] : 'low' ),
 		);
+		if ( self::claude_con_esfuerzo( $modelo ) ) {
+			$cuerpo['output_config'] = array( 'effort' => $esfuerzo );
+		}
+		$cabeceras = array(
+			'x-api-key'         => $pet['clave'],
+			'anthropic-version' => '2023-06-01',
+		);
+		if ( self::claude_con_reintento( $modelo ) ) {
+			/* La forma «default» va con ESTA cabecera y no con la de la
+			   forma de lista (-2026-06-01): cruzarlas da 400. */
+			$cuerpo['fallbacks']        = 'default';
+			$cabeceras['anthropic-beta'] = 'server-side-fallback-2026-07-01';
+		}
 
 		/* El bloque de herramientas SOLO si hay alguna. Véase la nota de
 		   `sin_herramientas()`: una lista vacía no es «ninguna
@@ -385,21 +496,16 @@ final class UHP_LLM {
 			$cuerpo['tool_choice'] = array( 'type' => 'auto' );
 		}
 
-		$d = self::pedir(
-			'https://api.anthropic.com/v1/messages',
-			array(
-				'x-api-key'         => $pet['clave'],
-				'anthropic-version' => '2023-06-01',
-			),
-			$cuerpo
-		);
+		$d = self::pedir( 'https://api.anthropic.com/v1/messages', $cabeceras, $cuerpo );
 		if ( isset( $d['__fallo'] ) ) {
 			return $d['__fallo'];
 		}
 
+		$parada = isset( $d['stop_reason'] ) ? (string) $d['stop_reason'] : '';
+
 		// Una negativa por seguridad llega con 200 y su propio motivo.
-		if ( isset( $d['stop_reason'] ) && 'refusal' === $d['stop_reason'] ) {
-			return self::fallo( 'el proveedor declinó la petición' );
+		if ( 'refusal' === $parada ) {
+			return self::fallo( 'el proveedor declinó la petición', 200, 'UHP-LLM-11' );
 		}
 
 		$texto    = '';
@@ -419,17 +525,24 @@ final class UHP_LLM {
 			}
 		}
 
-		return array(
-			'ok'       => true,
-			'texto'    => $texto,
-			'llamadas' => $llamadas,
-			'error'    => '',
-			'codigo'   => 200,
-			'uso'      => array(
+		/* CORTADA CON HERRAMIENTAS A MEDIAS: no se ejecutan. Unos
+		   argumentos truncados moverían el tablero a donde nadie pidió. */
+		if ( 'max_tokens' === $parada && $llamadas ) {
+			return self::fallo( 'respuesta cortada por max_tokens con herramientas a medias', 200, 'UHP-LLM-13' );
+		}
+
+		return self::exito(
+			$texto,
+			$llamadas,
+			array(
 				'entrada' => isset( $d['usage']['input_tokens'] ) ? (int) $d['usage']['input_tokens'] : 0,
 				'salida'  => isset( $d['usage']['output_tokens'] ) ? (int) $d['usage']['output_tokens'] : 0,
 				'cache'   => isset( $d['usage']['cache_read_input_tokens'] ) ? (int) $d['usage']['cache_read_input_tokens'] : 0,
 			),
+			// Una respuesta cortada en el tope. Antes nadie se enteraba de que
+			// se cortaba; ahora llega con su aviso (véase tope_salida()).
+			'max_tokens' === $parada ? array( 'UHP-LLM-13' ) : array(),
+			'' !== $parada ? 'stop_reason=' . $parada : ''
 		);
 	}
 
@@ -437,9 +550,10 @@ final class UHP_LLM {
 	 * Las herramientas en la forma que espera Anthropic.
 	 *
 	 * `strict` obliga a que los argumentos validen contra el esquema, y
-	 * para eso el esquema tiene que cerrar `additionalProperties`. Se
-	 * añade aquí y no en la definición compartida porque es una exigencia
-	 * de ESTE proveedor: Gemini rechaza esa misma palabra.
+	 * para eso el esquema tiene que cerrar `additionalProperties`. Los
+	 * otros dos adaptadores también lo cierran: Gemini lo admite porque
+	 * se le manda en `parametersJsonSchema` —el antiguo `parameters` sí lo
+	 * rechazaba, y de ahí venía la nota que decía lo contrario—.
 	 *
 	 * @param array $defs Definiciones compartidas.
 	 * @return array
@@ -524,7 +638,7 @@ final class UHP_LLM {
 		}
 
 		$herramientas = array();
-		foreach ( $pet['herramientas'] as $d ) {
+		foreach ( self::sin_herramientas( $pet ) ? array() : $pet['herramientas'] as $d ) {
 			$esquema                         = $d['parameters'];
 			$esquema['additionalProperties'] = false;
 			if ( ! isset( $esquema['required'] ) ) {
@@ -540,13 +654,14 @@ final class UHP_LLM {
 			);
 		}
 
-		$cuerpo = array(
+		$esfuerzo = isset( $pet['esfuerzo'] ) ? $pet['esfuerzo'] : 'low';
+		$cuerpo   = array(
 			'model'             => $modelo,
 			// El sistema va en su propio campo, no como un mensaje
 			// con rol dentro del historial.
 			'instructions'      => $pet['sistema'],
 			'input'             => $entrada,
-			'max_output_tokens' => self::TOPE_SALIDA,
+			'max_output_tokens' => self::tope_salida( $esfuerzo ),
 			/* NO se guarda la conversación en el proveedor. Por
 			   omisión la almacena, y lo que pasa por aquí son las
 			   preguntas de ciudadanos a una entidad pública: no hay
@@ -557,6 +672,14 @@ final class UHP_LLM {
 		if ( ! self::sin_herramientas( $pet ) ) {
 			$cuerpo['tools']       = $herramientas;
 			$cuerpo['tool_choice'] = 'auto';
+		}
+
+		/* EL ESFUERZO, que hasta la 2.0 solo llegaba a Claude. Sin él, un
+		   modelo de razonamiento de OpenAI piensa en «medium» y se come
+		   el tope. Solo a las familias que razonan: a un modelo que no lo
+		   admite, el parámetro le da 400. */
+		if ( preg_match( '#^(gpt-[5-9]|o[1-9])#', (string) $modelo ) ) {
+			$cuerpo['reasoning'] = array( 'effort' => $esfuerzo );
 		}
 
 		$d = self::pedir(
@@ -570,18 +693,30 @@ final class UHP_LLM {
 
 		$texto    = '';
 		$llamadas = array();
+		$avisos   = array();
+		$nego     = false;
 		foreach ( (array) ( isset( $d['output'] ) ? $d['output'] : array() ) as $item ) {
 			if ( ! isset( $item['type'] ) ) {
 				continue;
 			}
 			if ( 'message' === $item['type'] ) {
 				foreach ( (array) ( isset( $item['content'] ) ? $item['content'] : array() ) as $c ) {
+					// Una negativa viene como contenido de tipo «refusal», con
+					// 200: sin mirarlo, se contaba como una respuesta vacía.
+					if ( isset( $c['type'] ) && 'refusal' === $c['type'] ) {
+						$nego = true;
+						continue;
+					}
 					if ( isset( $c['text'] ) ) {
 						$texto .= (string) $c['text'];
 					}
 				}
 			} elseif ( 'function_call' === $item['type'] ) {
 				$args = isset( $item['arguments'] ) ? json_decode( (string) $item['arguments'], true ) : array();
+				if ( isset( $item['arguments'] ) && '' !== trim( (string) $item['arguments'] ) && ! is_array( $args ) ) {
+					// Se ejecuta sin argumentos, pero ya no en silencio.
+					$avisos[] = 'UHP-LLM-14';
+				}
 				$llamadas[] = array(
 					'id'     => isset( $item['call_id'] ) ? (string) $item['call_id'] : '',
 					'nombre' => isset( $item['name'] ) ? (string) $item['name'] : '',
@@ -590,16 +725,31 @@ final class UHP_LLM {
 			}
 		}
 
-		return array(
-			'ok'       => true,
-			'texto'    => $texto,
-			'llamadas' => $llamadas,
-			'error'    => '',
-			'codigo'   => 200,
-			'uso'      => array(
+		if ( $nego && '' === trim( $texto ) && ! $llamadas ) {
+			return self::fallo( 'el proveedor declinó la petición', 200, 'UHP-LLM-11' );
+		}
+
+		$estado = isset( $d['status'] ) ? (string) $d['status'] : '';
+		$razon  = isset( $d['incomplete_details']['reason'] ) ? (string) $d['incomplete_details']['reason'] : '';
+		if ( 'incomplete' === $estado && 'content_filter' === $razon ) {
+			return self::fallo( 'el proveedor declinó la petición · reason=content_filter', 200, 'UHP-LLM-11' );
+		}
+		if ( 'incomplete' === $estado && 'max_output_tokens' === $razon ) {
+			if ( $llamadas ) {
+				return self::fallo( 'respuesta cortada por max_output_tokens con herramientas a medias', 200, 'UHP-LLM-13' );
+			}
+			$avisos[] = 'UHP-LLM-13';
+		}
+
+		return self::exito(
+			$texto,
+			$llamadas,
+			array(
 				'entrada' => isset( $d['usage']['input_tokens'] ) ? (int) $d['usage']['input_tokens'] : 0,
 				'salida'  => isset( $d['usage']['output_tokens'] ) ? (int) $d['usage']['output_tokens'] : 0,
 			),
+			$avisos,
+			trim( ( '' !== $estado ? 'status=' . $estado : '' ) . ( '' !== $razon ? ' reason=' . $razon : '' ) )
 		);
 	}
 
@@ -674,7 +824,7 @@ final class UHP_LLM {
 		}
 
 		$declaraciones = array();
-		foreach ( $pet['herramientas'] as $d ) {
+		foreach ( self::sin_herramientas( $pet ) ? array() : $pet['herramientas'] as $d ) {
 			$esquema                         = $d['parameters'];
 			$esquema['additionalProperties'] = false;
 			if ( ! isset( $esquema['required'] ) ) {
@@ -695,11 +845,20 @@ final class UHP_LLM {
 
 		$modelo_ruta = ( 0 === strpos( $modelo, 'models/' ) ) ? $modelo : 'models/' . $modelo;
 
+		$esfuerzo  = isset( $pet['esfuerzo'] ) ? $pet['esfuerzo'] : 'low';
+		$generacion = array( 'maxOutputTokens' => self::tope_salida( $esfuerzo ) );
+		/* EL NIVEL DE PENSAMIENTO, solo en Gemini 3 o posterior: en los
+		   anteriores el campo da error. Sin él, piensa en «medium» y se
+		   puede comer el tope entero. */
+		if ( preg_match( '#(^|/)gemini-[3-9]#', (string) $modelo ) ) {
+			$generacion['thinkingConfig'] = array( 'thinkingLevel' => strtoupper( $esfuerzo ) );
+		}
+
 		$cuerpo = array(
 			// El sistema es un Content aparte, no un rol del historial.
 			'systemInstruction' => array( 'parts' => array( array( 'text' => $pet['sistema'] ) ) ),
 			'contents'          => $contenidos,
-			'generationConfig'  => array( 'maxOutputTokens' => self::TOPE_SALIDA ),
+			'generationConfig'  => $generacion,
 		);
 
 		/* AQUÍ ESTABA EL FALLO que rechazaba la verificación con un 400.
@@ -731,6 +890,19 @@ final class UHP_LLM {
 			return $d['__fallo'];
 		}
 
+		/* Un bloqueo de la PREGUNTA llega sin candidatos y con su motivo
+		   en promptFeedback; uno de la RESPUESTA, con finishReason. Los
+		   dos con 200. */
+		$bloqueo = isset( $d['promptFeedback']['blockReason'] ) ? (string) $d['promptFeedback']['blockReason'] : '';
+		$parada  = isset( $d['candidates'][0]['finishReason'] ) ? (string) $d['candidates'][0]['finishReason'] : '';
+		if ( '' !== $bloqueo || in_array( $parada, array( 'SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'IMAGE_SAFETY' ), true ) ) {
+			return self::fallo(
+				'el proveedor declinó la petición · ' . ( '' !== $bloqueo ? 'blockReason=' . $bloqueo : 'finishReason=' . $parada ),
+				200,
+				'UHP-LLM-11'
+			);
+		}
+
 		/* No hay un «stop_reason» que diga que pidió herramientas: se
 		   detecta recorriendo las partes. */
 		$partes   = isset( $d['candidates'][0]['content']['parts'] ) ? $d['candidates'][0]['content']['parts'] : array();
@@ -760,16 +932,34 @@ final class UHP_LLM {
 			);
 		}
 
-		return array(
-			'ok'       => true,
-			'texto'    => $texto,
-			'llamadas' => $llamadas,
-			'error'    => '',
-			'codigo'   => 200,
-			'uso'      => array(
+		/* Una firma de razonamiento que no volvió exacta. Es un defecto
+		   del historial que mandó el navegador, no de la configuración. */
+		if ( 'MISSING_THOUGHT_SIGNATURE' === $parada ) {
+			return self::fallo( 'finishReason=MISSING_THOUGHT_SIGNATURE', 200, 'UHP-LLM-06' );
+		}
+
+		$avisos = array();
+		if ( 'MAX_TOKENS' === $parada ) {
+			if ( $llamadas ) {
+				return self::fallo( 'respuesta cortada por MAX_TOKENS con herramientas a medias', 200, 'UHP-LLM-13' );
+			}
+			$avisos[] = 'UHP-LLM-13';
+		}
+		if ( 'MALFORMED_FUNCTION_CALL' === $parada ) {
+			$avisos[] = 'UHP-LLM-14';
+		}
+
+		return self::exito(
+			$texto,
+			$llamadas,
+			array(
 				'entrada' => isset( $d['usageMetadata']['promptTokenCount'] ) ? (int) $d['usageMetadata']['promptTokenCount'] : 0,
-				'salida'  => isset( $d['usageMetadata']['candidatesTokenCount'] ) ? (int) $d['usageMetadata']['candidatesTokenCount'] : 0,
+				// El razonamiento se cobra como salida y viene aparte.
+				'salida'  => ( isset( $d['usageMetadata']['candidatesTokenCount'] ) ? (int) $d['usageMetadata']['candidatesTokenCount'] : 0 )
+					+ ( isset( $d['usageMetadata']['thoughtsTokenCount'] ) ? (int) $d['usageMetadata']['thoughtsTokenCount'] : 0 ),
 			),
+			$avisos,
+			'' !== $parada ? 'finishReason=' . $parada : ''
 		);
 	}
 

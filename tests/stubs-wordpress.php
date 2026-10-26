@@ -278,6 +278,7 @@ function uhp_cargar_clases_de_datos() {
 	require_once $base . 'analysis/class-uhp-analisis.php';
 	require_once $base . 'data/class-uhp-views.php';
 	require_once $base . 'data/class-uhp-territorios.php';
+	require_once $base . 'class-uhp-codigos.php';
 	require_once $base . 'class-uhp-llm.php';
 	require_once $base . 'class-uhp-rest.php';
 	require_once $base . 'class-uhp-voz.php';
@@ -626,6 +627,109 @@ function wp_remote_retrieve_response_code( $r ) {
 		return 0;
 	}
 	return isset( $r['response']['code'] ) ? (int) $r['response']['code'] : 0;
+}
+
+function wp_remote_retrieve_header( $r, $nombre ) {
+	if ( is_wp_error( $r ) || ! is_array( $r ) || empty( $r['headers'] ) ) {
+		return '';
+	}
+	$nombre = strtolower( (string) $nombre );
+	foreach ( (array) $r['headers'] as $k => $v ) {
+		if ( strtolower( (string) $k ) === $nombre ) {
+			return (string) $v;
+		}
+	}
+	return '';
+}
+
+/* ------------------------------------------------------------------ */
+/* API REST: lo justo para llamar a las dos rutas del asistente        */
+/* ------------------------------------------------------------------ */
+
+/* Con esto la suite llama a ruta_chat() y ruta_hablar() de verdad, con
+   sus puertas, su cupo y sus códigos UHP, en vez de fiarse de que el
+   navegador recibe lo que el servidor dice que manda. */
+
+$GLOBALS['uhp_test_home']   = 'https://narino.gov.co';
+$GLOBALS['uhp_test_editor'] = false;
+
+function home_url( $ruta = '' ) {
+	return rtrim( $GLOBALS['uhp_test_home'], '/' ) . '/' . ltrim( (string) $ruta, '/' );
+}
+
+function current_user_can( $cap ) {
+	return (bool) $GLOBALS['uhp_test_editor'];
+}
+
+function sanitize_textarea_field( $texto ) {
+	// Como sanitize_text_field(), pero conservando los saltos de línea.
+	$lineas = preg_split( '/\r\n|\r|\n/', (string) $texto );
+	return implode( "\n", array_map( 'sanitize_text_field', $lineas ) );
+}
+
+function wp_unslash( $valor ) {
+	return is_string( $valor ) ? stripslashes( $valor ) : $valor;
+}
+
+function register_rest_route() {
+	return true;
+}
+
+class WP_REST_Server {
+	const CREATABLE = 'POST';
+	const READABLE  = 'GET';
+}
+
+class WP_REST_Request {
+
+	/** @var array */
+	private $params;
+	/** @var string */
+	private $route;
+
+	public function __construct( $params = array(), $route = '' ) {
+		$this->params = $params;
+		$this->route  = $route;
+	}
+
+	public function get_param( $k ) {
+		return isset( $this->params[ $k ] ) ? $this->params[ $k ] : null;
+	}
+
+	public function get_route() {
+		return $this->route;
+	}
+}
+
+class WP_REST_Response {
+
+	/** @var mixed */
+	private $data;
+	/** @var int */
+	private $status;
+	/** @var array */
+	private $headers = array();
+
+	public function __construct( $data = null, $status = 200 ) {
+		$this->data   = $data;
+		$this->status = (int) $status;
+	}
+
+	public function get_data() {
+		return $this->data;
+	}
+
+	public function get_status() {
+		return $this->status;
+	}
+
+	public function header( $k, $v ) {
+		$this->headers[ $k ] = $v;
+	}
+
+	public function get_headers() {
+		return $this->headers;
+	}
 }
 
 function wp_remote_retrieve_body( $r ) {

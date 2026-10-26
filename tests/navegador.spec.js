@@ -230,10 +230,14 @@ test.describe('Asistente de voz', () => {
         chat: 0, hablar: 0, cuerpos: [], textos: [],
         // Lo que el doble va a contestar, en orden.
         guion: [], contador: 0,
-        /* Para forzar un fallo: { ruta, codigo, code }. `code` es el del
-           WP_Error que WordPress serializa en el cuerpo, y es lo que
-           distingue dos 503 que significan cosas distintas. */
+        /* Para forzar un fallo: { ruta, codigo, code, uhp }. `code` es el
+           del WP_Error que WordPress serializa en el cuerpo, y `uhp` el
+           código UHP que el servidor de la 2.1 pone en `data.uhp`. Sin
+           `uhp`, el doble se comporta como un servidor anterior. */
         fallo: null,
+        // Milisegundos que tarda /voz/chat en contestar: para poder
+        // pulsar «Parar» mientras el asistente consulta.
+        retraso: 0, retrasoVoz: 0,
         // El micrófono. Cuántas veces se pidió y cuántas pistas quedaron
         // abiertas: en el canal escrito las dos tienen que ser cero.
         microfono: 0, pistasVivas: 0,
@@ -346,9 +350,13 @@ test.describe('Asistente de voz', () => {
           S.chat++;
           S.cuerpos.push(cuerpo);
           if (S.fallo && S.fallo.ruta === 'chat') {
-            return responder({ code: S.fallo.code || '', message: 'x' }, S.fallo.codigo);
+            return responder({ code: S.fallo.code || '', message: 'x', data: { status: S.fallo.codigo, uhp: S.fallo.uhp || undefined } }, S.fallo.codigo);
           }
           const siguiente = S.guion.length ? S.guion.shift() : { texto: 'No tengo guion.', llamadas: [] };
+          if (S.retraso) {
+            const ms = S.retraso;
+            return new Promise(function (listo) { setTimeout(function () { listo(responder(siguiente)); }, ms); });
+          }
           return responder(siguiente);
         }
 
@@ -356,7 +364,11 @@ test.describe('Asistente de voz', () => {
           S.hablar++;
           S.textos.push(cuerpo && cuerpo.texto);
           if (S.fallo && S.fallo.ruta === 'hablar') {
-            return responder({ code: S.fallo.code || '', message: 'x' }, S.fallo.codigo);
+            return responder({ code: S.fallo.code || '', message: 'x', data: { status: S.fallo.codigo, uhp: S.fallo.uhp || undefined } }, S.fallo.codigo);
+          }
+          if (S.retrasoVoz) {
+            const ms = S.retrasoVoz;
+            return new Promise(function (listo) { setTimeout(function () { listo(responder({ tipo: 'audio/mpeg', audio: cfg.mp3 })); }, ms); });
           }
           return responder({ tipo: 'audio/mpeg', audio: cfg.mp3 });
         }
@@ -968,7 +980,7 @@ test.describe('Asistente de voz', () => {
     const hilo = page.locator('.uhp-voz__hilo');
     await expect(hilo).toHaveAttribute('tabindex', '0');
     await expect(hilo).toHaveAttribute('role', 'log');
-    await expect(hilo).toHaveAttribute('aria-label', /transcripci/i);
+    await expect(hilo).toHaveAttribute('aria-label', /conversaci/i);
   });
 
   test('sin JavaScript el botón del micrófono no promete nada', async ({ page }) => {
@@ -1067,7 +1079,7 @@ test.describe('Asistente de voz', () => {
       { texto: 'Hay 55 municipios.', llamadas: [] }
     ]);
     comprobar(await medir([
-      '.uhp-voz__quien', '.uhp-voz__turno', '.uhp-voz__estado-txt', '.uhp-voz__cab h3'
+      '.uhp-voz__quien', '.uhp-voz__globo', '.uhp-voz__estado-txt', '.uhp-voz__sug-rotulo', '.uhp-voz__pastilla'
     ]));
   });
 
@@ -1145,7 +1157,7 @@ test.describe('Asistente de voz', () => {
     // Quien no ve la pantalla depende de este rótulo: decirle
     // «escuchando» a quien está teclando le describe algo que no existe.
     const estado = page.locator('.uhp-voz__estado-txt');
-    await expect(estado).toContainText('Escriba');
+    await expect(estado).toContainText('Escribe');
     await expect(estado).not.toContainText('Escuchando');
 
     // El campo está desde el primer momento, aquí y en todas partes: es
@@ -1324,7 +1336,7 @@ test.describe('Asistente de voz', () => {
     expect(await page.evaluate(() => window.__UHP_AUDIO[1].error)).toBeNull();
 
     // Y el panel queda en reposo, no atrapado en «respondiendo».
-    await expect(page.locator('.uhp-voz__estado-txt')).toContainText('Escriba');
+    await expect(page.locator('.uhp-voz__estado-txt')).toContainText('Escribe');
   });
 
   test('una pregunta nueva no se encola mientras el asistente responde', async ({ page }) => {
@@ -1345,7 +1357,11 @@ test.describe('Asistente de voz', () => {
        1,056 s. */
     const antes = await page.evaluate(() => window.__UHP_STUB.chat);
     await page.locator('.uhp-voz__campo').fill('segunda a destiempo');
-    await page.locator('[data-uhp-voz-accion="enviar"]').click();
+    /* «Enviar» está inactivo con aria-disabled y no con disabled —así no
+       se lleva el foco al <body>—, y Playwright se niega a pulsar un
+       control así: se envía con Enter, que es lo que haría la persona. */
+    await expect(page.locator('[data-uhp-voz-accion="enviar"]')).toHaveAttribute('aria-disabled', 'true');
+    await page.locator('.uhp-voz__campo').press('Enter');
     expect(await page.evaluate(() => window.__UHP_STUB.chat)).toBe(antes);
     await expect(page.locator('.uhp-voz__turno--usted')).toHaveCount(1);
 
@@ -1754,21 +1770,30 @@ test.describe('Asistente de voz', () => {
        demasiado larga— tienen que llegar al visitante como algo que
        entiende, no como «algo salió mal». */
     const campo = page.locator('.uhp-voz__campo');
+    /* Con la forma de verdad del servidor 2.1: el code de WordPress y el
+       código UHP en data.uhp. El código además se VE junto al mensaje,
+       que es lo que el visitante le dicta a la mesa de ayuda. */
     const puertas = [
-      [503, 'uhp_voz_cuota', /hoy/i],
-      [429, 'uhp_voz_ritmo', /espere|demasiadas/i],
-      [413, 'uhp_voz_larga', /larga/i],
+      [503, 'uhp_voz_cuota', 'UHP-ACC-06', /hoy/i],
+      [429, 'uhp_rate_limit', 'UHP-ACC-05', /espera|muchas/i],
+      [413, 'uhp_voz_larga', 'UHP-CNV-06', /larga/i],
       /* Y el que importa: un 503 que NO es el cupo. La ruta devuelve uno
          cuando la voz no está configurada, y se anunciaba como «alcanzó
          su límite de consultas de hoy» —una cifra que no se había
          gastado y un límite que no existía—. El estado HTTP no basta
          para clasificar: hace falta el código del servidor. */
-      [503, 'uhp_voz_sin_voz', /no pude consultar/i],
+      [503, 'uhp_voz_sin_voz', 'UHP-CFG-04', /no pude consultar/i],
+      // Una negativa del modelo no es una avería: se dice otra cosa.
+      [502, 'uhp_voz_proveedor', 'UHP-LLM-11', /de otra forma/i],
     ];
-    for (const [codigo, code, aguja] of puertas) {
-      await page.evaluate((f) => { window.__UHP_STUB.fallo = { ruta: 'chat', codigo: f[0], code: f[1] }; }, [codigo, code]);
+    for (const [codigo, code, uhp, aguja] of puertas) {
+      await page.evaluate((f) => {
+        window.__UHP_STUB.fallo = { ruta: 'chat', codigo: f[0], code: f[1], uhp: { codigo: f[2], frase: 'frase del servidor', nivel: 'warn', ref: 'a1b2c3' } };
+      }, [codigo, code, uhp]);
       await enviar(page, 'una pregunta');
       await expect(page.locator('.uhp-voz__estado-txt')).toContainText(aguja);
+      await expect(page.locator('.uhp-voz__codigo')).toHaveText(uhp);
+      await expect(page.locator('[data-uhp-voz]')).toHaveAttribute('data-uhp-voz-error', uhp);
 
       /* Y nunca se queda sin salida. El botón «Volver a preguntar»
          desapareció al reducir la fila a tres controles, y no hacía
@@ -1803,7 +1828,12 @@ test.describe('Asistente de voz', () => {
        reproducción se ven exactamente igual, y se arreglan distinto.
        Quien tenga que diagnosticarlo solo tiene el equipo del visitante,
        y hasta ahora ahí no había absolutamente nada. */
-    await page.evaluate(() => { window.__UHP_STUB.fallo = { ruta: 'hablar', codigo: 502, code: 'uhp_voz_proveedor' }; });
+    await page.evaluate(() => {
+      window.__UHP_STUB.fallo = {
+        ruta: 'hablar', codigo: 502, code: 'uhp_voz_proveedor',
+        uhp: { codigo: 'UHP-VOZ-03', frase: 'la síntesis de voz rechazó la clave', nivel: 'error', ref: '7c2e9a' }
+      };
+    });
     await preguntar(page, '¿cuántos municipios hay?', [
       { texto: 'Son 55 municipios priorizados.', llamadas: [] }
     ]);
@@ -1811,9 +1841,26 @@ test.describe('Asistente de voz', () => {
     await expect(page.locator('.uhp-voz__turno').last()).toContainText('Son 55 municipios');
     await expect(page.locator('.uhp-voz__estado-txt')).not.toContainText(/error/i);
 
-    await expect.poll(() => consola.filter((l) => l.includes('voz:')).length).toBeGreaterThan(0);
-    expect(consola.join(' ')).toContain('HTTP 502');
-    expect(consola.join(' ')).toContain('uhp_voz_proveedor');
+    /* UNA línea, con el código, la frase del servidor, el ref que la une
+       con el registro de PHP y la versión de la página. */
+    await expect.poll(() => consola.filter((l) => l.includes('UHP-VOZ-03')).length).toBe(1);
+    const linea = consola.find((l) => l.includes('UHP-VOZ-03'));
+    expect(linea).toContain('la síntesis de voz rechazó la clave');
+    expect(linea).toContain('HTTP 502');
+    expect(linea).toContain('ref 7c2e9a');
+    expect(linea).toMatch(/· v\d/);
+
+    // Un servidor anterior, sin código UHP: el navegador lo deduce del code
+    // de WordPress y lo dice.
+    await page.evaluate(() => { window.__UHP_STUB.fallo = { ruta: 'hablar', codigo: 502, code: 'uhp_voz_proveedor' }; });
+    await preguntar(page, '¿y en la zona roja?', [{ texto: 'En la zona roja hay varios.', llamadas: [] }]);
+    await expect.poll(() => consola.filter((l) => l.includes('UHP-VOZ-99')).length).toBe(1);
+    expect(consola.find((l) => l.includes('UHP-VOZ-99'))).toContain('uhp_voz_proveedor');
+
+    // Y el diagnóstico se puede copiar como texto.
+    const diag = await page.evaluate(() => window.UHPVozAsistente.diagnostico());
+    expect(diag).toContain('UHP-VOZ-03');
+    expect(diag).toContain('ref 7c2e9a');
   });
 
   test('el motivo que da el navegador al fallar el micrófono llega a la consola', async ({ page }) => {
@@ -1832,8 +1879,10 @@ test.describe('Asistente de voz', () => {
     await page.locator('[data-uhp-voz-accion="dictar"]').click();
     await expect(page.locator('.uhp-voz__estado-txt')).toContainText('no reconoce la voz');
 
-    await expect.poll(() => consola.filter((l) => l.includes('micrófono')).length).toBeGreaterThan(0);
+    await expect.poll(() => consola.filter((l) => l.includes('UHP-MIC-05')).length).toBeGreaterThan(0);
     expect(consola.join(' ')).toContain('service-not-allowed');
+    // Y el código se ve en pantalla junto al mensaje.
+    await expect(page.locator('.uhp-voz__codigo')).toHaveText('UHP-MIC-05');
   });
 
   test('un navegador sin reconocimiento lo dice en la consola, no solo en pantalla', async ({ page }) => {
@@ -1874,6 +1923,26 @@ test.describe('Asistente de voz', () => {
     await expect(page.locator('.uhp-voz__turno').last()).toContainText(/me enred/i, { timeout: 15000 });
     // El tope de la página de pruebas es 8.
     expect(await page.evaluate(() => window.__UHP_STUB.chat)).toBeLessThanOrEqual(9);
+
+    /* Y la pregunta SIGUIENTE sale bien formada. Hasta la 2.0 el tope
+       dejaba la última llamada sin resultado, y los tres proveedores
+       contestan 400 a eso: el asistente se quedaba mudo para el resto de
+       la conversación. */
+    await page.evaluate(() => { window.__UHP_STUB.guion = []; });
+    await preguntar(page, 'otra', [{ texto: 'Ahora sí.', llamadas: [] }]);
+    const huerfanas = await page.evaluate(() => {
+      const S = window.__UHP_STUB;
+      const m = S.cuerpos[S.cuerpos.length - 1].mensajes;
+      const malas = [];
+      m.forEach((x, i) => {
+        if (x.rol !== 'asistente' || !x.llamadas || !x.llamadas.length) { return; }
+        const sig = m[i + 1];
+        const ids = sig && sig.rol === 'herramienta' ? sig.resultados.map((r) => r.id) : [];
+        x.llamadas.forEach((l) => { if (ids.indexOf(l.id) < 0) { malas.push(l.id); } });
+      });
+      return malas;
+    });
+    expect(huerfanas).toEqual([]);
   });
 
   test('un participante publicado no se sustituye por uno prorrateado', async ({ page }) => {
@@ -1939,6 +2008,274 @@ test.describe('Asistente de voz', () => {
     // hay es cifra publicada ni municipio intervenido.
     expect(r).toContain('Sanquianga');
     expect(r).toContain('no se pueden filtrar');
+  });
+  /* ---------------------------------------------------------------- */
+  /* La ventana de la 2.1                                             */
+  /* ---------------------------------------------------------------- */
+
+  test('la ventana tiene la estructura de la captura, con los iconos nombrados', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    // El nombre del anfitrión va ENCIMA del globo del saludo.
+    const saludo = page.locator('.uhp-voz__turno--asistente').first();
+    await expect(saludo.locator('.uhp-voz__quien')).toHaveText('Tu anfitrión');
+    await expect(saludo.locator('.uhp-voz__globo')).toContainText('Te doy la bienvenida');
+
+    // «Puedes preguntar:» con sus pastillas, como grupo con nombre.
+    const grupo = page.getByRole('group', { name: 'Puedes preguntar:' });
+    await expect(grupo.getByRole('button')).toHaveCount(6);
+
+    /* La barra, en el orden de la captura, y cada icono con su nombre.
+       `exact`: getByRole casa por subcadena. */
+    for (const nombre of ['Dictar la pregunta', 'Enviar la pregunta', 'Parar', 'Cerrar el asistente']) {
+      await expect(page.getByRole('button', { name: nombre, exact: true })).toHaveCount(1);
+    }
+    const orden = await page.evaluate(() => Array.prototype.map.call(
+      document.querySelectorAll('.uhp-voz__pie [data-uhp-voz-accion]'),
+      (b) => b.getAttribute('data-uhp-voz-accion')
+    ));
+    expect(orden).toEqual(['dictar', 'enviar', 'parar', 'cerrar']);
+
+    // «Enviar» va DENTRO de la píldora del campo.
+    await expect(page.locator('.uhp-voz__caja [data-uhp-voz-accion="enviar"]')).toHaveCount(1);
+
+    // El lanzador dice siempre «Asistente»: el estado lo da aria-expanded.
+    const lanzador = page.locator('[data-uhp-voz-accion="abrir"]');
+    await expect(lanzador).toHaveAttribute('aria-expanded', 'true');
+    await expect(lanzador).toContainText('Asistente');
+  });
+
+  test('el micrófono enseña su estado con el dibujo, sin cambiar de nombre', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    const mic = page.getByRole('button', { name: 'Dictar la pregunta', exact: true });
+    await expect(mic.locator('.uhp-voz__ico--reposo')).toBeVisible();
+    await expect(mic.locator('.uhp-voz__ico--activo')).toBeHidden();
+
+    await mic.click();
+    // El MISMO botón, con el mismo nombre: un nombre que cambia junto con
+    // aria-pressed se lee al revés.
+    await expect(mic).toHaveAttribute('aria-pressed', 'true');
+    await expect(mic.locator('.uhp-voz__ico--activo')).toBeVisible();
+    await expect(mic.locator('.uhp-voz__ico--reposo')).toBeHidden();
+  });
+
+  test('una pastilla envía su pregunta tal cual', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    await page.locator('.uhp-voz__campo').fill('lo que yo estaba escribiendo');
+    const antes = await page.evaluate(() => window.__UHP_STUB.chat);
+    await responde(page, [{ texto: 'Te cuento.', llamadas: [] }]);
+    const primera = page.locator('.uhp-voz__pastilla').first();
+    const texto = await primera.textContent();
+    await primera.click();
+
+    await expect(page.locator('.uhp-voz__turno--usted').last()).toContainText(texto);
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.chat)).toBe(antes + 1);
+    // Lo que había escrito en el campo es suyo y no se toca.
+    await expect(page.locator('.uhp-voz__campo')).toHaveValue('lo que yo estaba escribiendo');
+  });
+
+  test('«Parar» corta la consulta, deja una nota y la pregunta no vuelve a viajar', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    const parar = page.getByRole('button', { name: 'Parar', exact: true });
+    await expect(parar).toHaveAttribute('aria-disabled', 'true');
+
+    await page.evaluate(() => { window.__UHP_STUB.retraso = 3000; });
+    await responde(page, [{ texto: 'Esta respuesta llega tarde.', llamadas: [] }]);
+    await page.locator('.uhp-voz__campo').fill('pregunta abandonada');
+    await page.locator('.uhp-voz__campo').press('Enter');
+    await expect(parar).toHaveAttribute('aria-disabled', 'false');
+    await parar.click();
+
+    await expect(page.locator('.uhp-voz__nota')).toContainText('paré');
+    await expect(parar).toHaveAttribute('aria-disabled', 'true');
+    // aria-disabled y no disabled: el foco se queda donde estaba.
+    await expect(parar).toBeFocused();
+    await page.waitForTimeout(3500);
+    await expect(page.locator('.uhp-voz__turno--asistente', { hasText: 'llega tarde' })).toHaveCount(0);
+
+    // La pregunta abandonada se sacó del historial.
+    await page.evaluate(() => { window.__UHP_STUB.retraso = 0; });
+    await preguntar(page, 'otra', [{ texto: 'Ahora sí.', llamadas: [] }]);
+    const cuerpo = await page.evaluate(() => JSON.stringify(window.__UHP_STUB.cuerpos[window.__UHP_STUB.cuerpos.length - 1]));
+    expect(cuerpo).not.toContain('pregunta abandonada');
+  });
+
+  test('«Parar» calla la voz y no borra la respuesta escrita', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    /* La síntesis tarda: «Parar» la corta mientras se pide, que es
+       cuando más se nota esperar una voz que ya no se quiere oír. */
+    await page.evaluate(() => { window.__UHP_STUB.retrasoVoz = 2500; });
+    await responde(page, [{ texto: 'Son 55 municipios priorizados.', llamadas: [] }]);
+    await page.locator('.uhp-voz__campo').fill('¿cuántos son?');
+    await page.locator('.uhp-voz__campo').press('Enter');
+    await expect(page.locator('[data-uhp-voz]')).toHaveClass(/uhp-voz--habla/);
+    await page.getByRole('button', { name: 'Parar', exact: true }).click();
+
+    await expect(page.locator('[data-uhp-voz]')).not.toHaveClass(/uhp-voz--habla/);
+    await expect(page.locator('.uhp-voz__estado-txt')).toContainText('Escribe');
+    await expect(page.locator('.uhp-voz__turno').last()).toContainText('Son 55 municipios');
+    // Y lo que llega después de parar ya no suena.
+    await page.waitForTimeout(3000);
+    expect(await page.evaluate(() => window.__UHP_AUDIO.length)).toBe(0);
+  });
+
+  test('la X cierra, devuelve el foco al lanzador y Escape fuera del asistente no cierra', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    // Con el foco en la lista de municipios, Escape es de ella.
+    await page.locator('.uhp-db__mrow').first().focus();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Cerrar el asistente', exact: true }).click();
+    await expect(page.locator('[data-uhp-voz-zona="panel"]')).toBeHidden();
+    const lanzador = page.locator('[data-uhp-voz-accion="abrir"]');
+    await expect(lanzador).toHaveAttribute('aria-expanded', 'false');
+    await expect(lanzador).toContainText('Asistente');
+    await expect(lanzador).toBeFocused();
+  });
+
+  test('a 360 px todo se toca con el dedo y nada se sale de la pantalla', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    const medidas = await page.evaluate(() => {
+      const caja = (s) => document.querySelector(s).getBoundingClientRect();
+      const botones = ['dictar', 'enviar', 'parar', 'cerrar'].map((a) => {
+        const r = caja('[data-uhp-voz-accion="' + a + '"]');
+        return { a: a, w: r.width, h: r.height };
+      });
+      return {
+        botones: botones,
+        campoDer: caja('.uhp-voz__campo').right,
+        enviarIzq: caja('[data-uhp-voz-accion="enviar"]').left,
+        ancho: document.documentElement.scrollWidth
+      };
+    });
+    medidas.botones.forEach((b) => {
+      expect(b.w, b.a + ' de ancho').toBeGreaterThanOrEqual(44);
+      expect(b.h, b.a + ' de alto').toBeGreaterThanOrEqual(44);
+    });
+    // El texto termina donde empieza «Enviar»: nunca debajo.
+    expect(medidas.campoDer).toBeLessThanOrEqual(medidas.enviarIzq + 0.5);
+    expect(medidas.ancho).toBeLessThanOrEqual(360);
+  });
+
+  /* ---------------------------------------------------------------- */
+  /* El dictado espera la pregunta completa                           */
+  /* ---------------------------------------------------------------- */
+
+  /** Un resultado del reconocedor, con la forma que da el navegador. */
+  async function dicta(page, texto, definitivo) {
+    await page.evaluate(([t, fin]) => {
+      const r = window.__UHP_STUB.viva;
+      const alternativa = [{ transcript: t }];
+      alternativa.isFinal = !!fin;
+      r.onresult({ resultIndex: 0, results: [alternativa] });
+    }, [texto, definitivo]);
+  }
+
+  test('una pausa a media pregunta no la corta', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+    await responde(page, [{ texto: 'Son once.', llamadas: [] }]);
+
+    const antes = await page.evaluate(() => window.__UHP_STUB.chat);
+    await page.getByRole('button', { name: 'Dictar la pregunta', exact: true }).click();
+    await dicta(page, '¿cuántos municipios', true);
+
+    /* La persona toma aire y el navegador cierra solo, como hace Chrome
+       en Android tras cada frase. Antes eso ENTREGABA medio pregunta. */
+    await page.evaluate(() => { window.__UHP_STUB.viva.onend({}); });
+    expect(await page.evaluate(() => window.__UHP_STUB.chat)).toBe(antes);
+    await expect(page.locator('.uhp-voz__campo')).toHaveValue('¿cuántos municipios');
+
+    // Sigue: el reconocedor se volvió a abrir y la segunda parte se suma.
+    await dicta(page, 'hay en la zona roja?', true);
+    await expect(page.locator('.uhp-voz__turno--usted').last()).toHaveText(/¿cuántos municipios hay en la zona roja\?/, { timeout: 8000 });
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.chat)).toBe(antes + 1);
+  });
+
+  test('el micrófono espera a que la persona empiece a hablar', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    const mic = page.getByRole('button', { name: 'Dictar la pregunta', exact: true });
+    await mic.click();
+    // Chrome se cansa de esperar con 'no-speech' y cierra. No es el final.
+    for (let i = 0; i < 3; i++) {
+      await page.evaluate(() => {
+        const r = window.__UHP_STUB.viva;
+        r.onerror({ error: 'no-speech' });
+        r.onend({});
+      });
+    }
+    await expect(mic).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.uhp-voz__estado-txt')).toContainText('Te escucho');
+    expect(await page.evaluate(() => window.__UHP_STUB.dictados)).toBe(4);
+  });
+
+  test('pulsar otra vez el micrófono envía lo dictado sin esperar', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+    await responde(page, [{ texto: 'Te explico.', llamadas: [] }]);
+
+    const antes = await page.evaluate(() => window.__UHP_STUB.chat);
+    const mic = page.getByRole('button', { name: 'Dictar la pregunta', exact: true });
+    await mic.click();
+    await dicta(page, '¿qué es una lesión precursora?', false);
+    await mic.click();
+    await expect.poll(() => page.evaluate(() => window.__UHP_STUB.chat), { timeout: 1000 }).toBe(antes + 1);
+    await expect(page.locator('.uhp-voz__turno--usted').last()).toContainText('lesión precursora');
+  });
+
+  test('«Parar» descarta lo dictado', async ({ page }) => {
+    await conDoble(page);
+    await page.goto(BASE + '/paginas/voz-dos.html');
+    await listo(page);
+    await conversar(page);
+
+    const antes = await page.evaluate(() => window.__UHP_STUB.chat);
+    const mic = page.getByRole('button', { name: 'Dictar la pregunta', exact: true });
+    await mic.click();
+    await dicta(page, 'esto no lo quería mandar', false);
+    await page.getByRole('button', { name: 'Parar', exact: true }).click();
+
+    await expect(mic).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('.uhp-voz__campo')).toHaveValue('');
+    await page.waitForTimeout(2500);
+    expect(await page.evaluate(() => window.__UHP_STUB.chat)).toBe(antes);
   });
 });
 

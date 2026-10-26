@@ -20,6 +20,7 @@ use GobernacionNarino\Urkunina\UHP_Municipios;
 use GobernacionNarino\Urkunina\UHP_Views;
 use GobernacionNarino\Urkunina\UHP_Rest;
 use GobernacionNarino\Urkunina\UHP_Voz;
+use GobernacionNarino\Urkunina\UHP_Codigos;
 use GobernacionNarino\Urkunina\UHP_Security;
 use GobernacionNarino\Urkunina\UHP_Topojson;
 use GobernacionNarino\Urkunina\UHP_Subregiones;
@@ -1395,7 +1396,7 @@ comprobar(
 	'Ni qué proveedor está detrás, que el navegador no necesita saber'
 );
 
-$permitidas = array( 'micro', 'voz', 'aviso', 'recordar', 'avisoVersion', 'turnos', 'rutaChat', 'rutaVoz', 'nonce' );
+$permitidas = array( 'micro', 'voz', 'silencio', 'sugerencias', 'aviso', 'recordar', 'avisoVersion', 'turnos', 'rutaChat', 'rutaVoz', 'version', 'nonce' );
 $sobran     = array_diff( array_keys( $front ), $permitidas );
 comprobar(
 	! $sobran,
@@ -2466,6 +2467,645 @@ comprobar(
 	'0.0.0-test' === UHP_VERSION,
 	'La versión de los stubs es falsa a propósito y no se sincroniza con la real'
 );
+
+echo "\n16. Asistente: códigos de error en el registro, la consola y el panel\n";
+
+/* «No pude consultar en este momento» es lo correcto para el visitante y
+   no le sirve a quien tiene que arreglarlo. Desde la 2.1 cada fallo lleva
+   un código UHP-ÁREA-NN que es el MISMO en el registro de PHP, en la
+   consola del navegador, en el panel y en la pantalla del visitante. */
+
+$catalogo = UHP_Codigos::CATALOGO;
+$malos    = array();
+foreach ( $catalogo as $cod => $fila ) {
+	$frase = $fila[1];
+	if ( ! preg_match( '/^UHP-[A-Z]{3}-[0-9]{2}$/', $cod )
+		|| ! in_array( $fila[0], array( 'error', 'warn', 'info' ), true )
+		|| mb_strlen( $frase ) > 70
+		|| false !== strpos( $frase, '%' )
+		|| preg_match( '/[.]$/', $frase )
+		|| mb_strtolower( mb_substr( $frase, 0, 1 ) ) !== mb_substr( $frase, 0, 1 )
+		|| preg_match( '/claude|anthropic|openai|gpt|gemini|google|elevenlabs/i', $frase ) ) {
+		$malos[] = $cod;
+	}
+}
+comprobar(
+	! $malos,
+	'Cada código del servidor tiene forma UHP-ÁREA-NN, un nivel válido y una frase fija, corta, sin variables y sin nombrar al proveedor' . ( $malos ? ': ' . implode( ', ', $malos ) : '' )
+);
+
+/* PRIMERO EL CUERPO, DESPUÉS EL ESTADO. Los cuatro casos reales en que
+   clasificar solo por HTTP se equivocaba. */
+$casos = array(
+	array( 'LLM', 429, '{"error":{"message":"You exceeded your current quota","type":"insufficient_quota","code":"insufficient_quota"}}', 'UHP-LLM-07', 'Un 429 de OpenAI por falta de saldo es saldo, no límite de ritmo' ),
+	array( 'LLM', 400, '{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"API_KEY_INVALID"}]}}', 'UHP-LLM-03', 'Un 400 de Gemini por clave inválida es la clave, no una petición mal formada' ),
+	array( 'LLM', 400, '{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API."}}', 'UHP-LLM-07', 'Un 400 de Anthropic por saldo es saldo' ),
+	array( 'VOZ', 401, '{"detail":{"status":"quota_exceeded","message":"This request exceeds your quota."}}', 'UHP-VOZ-07', 'Un 401 de ElevenLabs por cuota agotada es saldo, no la clave' ),
+	array( 'LLM', 400, '{"error":{"code":400,"message":"* GenerateContentRequest.tools[0].function_declarations: at least one function declaration is required","status":"INVALID_ARGUMENT"}}', 'UHP-LLM-06', 'El 400 de Gemini de la 1.x sigue siendo una petición rechazada' ),
+	array( 'LLM', 401, '{}', 'UHP-LLM-03', 'Sin cuerpo, un 401 es la clave' ),
+	array( 'LLM', 403, '{}', 'UHP-LLM-04', 'Sin cuerpo, un 403 es un permiso' ),
+	array( 'VOZ', 404, '{"detail":{"status":"voice_not_found","message":"A voice with that id was not found."}}', 'UHP-VOZ-05', 'Una voz que no existe en la cuenta' ),
+	array( 'LLM', 529, '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}', 'UHP-LLM-09', 'La sobrecarga de Anthropic es del proveedor, no de la configuración' ),
+	array( 'VOZ', 422, '{"detail":[{"loc":["body","text"],"msg":"field required","type":"value_error.missing"}]}', 'UHP-VOZ-06', 'Un 422 de validación de ElevenLabs es un parámetro rechazado' ),
+	array( 'LLM', 418, 'no es json', 'UHP-LLM-99', 'Lo que no se reconoce cae en el 99, que ya es un aviso: falta una fila' ),
+);
+foreach ( $casos as $c ) {
+	$obtenido = UHP_Codigos::de_proveedor( $c[0], $c[1], $c[2] );
+	comprobar( $c[3] === $obtenido, $c[4] . ' (' . $obtenido . ')' );
+}
+comprobar( 'UHP-LLM-02' === UHP_Codigos::de_transporte( 'LLM', 'http_request_failed · cURL error 28: Operation timed out after 45001 milliseconds' ), 'Un tiempo agotado no es lo mismo que no conectar' );
+comprobar( 'UHP-VOZ-01' === UHP_Codigos::de_transporte( 'VOZ', 'http_request_failed · cURL error 6: Could not resolve host' ), 'Y no resolver el nombre es no conectar' );
+
+/* LAS DOS RUTAS DE VERDAD, con sus puertas, su cupo y sus códigos. */
+$registro_php = tempnam( sys_get_temp_dir(), 'uhp-reg' );
+$registro_ant = ini_set( 'error_log', $registro_php );
+
+$base16 = UHP_Voz::por_defecto();
+$base16['activo']      = true;
+$base16['visibilidad'] = 'todos';
+$base16['voz_id']      = '21m00Tcm4TlvDq8ikWAM';
+$base16['proveedor']   = 'openai';
+$base16['cuota_dia']   = 50;
+update_option( 'uhp_voz', $base16 );
+update_option( 'uhp_llm_clave', 'sk-que-no-debe-salir-en-ninguna-parte' );
+update_option( 'uhp_voz_clave', 'sk-el-que-no-debe-salir-tampoco' );
+foreach ( array_keys( $GLOBALS['uhp_test_almacen'] ) as $k ) {
+	if ( 0 === strpos( $k, 'uhp_reg_' ) || 0 === strpos( $k, 'uhp_rl_' ) || 0 === strpos( $k, 'uhp_voz_cuota' ) ) {
+		unset( $GLOBALS['uhp_test_almacen'][ $k ] );
+	}
+}
+
+$voz16    = new UHP_Voz();
+$pregunta = new WP_REST_Request( array( 'mensajes' => array( array( 'rol' => 'usuario', 'texto' => '¿Cuál es la cifra de Pasto?' ) ) ), '/urkunina/v1/voz/chat' );
+
+/**
+ * El código UHP que trae un WP_Error, o vacío.
+ *
+ * @param mixed $r Respuesta de una ruta.
+ * @return string
+ */
+function uhp_test_codigo( $r ) {
+	if ( ! is_wp_error( $r ) ) {
+		return '';
+	}
+	$d = $r->get_error_data();
+	return isset( $d['uhp']['codigo'] ) ? $d['uhp']['codigo'] : '';
+}
+
+// Sin Origin ni Referer: ACC-04, y el motivo en el registro.
+unset( $_SERVER['HTTP_ORIGIN'], $_SERVER['HTTP_REFERER'] );
+$r = $voz16->ruta_chat( $pregunta );
+comprobar( 'UHP-ACC-04' === uhp_test_codigo( $r ) && 'uhp_voz_origen' === $r->get_error_code(), 'Sin origen: UHP-ACC-04, y el código de WordPress no cambia' );
+$d = is_wp_error( $r ) ? $r->get_error_data() : array();
+comprobar(
+	isset( $d['uhp']['ref'] ) && preg_match( '/^[0-9a-f]{6}$/', $d['uhp']['ref'] ) && '' !== $d['uhp']['frase'],
+	'El error lleva el código, su frase fija y un ref de seis caracteres'
+);
+
+// Un proxy que termina TLS: el sitio es https y la petición llega por http.
+$_SERVER['HTTP_ORIGIN'] = 'http://narino.gov.co';
+$r = $voz16->ruta_chat( $pregunta );
+comprobar( 'UHP-ACC-04' === uhp_test_codigo( $r ), 'Con otro esquema, también ACC-04' );
+$linea = (string) file_get_contents( $registro_php );
+comprobar(
+	false !== strpos( $linea, 'motivo=sin-cabecera' ),
+	'Y el registro dice cuál de las causas fue (aquí, sin cabecera: el esquema cae en la misma ventana de diez minutos)'
+);
+
+$_SERVER['HTTP_ORIGIN'] = 'https://narino.gov.co';
+
+// Saldo agotado en OpenAI, que llega como 429.
+$antes = UHP_Voz::cuota_usada();
+uhp_test_http(
+	array(
+		array(
+			'response' => array( 'code' => 429 ),
+			'body'     => '{"error":{"message":"You exceeded your current quota, please check your plan and billing details.","type":"insufficient_quota","code":"insufficient_quota"}}',
+		),
+	)
+);
+$r = $voz16->ruta_chat( $pregunta );
+comprobar( 'UHP-LLM-07' === uhp_test_codigo( $r ) && 'uhp_voz_proveedor' === $r->get_error_code(), 'Sin saldo en el proveedor: UHP-LLM-07 hacia el navegador' );
+comprobar( $antes === UHP_Voz::cuota_usada(), 'Y la plaza del cupo se devuelve: un fallo del proveedor no gasta una consulta' );
+
+$plano = wp_json_encode( is_wp_error( $r ) ? array( $r->get_error_code(), $r->get_error_message(), $r->get_error_data() ) : array() );
+comprobar(
+	false === strpos( $plano, 'sk-que-no' ) && false === stripos( $plano, 'openai' ) && false === strpos( $plano, 'insufficient_quota' ) && false === strpos( $plano, 'billing' ),
+	'Al navegador NO viaja ni la clave, ni el proveedor, ni lo que dijo el proveedor'
+);
+$ref_1 = $d = is_wp_error( $r ) ? $r->get_error_data()['uhp']['ref'] : '';
+
+$log = (string) file_get_contents( $registro_php );
+comprobar(
+	false !== strpos( $log, '[URKUNINA 5000] UHP-LLM-07 · ' ) && false !== strpos( $log, 'ref ' . $ref_1 ) && false !== strpos( $log, 'proveedor=openai' ),
+	'En el registro sí: el código, el mismo ref y con qué proveedor se hablaba'
+);
+comprobar( false === strpos( $log, 'sk-que-no' ) && false === strpos( $log, 'sk-el-que' ), 'Y ninguna clave, ni en el registro' );
+comprobar( false === strpos( $log, 'Pasto' ), 'Ni la pregunta del visitante' );
+
+// La segunda vez, dentro del minuto: misma línea, mismo ref.
+uhp_test_http( array( array( 'response' => array( 'code' => 429 ), 'body' => '{"error":{"type":"insufficient_quota","code":"insufficient_quota"}}' ) ) );
+$r     = $voz16->ruta_chat( $pregunta );
+$ref_2 = is_wp_error( $r ) ? $r->get_error_data()['uhp']['ref'] : '';
+comprobar(
+	$ref_1 === $ref_2 && 1 === substr_count( (string) file_get_contents( $registro_php ), 'UHP-LLM-07' ),
+	'Un fallo repetido no inunda el registro: una línea por código y ventana, y el ref sigue llevando a ella'
+);
+
+// Un 200 vacío ya no es un éxito.
+uhp_test_http( array( array( 'response' => array( 'code' => 200 ), 'body' => '{"status":"completed","output":[]}' ) ) );
+$antes = UHP_Voz::cuota_usada();
+$r     = $voz16->ruta_chat( $pregunta );
+comprobar( 'UHP-LLM-12' === uhp_test_codigo( $r ), 'Un 200 sin texto ni herramientas es UHP-LLM-12 y no una respuesta vacía' );
+comprobar( $antes === UHP_Voz::cuota_usada(), 'Y tampoco gasta cupo' );
+
+// Una respuesta cortada en el tope: llega, pero con su aviso.
+uhp_test_http(
+	array(
+		array(
+			'response' => array( 'code' => 200 ),
+			'body'     => wp_json_encode(
+				array(
+					'status'             => 'incomplete',
+					'incomplete_details' => array( 'reason' => 'max_output_tokens' ),
+					'output'             => array( array( 'type' => 'message', 'content' => array( array( 'type' => 'output_text', 'text' => 'Pasto tiene' ) ) ) ),
+				)
+			),
+		),
+	)
+);
+$r = $voz16->ruta_chat( $pregunta );
+$d = ( $r instanceof WP_REST_Response ) ? $r->get_data() : array();
+comprobar(
+	isset( $d['avisos'][0]['codigo'] ) && 'UHP-LLM-13' === $d['avisos'][0]['codigo'] && 'Pasto tiene' === $d['texto'],
+	'Una respuesta cortada llega, pero con el aviso UHP-LLM-13'
+);
+
+// Las cabeceras X-UHP-*.
+$con_error = new WP_REST_Response( array( 'code' => 'uhp_voz_proveedor', 'data' => array( 'status' => 502, 'uhp' => array( 'codigo' => 'UHP-LLM-07', 'ref' => 'abc123' ) ) ), 502 );
+$h = UHP_Codigos::cabeceras( $con_error, null, new WP_REST_Request( array(), '/urkunina/v1/voz/chat' ) )->get_headers();
+comprobar(
+	isset( $h['X-UHP-Codigo'], $h['X-UHP-Ref'], $h['X-UHP-Version'] ) && 'UHP-LLM-07' === $h['X-UHP-Codigo'] && 'abc123' === $h['X-UHP-Ref'],
+	'Las rutas del asistente repiten el código y el ref en cabeceras, con la versión del servidor'
+);
+$h = UHP_Codigos::cabeceras( new WP_REST_Response( array(), 200 ), null, new WP_REST_Request( array(), '/urkunina/v1/municipios' ) )->get_headers();
+comprobar( ! $h, 'Y las demás rutas del plugin no se tocan' );
+
+// Visibilidad «editores» y petición anónima.
+$base16['visibilidad'] = 'editores';
+update_option( 'uhp_voz', $base16 );
+$r = $voz16->ruta_chat( $pregunta );
+comprobar( 'UHP-ACC-02' === uhp_test_codigo( $r ), 'En ensayo y sin sesión: UHP-ACC-02, distinto de «apagado»' );
+$base16['visibilidad'] = 'todos';
+
+// Apagado.
+$base16['activo'] = false;
+update_option( 'uhp_voz', $base16 );
+$r = $voz16->ruta_chat( $pregunta );
+comprobar( 'UHP-ACC-01' === uhp_test_codigo( $r ), 'Apagado: UHP-ACC-01' );
+$base16['activo'] = true;
+update_option( 'uhp_voz', $base16 );
+
+// Sin conversación.
+$r = $voz16->ruta_chat( new WP_REST_Request( array( 'mensajes' => array() ), '/urkunina/v1/voz/chat' ) );
+comprobar( 'UHP-CNV-05' === uhp_test_codigo( $r ) && 'uhp_voz_vacio' === $r->get_error_code(), 'Sin conversación: UHP-CNV-05' );
+
+/* LA SÍNTESIS. */
+$frase16 = new WP_REST_Request( array( 'texto' => 'Pasto tiene la cifra más alta de su subregión.' ), '/urkunina/v1/voz/hablar' );
+uhp_test_http( array( array( 'response' => array( 'code' => 200 ), 'headers' => array( 'content-type' => 'audio/mpeg' ), 'body' => "ID3\x03\x00audio" ) ) );
+$r = $voz16->ruta_hablar( $frase16 );
+$d = ( $r instanceof WP_REST_Response ) ? $r->get_data() : array();
+comprobar( isset( $d['audio'] ) && "ID3\x03\x00audio" === base64_decode( $d['audio'] ), 'La síntesis devuelve el audio' );
+
+uhp_test_http( array( array( 'response' => array( 'code' => 200 ), 'headers' => array( 'content-type' => 'text/html; charset=UTF-8' ), 'body' => '<html>proxy</html>' ) ) );
+$r = $voz16->ruta_hablar( $frase16 );
+comprobar( 'UHP-VOZ-10' === uhp_test_codigo( $r ), 'Un 200 que no es audio ya no llega mudo al navegador: UHP-VOZ-10' );
+
+uhp_test_http( array( array( 'response' => array( 'code' => 401 ), 'body' => '{"detail":{"status":"quota_exceeded","message":"This request exceeds your quota of 10000."}}' ) ) );
+$r = $voz16->ruta_hablar( $frase16 );
+comprobar( 'UHP-VOZ-07' === uhp_test_codigo( $r ), 'La cuota de ElevenLabs agotada es UHP-VOZ-07 aunque llegue como 401' );
+
+// LA SÍNTESIS TIENE CUPO. Hasta la 2.0 no lo tenía.
+$base16['cuota_dia'] = 1;
+update_option( 'uhp_voz', $base16 );
+foreach ( array_keys( $GLOBALS['uhp_test_almacen'] ) as $k ) {
+	if ( 0 === strpos( $k, 'uhp_voz_cuota' ) ) {
+		unset( $GLOBALS['uhp_test_almacen'][ $k ] );
+	}
+}
+uhp_test_http( array( array( 'response' => array( 'code' => 200 ), 'headers' => array( 'content-type' => 'audio/mpeg' ), 'body' => 'ID3' ) ) );
+$r1 = $voz16->ruta_hablar( $frase16 );
+$r2 = $voz16->ruta_hablar( $frase16 );
+comprobar(
+	$r1 instanceof WP_REST_Response && 'UHP-ACC-07' === uhp_test_codigo( $r2 ) && 'uhp_voz_cuota' === $r2->get_error_code(),
+	'La lectura en voz alta tiene su propio cupo diario: agotado, UHP-ACC-07'
+);
+comprobar( 0 === UHP_Voz::cuota_usada(), 'Y es un contador aparte: leer no gasta consultas' );
+
+// Sin voz configurada.
+$base16['voz_id'] = '';
+update_option( 'uhp_voz', $base16 );
+$r = $voz16->ruta_hablar( $frase16 );
+comprobar( 'UHP-CFG-04' === uhp_test_codigo( $r ), 'Pedir audio a un servidor sin voz: UHP-CFG-04' );
+
+// El panel pinta el mismo código.
+update_option( 'uhp_voz', array_merge( $base16, array( 'voz_id' => '21m00Tcm4TlvDq8ikWAM', 'proveedor' => 'gemini' ) ) );
+uhp_test_http(
+	array(
+		array( 'response' => array( 'code' => 400 ), 'body' => '{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT","details":[{"reason":"API_KEY_INVALID"}]}}' ),
+		$ok_voces,
+	)
+);
+$inf = UHP_Voz::verificar();
+comprobar(
+	'UHP-LLM-03' === $inf['llm']['codigo'] && false !== strpos( $inf['llm']['mensaje'], 'la clave no es válida' ),
+	'La verificación de una clave de Gemini inválida dice «clave» con su código, no «petición mal formada»'
+);
+comprobar( '' === $inf['voz']['codigo'], 'Y lo que está bien no lleva código' );
+
+unset( $_SERVER['HTTP_ORIGIN'] );
+update_option( 'uhp_voz', $base16 );
+
+echo "\n17. Asistente: lo que exige la documentación de cada proveedor\n";
+
+/* Cada comprobación de esta sección sale de la documentación oficial
+   vigente de su proveedor, contrastada para la 2.1. */
+
+$ok_openai = array(
+	'response' => array( 'code' => 200 ),
+	'body'     => wp_json_encode( array( 'status' => 'completed', 'output' => array( array( 'type' => 'message', 'content' => array( array( 'type' => 'output_text', 'text' => 'Listo.' ) ) ) ) ) ),
+);
+$ok_claude = array(
+	'response' => array( 'code' => 200 ),
+	'body'     => wp_json_encode( array( 'content' => array( array( 'type' => 'text', 'text' => 'Listo.' ) ), 'stop_reason' => 'end_turn' ) ),
+);
+$ok_gemini = array(
+	'response' => array( 'code' => 200 ),
+	'body'     => wp_json_encode( array( 'candidates' => array( array( 'content' => array( 'parts' => array( array( 'text' => 'Listo.' ) ) ), 'finishReason' => 'STOP' ) ) ) ),
+);
+
+/**
+ * Cuerpo JSON de la última petición que salió.
+ *
+ * @return array
+ */
+function uhp_test_cuerpo_ultimo() {
+	$p = uhp_test_http_peticiones();
+	$u = end( $p );
+	return $u ? json_decode( $u['args']['body'], true ) : array();
+}
+
+/**
+ * Cabeceras de la última petición que salió.
+ *
+ * @return array
+ */
+function uhp_test_cabeceras_ultimo() {
+	$p = uhp_test_http_peticiones();
+	$u = end( $p );
+	return $u ? $u['args']['headers'] : array();
+}
+
+$neutro = array(
+	'clave'        => 'k',
+	'sistema'      => 'Responde.',
+	'mensajes'     => array( array( 'rol' => 'usuario', 'texto' => 'Hola' ) ),
+	'herramientas' => array(),
+	'esfuerzo'     => 'low',
+);
+
+// El tope cuenta el razonamiento: 2.000 se quedaba corto.
+uhp_test_http( array( $ok_claude ) );
+UHP_LLM::conversar( array_merge( $neutro, array( 'proveedor' => 'claude', 'modelo' => 'claude-opus-5-5' ) ) );
+$cu = uhp_test_cuerpo_ultimo();
+$ca = uhp_test_cabeceras_ultimo();
+comprobar( $cu['max_tokens'] >= 6000, 'Claude: el tope deja sitio para pensar y responder (' . $cu['max_tokens'] . ')' );
+comprobar( isset( $cu['output_config']['effort'] ) && 'low' === $cu['output_config']['effort'], 'Claude: el esfuerzo va a un modelo que lo admite' );
+comprobar(
+	'default' === ( isset( $cu['fallbacks'] ) ? $cu['fallbacks'] : '' ) && 'server-side-fallback-2026-07-01' === ( isset( $ca['anthropic-beta'] ) ? $ca['anthropic-beta'] : '' ),
+	'Claude: si un clasificador declina, reintenta en el servidor con su cabecera, que no es la de la forma de lista'
+);
+
+uhp_test_http( array( $ok_claude ) );
+UHP_LLM::conversar( array_merge( $neutro, array( 'proveedor' => 'claude', 'modelo' => 'claude-haiku-4-5' ) ) );
+$cu = uhp_test_cuerpo_ultimo();
+$ca = uhp_test_cabeceras_ultimo();
+comprobar( ! isset( $cu['output_config'] ), 'Claude: a un modelo sin esfuerzo no se le manda (daría 400)' );
+comprobar( ! isset( $cu['fallbacks'] ) && ! isset( $ca['anthropic-beta'] ), 'Ni el reintento, que ese modelo no tiene' );
+
+uhp_test_http( array( $ok_openai ) );
+UHP_LLM::conversar( array_merge( $neutro, array( 'proveedor' => 'openai', 'modelo' => 'gpt-6-luna' ) ) );
+$cu = uhp_test_cuerpo_ultimo();
+comprobar( isset( $cu['reasoning']['effort'] ) && 'low' === $cu['reasoning']['effort'], 'OpenAI: el esfuerzo llega también, en vez de pensar en «medium» por omisión' );
+comprobar( $cu['max_output_tokens'] >= 6000, 'OpenAI: y su tope deja sitio al razonamiento' );
+
+uhp_test_http( array( $ok_openai ) );
+UHP_LLM::conversar( array_merge( $neutro, array( 'proveedor' => 'openai', 'modelo' => 'gpt-4.1' ) ) );
+comprobar( ! isset( uhp_test_cuerpo_ultimo()['reasoning'] ), 'OpenAI: a un modelo que no razona no se le manda (daría 400)' );
+
+uhp_test_http( array( $ok_gemini ) );
+UHP_LLM::conversar( array_merge( $neutro, array( 'proveedor' => 'gemini', 'modelo' => 'gemini-3.8-flash' ) ) );
+$cu = uhp_test_cuerpo_ultimo();
+comprobar(
+	isset( $cu['generationConfig']['thinkingConfig']['thinkingLevel'] ) && 'LOW' === $cu['generationConfig']['thinkingConfig']['thinkingLevel'],
+	'Gemini 3: el nivel de pensamiento va en generationConfig'
+);
+uhp_test_http( array( $ok_gemini ) );
+UHP_LLM::conversar( array_merge( $neutro, array( 'proveedor' => 'gemini', 'modelo' => 'gemini-2.5-flash' ) ) );
+comprobar( ! isset( uhp_test_cuerpo_ultimo()['generationConfig']['thinkingConfig'] ), 'Gemini 2: no, que ahí el campo da error' );
+
+// Cortada con herramientas a medias: no se ejecutan.
+uhp_test_http(
+	array(
+		array(
+			'response' => array( 'code' => 200 ),
+			'body'     => wp_json_encode(
+				array(
+					'content'     => array( array( 'type' => 'tool_use', 'id' => 'toolu_1', 'name' => 'uhp_seleccionar_municipio', 'input' => array( 'municipio' => 'Pupi' ) ) ),
+					'stop_reason' => 'max_tokens',
+				)
+			),
+		),
+	)
+);
+$r = UHP_LLM::conversar( array_merge( $neutro, array( 'proveedor' => 'claude', 'modelo' => 'claude-opus-5-5' ) ) );
+comprobar( empty( $r['ok'] ) && 'UHP-LLM-13' === $r['clase'], 'Una respuesta cortada con una herramienta a medias no se ejecuta: unos argumentos truncados moverían el tablero a ciegas' );
+
+// La negativa de OpenAI con 200.
+uhp_test_http(
+	array(
+		array(
+			'response' => array( 'code' => 200 ),
+			'body'     => wp_json_encode( array( 'status' => 'completed', 'output' => array( array( 'type' => 'message', 'content' => array( array( 'type' => 'refusal', 'refusal' => 'No puedo.' ) ) ) ) ) ),
+		),
+	)
+);
+$r = UHP_LLM::conversar( array_merge( $neutro, array( 'proveedor' => 'openai', 'modelo' => 'gpt-6-luna' ) ) );
+comprobar( empty( $r['ok'] ) && 'UHP-LLM-11' === $r['clase'], 'OpenAI: una negativa con 200 es UHP-LLM-11 y no una respuesta vacía' );
+
+// Gemini: bloqueo de la pregunta.
+uhp_test_http( array( array( 'response' => array( 'code' => 200 ), 'body' => '{"promptFeedback":{"blockReason":"SAFETY"}}' ) ) );
+$r = UHP_LLM::conversar( array_merge( $neutro, array( 'proveedor' => 'gemini', 'modelo' => 'gemini-3.8-flash' ) ) );
+comprobar( empty( $r['ok'] ) && 'UHP-LLM-11' === $r['clase'], 'Gemini: un bloqueo de la pregunta es UHP-LLM-11' );
+
+/* CADA LLAMADA CON SU RESULTADO. Al llegar al tope de vueltas, el
+   navegador de la 2.0 guardaba la llamada sin resultado, y la pregunta
+   siguiente daba 400 en Claude. */
+update_option( 'uhp_voz', array_merge( $base16, array( 'proveedor' => 'claude', 'modelo' => 'claude-opus-5-5', 'cuota_dia' => 50, 'activo' => true, 'visibilidad' => 'todos' ) ) );
+$_SERVER['HTTP_ORIGIN'] = 'https://narino.gov.co';
+foreach ( array_keys( $GLOBALS['uhp_test_almacen'] ) as $k ) {
+	if ( 0 === strpos( $k, 'uhp_voz_cuota' ) || 0 === strpos( $k, 'uhp_rl_' ) ) {
+		unset( $GLOBALS['uhp_test_almacen'][ $k ] );
+	}
+}
+$huerfana = new WP_REST_Request(
+	array(
+		'mensajes' => array(
+			array( 'rol' => 'usuario', 'texto' => 'Muéstrame Pasto' ),
+			array( 'rol' => 'asistente', 'texto' => '', 'llamadas' => array( array( 'id' => 'toolu_a', 'nombre' => 'uhp_seleccionar_municipio', 'args' => array( 'municipio' => 'Pasto' ) ) ) ),
+			array( 'rol' => 'usuario', 'texto' => '¿Y Tumaco?' ),
+		),
+	),
+	'/urkunina/v1/voz/chat'
+);
+uhp_test_http( array( $ok_claude ) );
+$r  = $voz16->ruta_chat( $huerfana );
+$cu = uhp_test_cuerpo_ultimo();
+$tras = isset( $cu['messages'][2]['content'][0] ) ? $cu['messages'][2]['content'][0] : array();
+comprobar(
+	$r instanceof WP_REST_Response && 'tool_result' === ( isset( $tras['type'] ) ? $tras['type'] : '' ) && 'toolu_a' === $tras['tool_use_id'],
+	'Una llamada sin resultado sale con uno que dice la verdad («no se ejecutó»), justo detrás de ella'
+);
+comprobar( 'user' === $cu['messages'][3]['role'] && '¿Y Tumaco?' === $cu['messages'][3]['content'][0]['text'], 'Y la pregunta siguiente va después, como exige el proveedor' );
+
+$suelto = new WP_REST_Request(
+	array(
+		'mensajes' => array(
+			array( 'rol' => 'usuario', 'texto' => 'Hola' ),
+			array( 'rol' => 'herramienta', 'resultados' => array( array( 'id' => 'x1', 'nombre' => 'uhp_leer_estado_tablero', 'salida' => 'algo' ) ) ),
+			array( 'rol' => 'usuario', 'texto' => '¿Qué hay?' ),
+		),
+	),
+	'/urkunina/v1/voz/chat'
+);
+uhp_test_http( array( $ok_claude ) );
+$voz16->ruta_chat( $suelto );
+$plano = wp_json_encode( uhp_test_cuerpo_ultimo()['messages'] );
+comprobar( false === strpos( $plano, 'tool_result' ), 'Un resultado sin su llamada se quita en vez de mandarse' );
+
+// La firma de Gemini vuelve EXACTA, por larga que sea.
+update_option( 'uhp_voz', array_merge( $base16, array( 'proveedor' => 'gemini', 'modelo' => 'gemini-3.8-flash', 'cuota_dia' => 50, 'activo' => true, 'visibilidad' => 'todos' ) ) );
+$firma = str_repeat( 'QUJD', 1500 ); // 6.000 caracteres: más que el viejo recorte de 4.000.
+$con_firma = new WP_REST_Request(
+	array(
+		'mensajes' => array(
+			array( 'rol' => 'usuario', 'texto' => 'Muéstrame Pasto' ),
+			array( 'rol' => 'asistente', 'texto' => '', 'llamadas' => array( array( 'id' => 'g1', 'nombre' => 'uhp_seleccionar_municipio', 'args' => array( 'municipio' => 'Pasto' ), 'firma' => $firma ) ) ),
+			array( 'rol' => 'herramienta', 'resultados' => array( array( 'id' => 'g1', 'nombre' => 'uhp_seleccionar_municipio', 'salida' => 'Pasto seleccionado.' ) ) ),
+		),
+	),
+	'/urkunina/v1/voz/chat'
+);
+uhp_test_http( array( $ok_gemini ) );
+$voz16->ruta_chat( $con_firma );
+$cu = uhp_test_cuerpo_ultimo();
+comprobar(
+	isset( $cu['contents'][1]['parts'][0]['thoughtSignature'] ) && $firma === $cu['contents'][1]['parts'][0]['thoughtSignature'],
+	'La firma de razonamiento de Gemini vuelve exacta: recortada, Gemini 3 contesta 400'
+);
+
+// Las voces, por páginas.
+update_option( 'uhp_voz', array_merge( $base16, array( 'voz_id' => 'VozDeLaSegundaPagina1', 'activo' => true ) ) );
+uhp_test_http(
+	array(
+		array( 'response' => array( 'code' => 200 ), 'body' => wp_json_encode( array( 'voices' => array( array( 'voice_id' => '21m00Tcm4TlvDq8ikWAM', 'name' => 'Lucía' ) ), 'has_more' => true, 'next_page_token' => 'pag2' ) ) ),
+		array( 'response' => array( 'code' => 200 ), 'body' => wp_json_encode( array( 'voices' => array( array( 'voice_id' => 'VozDeLaSegundaPagina1', 'name' => 'Rosa' ) ), 'has_more' => false ) ) ),
+	)
+);
+$voces = UHP_Voz::voces( true );
+$pet   = uhp_test_http_peticiones();
+comprobar( isset( $voces['VozDeLaSegundaPagina1'] ) && 2 === count( $pet ), 'Una voz de la segunda página del listado también existe: antes se pedía solo la primera' );
+comprobar( false !== strpos( $pet[1]['url'], 'next_page_token=pag2' ) && false !== strpos( $pet[0]['url'], 'include_total_count=false' ), 'Con el token de la página siguiente y sin el conteo total, que es lento' );
+
+unset( $_SERVER['HTTP_ORIGIN'] );
+update_option( 'uhp_voz', $base16 );
+
+// El registro de PHP de las secciones 16 y 17 iba a un archivo temporal.
+ini_set( 'error_log', false === $registro_ant ? '' : $registro_ant );
+@unlink( $registro_php ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+
+echo "\n18. Módulo Asistente AI: ajustes, bienvenida y lo que sabe del proyecto\n";
+
+if ( ! function_exists( 'is_admin' ) ) {
+	function is_admin() {
+		return true;
+	}
+}
+require_once UHP_DIR . 'includes/admin/class-uhp-admin-datos.php';
+require_once UHP_DIR . 'includes/admin/class-uhp-admin.php';
+$admin18 = ( new ReflectionClass( 'GobernacionNarino\\Urkunina\\UHP_Admin' ) )->newInstanceWithoutConstructor();
+
+/**
+ * Lo que guarda el formulario del módulo a partir de lo que se envía.
+ *
+ * @param array $previo  Configuración guardada antes.
+ * @param array $entrada Lo que llega del formulario.
+ * @return array
+ */
+function uhp_test_guardar( $previo, $entrada ) {
+	global $admin18;
+	update_option( 'uhp_voz', $previo );
+	// El formulario manda, oculta, la visibilidad que había al pintarlo.
+	if ( isset( $entrada['visibilidad_previa'] ) ) {
+		$entrada['visibilidad_previa'] = $previo['visibilidad'];
+	}
+	return $admin18->sanear_voz( $entrada );
+}
+
+$previo18 = array_merge( UHP_Voz::por_defecto(), array( 'activo' => true, 'visibilidad' => 'todos' ) );
+
+/* EL MICRÓFONO ES UNA CASILLA. En la 2.0 el panel mostraba un selector
+   de tres opciones mientras el saneado convertía cualquier valor en
+   «ambos»: elegir «solo texto» no apagaba el micrófono. */
+$o = uhp_test_guardar( $previo18, array( 'visibilidad_previa' => '1', 'visible' => '1', 'entrada' => 'ambos' ) );
+comprobar( 'ambos' === $o['entrada'], 'Con la casilla marcada se ofrece el micrófono' );
+$o = uhp_test_guardar( $previo18, array( 'visibilidad_previa' => '1', 'visible' => '1' ) );
+comprobar( 'texto' === $o['entrada'], 'Y desmarcada, de verdad se apaga (en la 2.0 seguía encendido)' );
+
+// «Visible en el sitio» sin perder el modo «oculto» de quien lo eligió.
+$o = uhp_test_guardar( $previo18, array( 'visibilidad_previa' => '1' ) );
+comprobar( 'editores' === $o['visibilidad'], 'Desmarcar «Visible en el sitio» lo deja en ensayo, para editores' );
+$o = uhp_test_guardar( array_merge( $previo18, array( 'visibilidad' => 'oculto' ) ), array( 'visibilidad_previa' => '1' ) );
+comprobar( 'oculto' === $o['visibilidad'], 'Y si estaba «oculto» (botón de la plantilla), guardar no lo cambia' );
+$o = uhp_test_guardar( array_merge( $previo18, array( 'visibilidad' => 'oculto' ) ), array( 'visibilidad_previa' => '1', 'visible' => '1' ) );
+comprobar( 'todos' === $o['visibilidad'], 'Marcarlo lo publica para todos' );
+
+// La bienvenida.
+$o = uhp_test_guardar( $previo18, array( 'visibilidad_previa' => '1', 'visible' => '1', 'anfitrion' => '  <b>Tu anfitriona</b>  ', 'saludo' => "¡Hola!\nBienvenida." ) );
+comprobar( 'Tu anfitriona' === $o['anfitrion'], 'El nombre del anfitrión se limpia como texto' );
+update_option( 'uhp_voz', array_merge( $previo18, array( 'anfitrion' => '', 'saludo' => '' ) ) );
+comprobar( 'Tu anfitrión' === UHP_Voz::anfitrion(), 'Vacío, «Tu anfitrión»: sin tilde, porque es posesivo' );
+comprobar( UHP_Voz::saludo_por_omision() === UHP_Voz::saludo(), 'Y el saludo vacío es el del ejemplo' );
+comprobar( UHP_Voz::anfitrion() === UHP_Voz::textos()['asistente'], 'El nombre llega al navegador como el rótulo de cada globo' );
+
+// Las preguntas sugeridas.
+$o = uhp_test_guardar( $previo18, array( 'visibilidad_previa' => '1', 'visible' => '1', 'sugerencias' => "Uno\n\n  Dos  \nUno\n<script>x</script>Tres\n" . str_repeat( 'x', 140 ) ) );
+$sug = explode( "\n", $o['sugerencias'] );
+comprobar( array( 'Uno', 'Dos' ) === array_slice( $sug, 0, 2 ) && 4 === count( $sug ), 'Las sugerencias se limpian: sin vacías, sin repetidas' );
+comprobar( false === strpos( $o['sugerencias'], '<script' ), 'Y sin marcado' );
+comprobar( mb_strlen( $sug[3] ) <= 90, 'Y ninguna pasa de 90 caracteres' );
+$muchas = implode( "\n", array_map( function ( $i ) { return 'Pregunta ' . $i; }, range( 1, 12 ) ) );
+comprobar( 8 === count( UHP_Voz::sanear_sugerencias( $muchas ) ), 'Como mucho ocho' );
+update_option( 'uhp_voz', array_merge( $previo18, array( 'sugerencias' => '' ) ) );
+$fabrica = UHP_Voz::sugerencias();
+comprobar( $fabrica === UHP_Voz::sugerencias_por_omision() && count( $fabrica ) >= 6, 'Vacío, las del ejemplo' );
+$largas = array_filter( $fabrica, function ( $t ) { return mb_strlen( $t ) > 32; } );
+comprobar( ! $largas, 'Las del ejemplo son cortas: una pastilla no parte líneas y a 400 px se ve al menos una entera' );
+
+// La espera tras la última palabra.
+comprobar( 2.0 === UHP_Voz::sanear_silencio( '' ), 'Sin valor, dos segundos de silencio dan por terminada la pregunta' );
+comprobar( 2.5 === UHP_Voz::sanear_silencio( '2,5' ), 'Admite la coma decimal de Colombia' );
+comprobar( 1.0 === UHP_Voz::sanear_silencio( '0.2' ) && 6.0 === UHP_Voz::sanear_silencio( 30 ), 'Y se queda entre uno y seis segundos' );
+
+/* LO QUE SABE DEL PROYECTO SIN CONSULTAR. Cada dato atado a su JSON: si
+   alguien edita un JSON desde el módulo Datos, esto lo dice. */
+$prompt = UHP_Voz::prompt_sistema();
+$ficha  = implode( "\n", UHP_Voz::ficha_proyecto() );
+comprobar( false !== strpos( $prompt, $ficha ), 'La ficha del proyecto va dentro del prompt' );
+comprobar( strpos( $prompt, $ficha ) < strpos( $prompt, 'LO QUE NO HACES' ), 'Antes de «LO QUE NO HACES», que sigue cerrando el prompt' );
+
+$nombre = UHP_Datos::valor( 'proyecto', 'identificacion.origen_del_nombre' );
+comprobar(
+	is_array( $nombre ) && false !== strpos( $ficha, $nombre['vocablo'] ) && false !== strpos( $ficha, $nombre['significado'] ) && false !== stripos( $ficha, $nombre['referencia'] ),
+	'El origen del nombre es el del informe: «' . ( is_array( $nombre ) ? $nombre['significado'] : '?' ) . '», por el volcán Galeras'
+);
+comprobar( false !== strpos( $ficha, (string) UHP_Datos::valor( 'proyecto', 'identificacion.bpin' ) ), 'El BPIN coincide con el del proyecto' );
+$total = UHP_Datos::valor( 'proyecto', 'financiacion.presupuesto_total' );
+$fuentes = UHP_Datos::valor( 'proyecto', 'financiacion.fuentes' );
+comprobar(
+	false !== strpos( $ficha, number_format( (float) $total, 0, ',', '.' ) )
+		&& false !== strpos( $ficha, number_format( (float) $fuentes[0]['valor'], 0, ',', '.' ) )
+		&& false !== strpos( $ficha, number_format( (float) $fuentes[1]['valor'], 0, ',', '.' ) ),
+	'El costo y sus dos fuentes coinciden con 01_proyecto.json'
+);
+comprobar(
+	'2017-06-09' === UHP_Datos::valor( 'proyecto', 'aprobacion.fecha_acuerdo' ) && false !== strpos( $ficha, 'Acuerdo número 57 del 9 de junio de 2017' ),
+	'El acuerdo de aprobación, con su fecha'
+);
+$etapas = UHP_Datos::valor( 'epidemiologia', 'cascada_de_correa.etapas' );
+$faltan = array();
+foreach ( (array) $etapas as $e ) {
+	if ( false === strpos( mb_strtolower( $ficha ), mb_strtolower( $e['etapa'] ) ) ) {
+		$faltan[] = $e['etapa'];
+	}
+}
+comprobar( 5 === count( (array) $etapas ) && ! $faltan && false !== strpos( $ficha, 'Pelayo Correa' ), 'Las cinco etapas de la cascada de Correa, con su autor' );
+$inc = UHP_Datos::valor( 'criterios', 'inclusion' );
+$exc = UHP_Datos::valor( 'criterios', 'exclusion' );
+comprobar(
+	4 === count( (array) $inc ) && 6 === count( (array) $exc )
+		&& false !== strpos( $ficha, 'de 30 a 70 años' ) && false !== strpos( $ficha, 'diez años' )
+		&& false !== strpos( $ficha, 'consentimiento informado' ) && false !== strpos( $ficha, 'bismuto' ) && false !== strpos( $ficha, 'várices esofágicas' ),
+	'Quién podía participar: los cuatro criterios de inclusión y los seis de exclusión'
+);
+comprobar( false !== strpos( $ficha, 'los documentos no explican más' ), 'Y dice lo que no se sabe: ningún documento explica el «5000»' );
+
+/* NI UNA CIFRA DE RESULTADOS. El bloque es descriptivo: las prevalencias,
+   los casos y las incidencias siguen saliendo solo de las herramientas.
+   El 35,1 era el ejemplo de formato del prompt y es la prevalencia real
+   de lesión precursora: el modelo podía soltarla sin consultar. */
+$prohibidas = array( '67,4', '35,1', '3.370', '1.755', '150 casos', '63,4', '90 %', '25.000' );
+$halladas   = array();
+foreach ( $prohibidas as $cifra ) {
+	if ( false !== strpos( $prompt, $cifra ) ) {
+		$halladas[] = $cifra;
+	}
+}
+comprobar( ! $halladas, 'El prompt no trae ninguna cifra de resultados' . ( $halladas ? ': ' . implode( ', ', $halladas ) : '' ) );
+comprobar( false === strpos( $prompt, '{' ) && false === strpos( $prompt, '}' ), 'Y sigue sin una sola llave: nada se inyecta' );
+comprobar( false !== strpos( $prompt, 'de noviembre de 2018 a abril de 2023' ), 'Las fechas son las del proyecto: el trabajo de campo empezó en 2019, no en 2018' );
+
+update_option( 'uhp_voz', $base16 );
+
+echo "\n19. Los códigos de error: un solo catálogo por lado, documentado entero\n";
+
+$js19 = (string) file_get_contents( UHP_DIR . 'assets/js/uhp-voz.js' );
+preg_match_all( "/'(UHP-[A-Z]{3}-[0-9]{2})': \\['(error|warn|info)', '([^']*)'\\]/", $js19, $m19, PREG_SET_ORDER );
+$cat_js = array();
+foreach ( $m19 as $f ) {
+	$cat_js[ $f[1] ] = array( $f[2], $f[3] );
+}
+$cat_php = UHP_Codigos::CATALOGO;
+comprobar( count( $cat_js ) > 40, 'El navegador tiene su catálogo (' . count( $cat_js ) . ' códigos)' );
+comprobar( ! array_intersect_key( $cat_js, $cat_php ), 'Ningún código está en los dos catálogos: cada fallo lo detecta un lado' );
+
+$malos = array();
+foreach ( $cat_js as $cod => $fila ) {
+	$frase = $fila[1];
+	if ( mb_strlen( $frase ) > 70 || false !== strpos( $frase, '%' ) || mb_strtolower( mb_substr( $frase, 0, 1 ) ) !== mb_substr( $frase, 0, 1 )
+		|| preg_match( '/claude|anthropic|openai|gpt|gemini|google|elevenlabs/i', $frase ) ) {
+		$malos[] = $cod;
+	}
+}
+comprobar( ! $malos, 'Las frases del navegador siguen las mismas reglas que las del servidor' . ( $malos ? ': ' . implode( ', ', $malos ) : '' ) );
+
+// Todo código que aparece en el código existe en un catálogo.
+$todos19 = array_merge( array_keys( $cat_js ), array_keys( $cat_php ) );
+$usados  = array();
+foreach ( array( 'assets/js/uhp-voz.js', 'includes/class-uhp-voz.php', 'includes/class-uhp-llm.php', 'includes/class-uhp-codigos.php', 'includes/admin/class-uhp-admin.php' ) as $archivo ) {
+	preg_match_all( '/UHP-[A-Z]{3}-[0-9]{2}/', (string) file_get_contents( UHP_DIR . $archivo ), $mm );
+	$usados = array_merge( $usados, $mm[0] );
+}
+$huerfanos = array_diff( array_unique( $usados ), $todos19 );
+comprobar( ! $huerfanos, 'Todo código que el plugin emite está catalogado' . ( $huerfanos ? ': ' . implode( ', ', $huerfanos ) : '' ) );
+
+// Y la documentación los tiene todos, y solo esos.
+$doc19 = is_readable( UHP_DIR . 'docs/voz/codigos.md' ) ? (string) file_get_contents( UHP_DIR . 'docs/voz/codigos.md' ) : '';
+preg_match_all( '/^\| `(UHP-[A-Z]{3}-[0-9]{2})`/m', $doc19, $md19 );
+sort( $todos19 );
+$en_doc = $md19[1];
+sort( $en_doc );
+comprobar( $todos19 === $en_doc, 'docs/voz/codigos.md tiene exactamente los códigos de los dos catálogos (si falla: php tests/generar-codigos.php)' );
 
 /* ---------------------------------------------------------------- */
 echo "\n";

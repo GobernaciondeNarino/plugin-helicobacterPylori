@@ -1,15 +1,27 @@
 /* =====================================================================
-   Asistente de voz del tablero.
+   Asistente del tablero.
 
    Hereda los tokens --uhp-db-* de .uhp-db: el asistente es una pieza más
-   del tablero y no una ventana de otro producto encima. Por eso no
-   declara ni un color propio y por eso la prueba de contraste de la
-   suite lo mide con los mismos pares que el resto.
+   del tablero y no una ventana de otro producto encima. No declara ni un
+   color propio —tampoco la tinta oscura sobre el acento, que antes eran
+   dos literales y ahora es --uhp-db-bg (11:1 sobre --uhp-db-acc, 5,3:1
+   sobre --uhp-db-roja)— y por eso la prueba de contraste de la suite lo
+   mide con los mismos pares que el resto.
 
    Flota sobre el tablero en lugar de ocupar una celda de su rejilla:
    .uhp-db__col--izq declara exactamente tantas filas como hijos tiene, y
    una cuarta tarjeta desplazaría la lista de municipios a una fila que
    no existe. Flotando, además, sobrevive a que avisar() vacíe <main>.
+
+   LA VENTANA reproduce la estructura que mandó la entidad, de arriba
+   abajo: el hilo (rótulo de quién habla encima de cada globo), una línea
+   de estado, la fila «Puedes preguntar:» con sus pastillas, y la barra
+   —micrófono, campo en píldora con enviar dentro, parar y cerrar—.
+
+   ESPECIFICIDAD. Los controles de la ventana se escriben colgando de
+   .uhp-voz (0,2,0) y no sueltos (0,1,0): los temas de WordPress estilan
+   `input[type="text"]` y `button` con 0,1,1 y ganaban, y un tema que le
+   pone borde, relleno y sombra al campo rompe la píldora entera.
    ===================================================================== */
 
 .uhp-voz {
@@ -19,7 +31,10 @@
   /* Por encima del mapa y de sus controles de zoom (z-index 500) y por
      debajo de nada: es lo último que se dibuja. */
   z-index: 600;
-  width: min(360px, calc(100% - 28px));
+  /* 400 y no 360: con cuatro botones redondos en la barra, a 360 el
+     campo se quedaba con 120 px de escritura y el texto de ayuda salía
+     cortado. */
+  width: min(400px, calc(100% - 28px));
   display: grid;
   gap: 8px;
   justify-items: end;
@@ -28,10 +43,8 @@
 
 /* Sin lanzador —visibilidad «oculto»— el bloque sigue en la página para
    que una plantilla pueda abrirlo desde su propio control. Pero entonces
-   no puede quedarse encima del mapa comiéndose los clics: una caja
-   invisible de 360 px con z-index 600 que intercepta punteros deja los
-   municipios de esa esquina sin responder, y es un fallo que nadie sabría
-   describir. El panel recupera los punteros cuando se abre. */
+   no puede quedarse encima del mapa comiéndose los clics. El panel
+   recupera los punteros cuando se abre. */
 .uhp-voz--sin-lanzador { pointer-events: none; }
 .uhp-voz--sin-lanzador .uhp-voz__panel { pointer-events: auto; }
 
@@ -44,11 +57,6 @@
   max-width: 100%;
 }
 
-/* Los dos lanzadores en una fila que se parte cuando no cabe. Sin esta
-   caja la rejilla de la barra les daba una fila a cada uno y el panel
-   empezaba cuarenta píxeles más abajo. Ninguno de los dos es secundario:
-   el canal escrito no es un plan B que haya que buscar, es la alternativa
-   equivalente que pide la Resolución 1519 de 2020. */
 .uhp-voz__botones {
   display: flex;
   flex-wrap: wrap;
@@ -77,6 +85,8 @@
 }
 /* Mientras el script no lo cablea, el botón existe pero no promete nada. */
 .uhp-voz__abrir[disabled] { opacity: .55; cursor: default; }
+/* Abierto. El rótulo NO cambia —sigue diciendo «Asistente»—: el estado
+   lo dicen aria-expanded y este fondo. */
 .uhp-voz__abrir[aria-expanded="true"] {
   background: var(--uhp-db-sel-fondo);
   border-color: var(--uhp-db-acc);
@@ -84,8 +94,6 @@
 .uhp-voz__icono { display: inline-flex; color: var(--uhp-db-acc); }
 .uhp-voz__icono svg { fill: currentColor; }
 
-/* El aviso corto va SIEMPRE visible y servido en el HTML: es lo primero
-   que debe saber quien se plantea pulsar, no algo que aparezca después. */
 .uhp-voz__aviso-corto {
   margin: 0;
   max-width: 320px;
@@ -98,9 +106,18 @@
 }
 
 /* ---------- Panel ---------- */
+/* Dos rejillas. La de la COMPUERTA (cabecera, aviso, pie) es la base; la
+   de la CONVERSACIÓN la pone el modificador y declara UNA fila explícita
+   —el hilo, la que crece— y deja las demás implícitas en `auto`. Así una
+   instalación sin preguntas sugeridas no arrastra una fila vacía con su
+   hueco de 10 px, y el <h3> recortado no gasta fila porque es absoluto.
+
+   Es contenedor de consulta: la barra decide si cabe en una fila por el
+   ancho del PANEL, no de la ventana. El tablero puede estar incrustado
+   en una columna estrecha de un escritorio ancho. */
 .uhp-voz__panel {
   width: 100%;
-  max-height: min(60vh, 460px);
+  max-height: min(60vh, 480px);
   overflow-y: auto;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -108,11 +125,18 @@
   padding: 12px;
   background: var(--uhp-db-panel);
   border: 1px solid var(--uhp-db-linea);
-  border-radius: 12px;
+  border-radius: 16px;
   box-shadow: var(--uhp-db-sombra);
+  container: uhp-voz-panel / inline-size;
 }
 .uhp-voz__panel[hidden] { display: none; }
+.uhp-voz__panel--conversacion {
+  grid-template-rows: minmax(0, 1fr);
+  grid-auto-rows: auto;
+}
 
+/* Cabecera: solo la compuerta la pinta. En la conversación el título va
+   recortado para lectores de pantalla y el estado baja junto a la barra. */
 .uhp-voz__cab {
   display: flex;
   align-items: center;
@@ -128,8 +152,103 @@
   color: var(--uhp-db-ink);
 }
 
-/* Punto de estado. El color NO es la única señal: al lado va siempre el
-   texto, porque el color solo incumple WCAG 2.1 §1.4.1. */
+/* ---------- Conversación ---------- */
+.uhp-voz__hilo {
+  /* Con el panel limitado por max-height y una ventana muy baja —320x256
+     es el tamaño efectivo al 400 % de zoom—, la fila 1fr del hilo se
+     quedaba en cero. Con un mínimo garantizado, lo que se desplaza es el
+     panel. */
+  min-height: 5.5em;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 2px 4px 2px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--uhp-db-scroll) transparent;
+}
+.uhp-voz__hilo::-webkit-scrollbar { width: 6px; }
+.uhp-voz__hilo::-webkit-scrollbar-thumb {
+  background: var(--uhp-db-scroll);
+  border-radius: 3px;
+}
+.uhp-voz__hilo:focus-visible {
+  outline: 2px solid var(--uhp-db-acc);
+  outline-offset: 2px;
+}
+
+/* Un turno es el rótulo de quién habla ENCIMA y el globo DEBAJO. El
+   rótulo queda fuera del globo a propósito: es el nombre que la entidad
+   le puso a su asistente y se lee antes que lo que dice. */
+.uhp-voz__turno {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  min-width: 0;
+}
+.uhp-voz__turno--usted { justify-items: end; }
+
+.uhp-voz__quien {
+  padding-left: 4px;
+  font-size: .7rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--uhp-db-ink-3);
+}
+
+.uhp-voz__globo {
+  max-width: 88%;
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 4px 16px 16px 16px;
+  background: var(--uhp-db-panel-2);
+  color: var(--uhp-db-ink);
+  font-size: .8rem;
+  line-height: 1.5;
+  /* Los saltos de línea del modelo se respetan; las palabras sin espacio
+     —una URL— se parten antes que empujar el panel en horizontal. */
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.uhp-voz__turno--usted .uhp-voz__globo {
+  border-radius: 16px 4px 16px 16px;
+  background: var(--uhp-db-sel-fondo);
+}
+
+.uhp-voz__vacio {
+  font-size: .76rem;
+  line-height: 1.45;
+  color: var(--uhp-db-ink-2);
+  margin: 0;
+}
+
+/* Lo que deja «Parar» en el hilo cuando corta una consulta: la pregunta
+   se queda sin respuesta, y quien relea la conversación tiene que saber
+   por qué. */
+.uhp-voz__nota {
+  justify-self: center;
+  margin: 0;
+  font-size: .72rem;
+  font-style: italic;
+  color: var(--uhp-db-ink-2);
+}
+
+/* ---------- Estado ---------- */
+/* La línea que dice qué está pasando —«Te escucho», «Estoy consultando el
+   tablero», o el error del micrófono— vive pegada a la barra, que es
+   donde está mirando quien acaba de pulsar. El punto de color NUNCA va
+   solo: al lado va siempre el texto (WCAG 2.1 §1.4.1). */
+.uhp-voz__estado-txt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 1.35em;
+  margin: 0;
+  font-size: .74rem;
+  line-height: 1.35;
+  color: var(--uhp-db-ink-2);
+}
+
 .uhp-voz__pulso {
   width: 9px;
   height: 9px;
@@ -149,60 +268,264 @@
   50% { opacity: .35; }
 }
 
-.uhp-voz__estado-txt {
+/* ---------- Preguntas sugeridas ---------- */
+/* Rótulo y pastillas en la misma fila; las pastillas desbordan hacia la
+   derecha y se desplazan en horizontal SIN barra visible. Con teclado no
+   hace falta barra: cada pastilla es un botón, el tabulador llega a
+   todas y el navegador desplaza la fila hasta la que recibe el foco. Con
+   rueda vertical lo resuelve el script, y en táctil es arrastrar.
+
+   El margen negativo y el relleno de 4 px son para el anillo de foco: una
+   caja con overflow recorta lo que sobresale, y el anillo de 2 px con
+   2 px de separación quedaba cortado por arriba y por abajo. */
+.uhp-voz__sugerencias {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 12px;
+  min-width: 0;
+}
+.uhp-voz__sug-rotulo {
+  flex: none;
   font-size: .74rem;
-  color: var(--uhp-db-ink-2);
-}
-
-/* ---------- Conversación ---------- */
-.uhp-voz__hilo {
-  /* Con el panel limitado por max-height y una ventana muy baja —320x256
-     es el tamaño efectivo al 400 % de zoom—, la fila 1fr del hilo se
-     quedaba en cero y la conversación desaparecía. Con un mínimo
-     garantizado, lo que se desplaza es el panel. */
-  min-height: 5.5em;
-  overflow-y: auto;
-  display: grid;
-  gap: 8px;
-  align-content: start;
-  padding-right: 4px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--uhp-db-scroll) transparent;
-}
-.uhp-voz__hilo::-webkit-scrollbar { width: 6px; }
-.uhp-voz__hilo::-webkit-scrollbar-thumb {
-  background: var(--uhp-db-scroll);
-  border-radius: 3px;
-}
-
-.uhp-voz__turno {
-  display: grid;
-  gap: 2px;
-  padding: 7px 9px;
-  border-radius: 8px;
-  background: var(--uhp-db-panel-2);
-  font-size: .78rem;
-  line-height: 1.45;
-  color: var(--uhp-db-ink);
-}
-.uhp-voz__turno--usted { background: var(--uhp-db-sel-fondo); }
-.uhp-voz__quien {
-  font-size: .66rem;
   font-weight: 600;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  color: var(--uhp-db-ink-3);
+  white-space: nowrap;
+  color: var(--uhp-db-ink-2);
+}
+.uhp-voz .uhp-voz__pastillas {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 8px;
+  /* Sin margen negativo a la izquierda: con él, al desplazar, el trozo
+     de pastilla cortada quedaba pegado al rótulo y se leía como parte
+     de él («Puedes preguntar: ubo?»). */
+  margin: -4px -4px -4px 0;
+  padding: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 8px;
+  scrollbar-width: none;
+}
+.uhp-voz .uhp-voz__pastillas::-webkit-scrollbar { display: none; }
+
+.uhp-voz .uhp-voz__pastilla {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 16px;
+  border: 1px solid var(--uhp-db-borde-control);
+  border-radius: 999px;
+  background: var(--uhp-db-panel-2);
+  box-shadow: none;
+  color: var(--uhp-db-ink);
+  font: inherit;
+  font-size: .8rem;
+  line-height: 1.2;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.uhp-voz .uhp-voz__pastilla:hover { background: var(--uhp-db-sel-fondo); }
+.uhp-voz .uhp-voz__pastilla:focus-visible {
+  outline: 2px solid var(--uhp-db-acc);
+  outline-offset: 2px;
 }
 
-.uhp-voz__vacio {
-  font-size: .76rem;
-  line-height: 1.45;
-  color: var(--uhp-db-ink-2);
-  margin: 0;
+/* ---------- La barra ---------- */
+/* Rejilla por áreas, no flex: el micrófono puede no existir (navegador
+   sin dictado, sitio «solo por escrito») o desaparecer a mitad de visita,
+   y con áreas nombradas el resto no se recoloca debajo del dedo. El
+   script mantiene data-uhp-voz-micro al día. */
+.uhp-voz__pie {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  border-top: 1px solid var(--uhp-db-linea);
+  padding-top: 9px;
 }
+.uhp-voz__pie--chat {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
+  grid-template-areas: "mic caja parar cerrar";
+  align-items: center;
+  gap: 8px 6px;
+  border-top: 0;
+  padding-top: 0;
+}
+.uhp-voz__pie--chat[data-uhp-voz-micro="no"] {
+  grid-template-columns: minmax(0, 1fr) 44px 44px;
+  grid-template-areas: "caja parar cerrar";
+}
+.uhp-voz__pie--chat > [data-uhp-voz-accion="dictar"] { grid-area: mic; }
+.uhp-voz__pie--chat > .uhp-voz__caja { grid-area: caja; }
+.uhp-voz__pie--chat > [data-uhp-voz-accion="parar"] { grid-area: parar; }
+.uhp-voz__pie--chat > [data-uhp-voz-accion="cerrar"] { grid-area: cerrar; }
+
+/* Los botones redondos. 44 × 44 px de área táctil: es la regla de este
+   plugin, y coincide con WCAG 2.2 §2.5.5 (Target Size, Enhanced, AAA) y
+   con las guías de Apple. El mínimo AA de §2.5.8 es 24 × 24; aquí se
+   cumple de sobra. El dibujo mide 20 px: lo que crece es la zona que
+   recibe el dedo, no el icono. */
+.uhp-voz .uhp-voz__redondo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--uhp-db-borde-control);
+  border-radius: 50%;
+  background: var(--uhp-db-panel-2);
+  box-shadow: none;
+  color: var(--uhp-db-ink);
+  line-height: 1;
+  text-transform: none;
+  cursor: pointer;
+}
+.uhp-voz .uhp-voz__redondo:hover { background: var(--uhp-db-sel-fondo); }
+.uhp-voz .uhp-voz__redondo:focus-visible {
+  outline: 2px solid var(--uhp-db-acc);
+  outline-offset: 2px;
+}
+
+/* Escuchando. El color no es lo único que lo dice: el icono pasa del
+   micrófono TACHADO al micrófono entero, aria-pressed pasa a true y la
+   línea de estado dice «Te escucho…». */
+.uhp-voz .uhp-voz__redondo[aria-pressed="true"],
+.uhp-voz .uhp-voz__redondo[aria-pressed="true"]:hover {
+  background: var(--uhp-db-roja);
+  border-color: var(--uhp-db-roja);
+  color: var(--uhp-db-bg);
+}
+
+/* Lo que no se puede pulsar ahora sigue en su sitio y en el orden de
+   tabulación (aria-disabled, no disabled). Los controles inactivos están
+   exentos del contraste mínimo (§1.4.3 y §1.4.11), y aun así el icono
+   queda por encima de 3:1. */
+.uhp-voz .uhp-voz__redondo[aria-disabled="true"],
+.uhp-voz .uhp-voz__pastilla[aria-disabled="true"] {
+  opacity: .45;
+  cursor: default;
+}
+.uhp-voz .uhp-voz__redondo[aria-disabled="true"]:hover,
+.uhp-voz .uhp-voz__pastilla[aria-disabled="true"]:hover {
+  background: var(--uhp-db-panel-2);
+}
+
+/* El campo en píldora, con «Enviar» DENTRO. El campo y el botón son
+   hermanos en una caja flexible: el texto termina donde empieza el botón
+   por construcción, sin un padding-right calculado a ojo que se rompe
+   el día que cambie el tamaño del botón. */
+.uhp-voz .uhp-voz__caja {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 44px;
+  border: 1px solid var(--uhp-db-borde-control);
+  border-radius: 999px;
+  background: var(--uhp-db-bg);
+  cursor: text;
+}
+
+.uhp-voz .uhp-voz__campo {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0 8px 0 16px;
+  border: 0;
+  border-radius: 999px 0 0 999px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--uhp-db-ink);
+  font: inherit;
+  /* En píxeles y no en rem: hay temas que ponen la raíz al 62,5 %. */
+  font-size: 14px;
+  line-height: normal;
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* 16 px en cualquier equipo táctil: por debajo, Safari en iOS amplía la
+   página entera al enfocar el campo y el panel se sale de la pantalla. */
+@media (any-pointer: coarse) {
+  .uhp-voz .uhp-voz__campo { font-size: 16px; }
+}
+.uhp-voz .uhp-voz__campo::placeholder {
+  color: var(--uhp-db-ink-3);
+  opacity: 1;
+}
+/* El anillo de foco del campo es el de la PÍLDORA entera. Donde :has()
+   no existe, el campo conserva su propio anillo, hacia dentro. */
+.uhp-voz .uhp-voz__campo:focus-visible {
+  outline: 2px solid var(--uhp-db-acc);
+  outline-offset: -2px;
+}
+@supports selector(:has(*)) {
+  .uhp-voz .uhp-voz__campo:focus-visible { outline: none; }
+  .uhp-voz .uhp-voz__caja:has(.uhp-voz__campo:focus-visible) {
+    outline: 2px solid var(--uhp-db-acc);
+    outline-offset: 2px;
+  }
+}
+
+/* Enviar: caja de 44 × 44 (la que recibe el dedo) y círculo visible de
+   32. El margen negativo lo monta encima del borde de la píldora, para
+   que la caja de 44 quepa en una píldora de 44 que tiene 1 px de borde. */
+.uhp-voz .uhp-voz__enviar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -1px -1px -1px 0;
+  padding: 6px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--uhp-db-acc);
+  background-clip: content-box;
+  box-shadow: none;
+  color: var(--uhp-db-bg);
+  line-height: 1;
+  cursor: pointer;
+}
+.uhp-voz .uhp-voz__enviar:hover { background-color: var(--uhp-db-acc-claro); }
+.uhp-voz .uhp-voz__enviar:focus-visible {
+  outline: 2px solid var(--uhp-db-acc);
+  outline-offset: -2px;
+}
+.uhp-voz .uhp-voz__enviar[aria-disabled="true"] { opacity: .45; cursor: default; }
+.uhp-voz .uhp-voz__enviar[aria-disabled="true"]:hover { background-color: var(--uhp-db-acc); }
+
+/* ---------- Iconos ---------- */
+/* fill y stroke también en CSS, y no solo en los atributos del SVG: un
+   tema que declare `svg { fill: currentColor }` gana a un atributo de
+   presentación y convertiría el micrófono en un borrón. */
+.uhp-voz .uhp-voz__ico {
+  display: block;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  pointer-events: none;
+}
+.uhp-voz .uhp-voz__ico-relleno { fill: currentColor; }
+
+/* El micrófono lleva sus dos dibujos y enseña el que dice aria-pressed.
+   El estado visible y el accesible salen del MISMO atributo: no pueden
+   contradecirse. */
+.uhp-voz .uhp-voz__ico--activo { display: none; }
+.uhp-voz [aria-pressed="true"] > .uhp-voz__ico--reposo { display: none; }
+.uhp-voz [aria-pressed="true"] > .uhp-voz__ico--activo { display: block; }
 
 /* ---------- Aviso de habeas data ---------- */
 .uhp-voz__aviso {
@@ -223,59 +546,6 @@
   font-size: .75rem;
   line-height: 1.5;
   color: var(--uhp-db-ink-2);
-}
-
-/* ---------- La fila: campo, enviar y micrófono ---------- */
-/* SIN flex-wrap a propósito. Un icono de 44 px que se va a una segunda
-   línea mueve el pie entero y empuja la transcripción hacia arriba
-   justo cuando alguien está leyéndola. */
-.uhp-voz__pie {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  border-top: 1px solid var(--uhp-db-linea);
-  padding-top: 9px;
-}
-
-/* 44 × 44 px de área táctil. Es el mínimo de la WCAG 2.2 §2.5.8 (Target
-   Size, Minimum, nivel AA) y de las guías de Apple y de Android. El
-   icono dentro mide 16 px: lo que crece es la zona que recibe el dedo,
-   no el dibujo. */
-.uhp-voz__icono-btn {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border-radius: 8px;
-  border: 1px solid var(--uhp-db-borde-control);
-  background: var(--uhp-db-panel-2);
-  color: var(--uhp-db-ink);
-  cursor: pointer;
-}
-.uhp-voz__icono-btn:hover { background: var(--uhp-db-sel-fondo); }
-.uhp-voz__icono-btn:focus-visible {
-  outline: 2px solid var(--uhp-db-acc);
-  outline-offset: 2px;
-}
-.uhp-voz__icono-btn[data-uhp-voz-accion="enviar"] {
-  background: var(--uhp-db-acc);
-  border-color: var(--uhp-db-acc);
-  /* Tinta oscura sobre el verde de acento: el claro no llega a 4,5:1. */
-  color: #06231a;
-}
-.uhp-voz__icono-btn[data-uhp-voz-accion="enviar"]:hover { background: var(--uhp-db-acc-claro); }
-
-/* Oyendo. El color no es lo único que lo dice —el rótulo accesible
-   cambia a «Dejar de hablar» y aria-pressed pasa a true—, porque un
-   estado que solo se distingue por el color no lo distingue todo el
-   mundo. WCAG 2.1 §1.4.1. */
-.uhp-voz__icono-btn--oyendo {
-  background: var(--uhp-db-roja);
-  border-color: var(--uhp-db-roja);
-  color: #2a0a0a;
 }
 
 /* La revocación, fuera del panel y junto al aviso corto. */
@@ -313,8 +583,7 @@
 .uhp-voz__btn--principal {
   background: var(--uhp-db-acc);
   border-color: var(--uhp-db-acc);
-  /* Tinta oscura sobre el verde de acento: el claro no llega a 4,5:1. */
-  color: #06231a;
+  color: var(--uhp-db-bg);
   font-weight: 600;
 }
 .uhp-voz__btn--principal:hover { background: var(--uhp-db-acc-claro); }
@@ -327,29 +596,7 @@
 .uhp-voz__btn--fino:hover { color: var(--uhp-db-ink); }
 .uhp-voz__btn[disabled] { opacity: .5; cursor: default; }
 
-/* El campo, que es lo que crece. */
-.uhp-voz__campo {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 44px;
-  padding: 7px 10px;
-  border-radius: 7px;
-  border: 1px solid var(--uhp-db-borde-control);
-  background: var(--uhp-db-bg);
-  color: var(--uhp-db-ink);
-  font: inherit;
-  font-size: .78rem;
-}
-.uhp-voz__campo:focus-visible {
-  outline: 2px solid var(--uhp-db-acc);
-  outline-offset: 1px;
-}
-
 /* ---------- Confirmación de municipio ---------- */
-/* Cuando el reconocimiento de voz entrega un nombre que no cruza exacto,
-   el asistente NO selecciona: pregunta, y la confirmación la da una
-   pulsación. Albán y Aldana están a dos cambios de distancia y los dos
-   son municipios intervenidos. */
 .uhp-voz__confirmar {
   display: flex;
   flex-wrap: wrap;
@@ -375,16 +622,43 @@
   border: 0;
 }
 
-/* Objetivos táctiles. En pantalla táctil, 31 px de alto es menos de lo
-   que exige WCAG 2.1 §2.5.5 (nivel AAA) y lo que recomienda §2.5.8; los
-   botones de confirmar municipio son además los que más caro salen si se
-   pulsa el de al lado. */
 @media (pointer: coarse) {
   .uhp-voz__btn,
   .uhp-voz__abrir {
     min-height: 44px;
     padding: 10px 14px;
   }
+}
+
+/* ---------- Barra estrecha ---------- */
+/* Por debajo de 354 px de panel no caben en una fila los tres redondos,
+   el campo y el botón de dentro con espacio para escribir: a 360 px de
+   pantalla el campo se quedaba con 90 px, diez letras. Se parte en dos
+   filas FIJAS —micrófono y campo arriba; parar y cerrar debajo, a la
+   derecha— decididas por el ancho, nunca por qué botones haya: así el
+   orden de lectura sigue siendo el del código y nada salta de fila
+   mientras se usa. */
+@container uhp-voz-panel (width < 354px) {
+  .uhp-voz__pie--chat {
+    grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
+    grid-template-areas:
+      "mic caja caja caja"
+      ".   .    parar cerrar";
+  }
+  .uhp-voz__pie--chat[data-uhp-voz-micro="no"] {
+    grid-template-columns: minmax(0, 1fr) 44px 44px;
+    grid-template-areas:
+      "caja caja  caja"
+      ".    parar cerrar";
+  }
+  /* El rótulo encima de las pastillas: en la misma fila se comía un
+     tercio del ancho y no dejaba ver entera ni la primera. */
+  .uhp-voz__sugerencias {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .uhp-voz .uhp-voz__pastillas { flex: none; margin-left: -4px; }
 }
 
 /* ---------- Pantallas estrechas ---------- */
@@ -397,10 +671,43 @@
   }
   .uhp-voz__barra { justify-items: stretch; text-align: left; }
   .uhp-voz__botones { justify-content: stretch; }
-  /* A lo ancho del panel y uno debajo de otro: dos píldoras de 44 px de
-     alto no caben a la vez en 320 px sin partir los rótulos. */
   .uhp-voz__botones > .uhp-voz__abrir { flex: 1 1 100%; }
   .uhp-voz__abrir { justify-content: center; }
   .uhp-voz__aviso-corto { max-width: none; }
-  .uhp-voz__panel { max-height: min(70vh, 420px); }
+  /* dvh donde exista: con la barra del navegador móvil a la vista, 70vh
+     es más alto que la pantalla útil. */
+  .uhp-voz__panel {
+    max-height: min(70vh, 480px);
+    max-height: min(70dvh, 480px);
+  }
 }
+
+/* ---------- Contraste forzado (Windows) ---------- */
+/* El sistema repinta fondos y bordes con sus colores. Lo que no puede
+   perderse es lo que dependía del fondo: que «Parar» está inactivo.
+   El estado del micrófono no depende del fondo: lo dice el dibujo. */
+@media (forced-colors: active) {
+  .uhp-voz .uhp-voz__redondo[aria-disabled="true"],
+  .uhp-voz .uhp-voz__pastilla[aria-disabled="true"],
+  .uhp-voz .uhp-voz__enviar[aria-disabled="true"] {
+    color: GrayText;
+    border-color: GrayText;
+    opacity: 1;
+  }
+  .uhp-voz .uhp-voz__enviar { border: 1px solid ButtonText; background-clip: border-box; }
+}
+
+/* ---------- Código del fallo ----------
+   En la línea de estado, junto al mensaje, y SOLO en la fase de error:
+   «UHP-ACC-06». Es lo que el visitante le dicta a la mesa de ayuda, y el
+   mismo código que queda en la consola y en el registro de PHP. Va en el
+   texto visible y no en la región viva: el lector de pantalla no tiene
+   por qué deletrear un código en cada fallo. */
+.uhp-voz .uhp-voz__codigo {
+  margin-left: 6px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--uhp-db-ink-2);
+  white-space: nowrap;
+}
+.uhp-voz .uhp-voz__codigo[hidden] { display: none; }
